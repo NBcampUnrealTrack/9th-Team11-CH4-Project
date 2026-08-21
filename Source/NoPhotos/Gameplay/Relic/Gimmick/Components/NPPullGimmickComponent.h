@@ -48,7 +48,10 @@ private:
 		float IntentForceAlignment);
 	void HandleGrabEnded();
 
-	UPROPERTY(EditAnywhere, Category="Pull Gimmick")
+	UPROPERTY(
+		EditAnywhere,
+		Category="Pull Gimmick",
+		meta=(ToolTip="World Space 기준의 당김 방향입니다."))
 	FVector PullDirection = FVector::UpVector;
 
 	UPROPERTY(EditAnywhere, Category="Pull Gimmick", meta=(ClampMin="0.0"))
