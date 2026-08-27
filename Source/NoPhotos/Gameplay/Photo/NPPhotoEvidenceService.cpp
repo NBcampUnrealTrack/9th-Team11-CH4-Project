@@ -175,6 +175,17 @@ FNPPhotoEvidenceResult UNPPhotoEvidenceService::EvaluatePhoto(
 			Result.Photographer.Get(),
 			BestReactiveVisibility,
 			Result.CaptureSequence);
+		// Keep the original callback intact, including Blueprint-only interface implementations.
+		if (IsValid(BestReactiveTarget))
+		{
+			INPPhotoReactiveTarget::Execute_OnPhotographedFromCamera(
+				BestReactiveTarget,
+				Result.Photographer.Get(),
+				BestReactiveVisibility,
+				Result.CaptureSequence,
+				Request.CameraLocation,
+				Request.CameraForward);
+		}
 
 		UE_LOG(
 			LogNPPhoto,

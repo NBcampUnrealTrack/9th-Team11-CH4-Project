@@ -1,12 +1,20 @@
 #include "NPGoblinCharacter.h"
 
 #include "Engine/World.h"
+#include "Animation/AnimMontage.h"
+#include "CollisionQueryParams.h"
+#include "CollisionShape.h"
+#include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerState.h"
 #include "Gameplay/Photo/NPPhotoLog.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Net/UnrealNetwork.h"
 #include "NPGoblinAIController.h"
+#include "NPGoblinPresentationDoor.h"
+#include "Navigation/PathFollowingComponent.h"
+#include "NavigationPath.h"
+#include "NavigationSystem.h"
 #include "TimerManager.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogNPGoblinCharacter, Log, All);
@@ -19,6 +27,7 @@ ANPGoblinCharacter::ANPGoblinCharacter()
 
 	AIControllerClass = ANPGoblinAIController::StaticClass();
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
+	PresentationDoorClass = ANPGoblinPresentationDoor::StaticClass();
 	bUseControllerRotationYaw = false;
 
 	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
@@ -49,6 +58,13 @@ void ANPGoblinCharacter::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(ThisClass, CurrentPhotoHP);
 }
 
+void ANPGoblinCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	CancelDoorPresentation();
+	GetWorldTimerManager().ClearTimer(PhotoReactionTimer);
+	Super::EndPlay(EndPlayReason);
+}
+
 void ANPGoblinCharacter::PrepareForSpawnPresentation()
 {
 	if (!HasAuthority())
@@ -62,7 +78,8 @@ void ANPGoblinCharacter::PrepareForSpawnPresentation()
 
 void ANPGoblinCharacter::FinishSpawnPresentation()
 {
-	if (HasAuthority() && LifecycleState == ENPGoblinLifecycleState::Spawning)
+	if (HasAuthority() && LifecycleState == ENPGoblinLifecycleState::Spawning
+		&& DoorPresentationPhase == EDoorPresentationPhase::None)
 	{
 		SetLifecycleState(ENPGoblinLifecycleState::Active);
 	}
@@ -78,7 +95,8 @@ void ANPGoblinCharacter::BeginDespawnPresentation()
 
 void ANPGoblinCharacter::FinishDespawnPresentation()
 {
-	if (HasAuthority() && LifecycleState == ENPGoblinLifecycleState::Despawning)
+	if (HasAuthority() && LifecycleState == ENPGoblinLifecycleState::Despawning
+		&& DoorPresentationPhase == EDoorPresentationPhase::None)
 	{
 		Destroy();
 	}
@@ -103,11 +121,23 @@ void ANPGoblinCharacter::NotifyLifecycleStateChanged()
 		return;
 	}
 
+	const bool bCancelHiddenSpawn = HasAuthority()
+		&& LifecycleState == ENPGoblinLifecycleState::Despawning
+		&& LastNotifiedLifecycleState == ENPGoblinLifecycleState::Spawning
+		&& IsHidden();
 	LastNotifiedLifecycleState = LifecycleState;
 	GetWorldTimerManager().ClearTimer(PresentationTimeoutTimer);
+	if (HasAuthority())
+	{
+		CancelDoorPresentation();
+	}
 
 	ANPGoblinAIController* GoblinController = Cast<ANPGoblinAIController>(GetController());
 	const bool bShouldEnableGameplay = LifecycleState == ENPGoblinLifecycleState::Active;
+	if (!bShouldEnableGameplay)
+	{
+		StopPhotoReaction();
+	}
 	if (HasAuthority() && GoblinController)
 	{
 		GoblinController->SetGameplayEnabled(bShouldEnableGameplay);
@@ -116,6 +146,14 @@ void ANPGoblinCharacter::NotifyLifecycleStateChanged()
 	switch (LifecycleState)
 	{
 	case ENPGoblinLifecycleState::Spawning:
+		if (bUseDoorPresentation)
+		{
+			if (HasAuthority() && !StartDoorPresentation())
+			{
+				FinishSpawnPresentation();
+			}
+			break;
+		}
 		if (HasAuthority())
 		{
 			if (SpawnPresentationTimeout <= 0.0f)
@@ -138,6 +176,20 @@ void ANPGoblinCharacter::NotifyLifecycleStateChanged()
 		break;
 
 	case ENPGoblinLifecycleState::Despawning:
+		if (bCancelHiddenSpawn)
+		{
+			// The event ended before the goblin emerged: close the entrance without revealing it.
+			FinishDespawnPresentation();
+			break;
+		}
+		if (bUseDoorPresentation)
+		{
+			if (HasAuthority() && !StartDoorPresentation())
+			{
+				FinishDespawnPresentation();
+			}
+			break;
+		}
 		if (HasAuthority())
 		{
 			if (DespawnPresentationTimeout <= 0.0f)
@@ -157,6 +209,204 @@ void ANPGoblinCharacter::NotifyLifecycleStateChanged()
 
 	default:
 		break;
+	}
+}
+
+bool ANPGoblinCharacter::FindDoorTravelLocation(FVector& OutFloorLocation, FTransform& OutDoorTransform) const
+{
+	UNavigationSystemV1* Navigation = UNavigationSystemV1::GetCurrent(GetWorld());
+	const ANPGoblinPresentationDoor* DoorDefaults = PresentationDoorClass.GetDefaultObject();
+	if (!Navigation || !DoorDefaults)
+	{
+		return false;
+	}
+	const FVector Origin = GetActorLocation();
+	const FVector Feet = Origin - FVector::UpVector * GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	FNavLocation StartFloor;
+	if (!Navigation->ProjectPointToNavigation(Feet, StartFloor, FVector(50.0f, 50.0f, 150.0f)))
+	{
+		return false;
+	}
+	const float Distance = FMath::Max(100.0f, DoorTravelDistance);
+	const float Angles[] = { 0.0f, 45.0f, -45.0f, 90.0f, -90.0f, 180.0f };
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(GoblinDoorClearance), false, this);
+	const FCollisionShape CapsuleShape = FCollisionShape::MakeCapsule(
+		GetCapsuleComponent()->GetScaledCapsuleRadius(), GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
+	for (const float Angle : Angles)
+	{
+		const FVector Direction = GetActorForwardVector().RotateAngleAxis(Angle, FVector::UpVector).GetSafeNormal2D();
+		FNavLocation Projected;
+		if (!Navigation->ProjectPointToNavigation(Feet + Direction * Distance,
+			Projected, FVector(80.0f, 80.0f, 150.0f))
+			|| FVector::DistSquared2D(Feet, Projected.Location) < FMath::Square(100.0f))
+		{
+			continue;
+		}
+		const FVector CapsuleCenter = Projected.Location
+			+ FVector::UpVector * (GetCapsuleComponent()->GetScaledCapsuleHalfHeight() + 2.0f);
+		if (GetWorld()->OverlapBlockingTestByProfile(CapsuleCenter, FQuat::Identity,
+			GetCapsuleComponent()->GetCollisionProfileName(), CapsuleShape, QueryParams))
+		{
+			continue;
+		}
+		const bool bEnteringWorld = LifecycleState == ENPGoblinLifecycleState::Spawning;
+		const FVector Outward = (bEnteringWorld ? Projected.Location - StartFloor.Location
+			: StartFloor.Location - Projected.Location).GetSafeNormal2D();
+		// For exit, the movement goal is behind the black interior, not in front of the door.
+		const FVector DoorLocation = bEnteringWorld ? StartFloor.Location
+			: Projected.Location + Outward * (GetCapsuleComponent()->GetScaledCapsuleRadius() + 20.0f);
+		const FVector DoorExtent = DoorDefaults->GetClearanceHalfExtent();
+		if (GetWorld()->OverlapBlockingTestByProfile(
+			DoorLocation + FVector::UpVector * (DoorExtent.Z + 2.0f), Outward.Rotation().Quaternion(),
+			GetCapsuleComponent()->GetCollisionProfileName(), FCollisionShape::MakeBox(DoorExtent), QueryParams))
+		{
+			continue;
+		}
+		UNavigationPath* Path = UNavigationSystemV1::FindPathToLocationSynchronously(
+			GetWorld(), Origin, Projected.Location, const_cast<ANPGoblinCharacter*>(this));
+		if (Path && Path->IsValid() && !Path->IsPartial()
+			&& Path->GetPathLength() < Distance * 2.0f)
+		{
+			OutFloorLocation = Projected.Location;
+			OutDoorTransform = FTransform(Outward.Rotation(), DoorLocation);
+			return true;
+		}
+	}
+	return false;
+}
+
+bool ANPGoblinCharacter::StartDoorPresentation()
+{
+	AAIController* AI = Cast<AAIController>(GetController());
+	FVector TravelFloorLocation;
+	FTransform DoorTransform;
+	if (!PresentationDoorClass || !AI || !FindDoorTravelLocation(TravelFloorLocation, DoorTransform))
+	{
+		UE_LOG(LogNPGoblinCharacter, Warning,
+			TEXT("[GoblinDoor] 문 출입 위치를 찾지 못해 연출을 생략합니다. Goblin=%s (문 클래스/AI/NavMesh/이동 공간 확인)"),
+			*GetNameSafe(this));
+		return false;
+	}
+
+	const bool bEnteringWorld = LifecycleState == ENPGoblinLifecycleState::Spawning;
+	FActorSpawnParameters Parameters;
+	// No owner/attachment to the goblin: this actor must finish closing after the goblin is gone.
+	Parameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	PresentationDoor = GetWorld()->SpawnActor<ANPGoblinPresentationDoor>(
+		PresentationDoorClass, DoorTransform.GetLocation(), DoorTransform.Rotator(), Parameters);
+	if (!IsValid(PresentationDoor))
+	{
+		return false;
+	}
+	DoorMoveTarget = TravelFloorLocation;
+	DoorPresentationPhase = EDoorPresentationPhase::Opening;
+	DoorPhaseEndTime = GetWorld()->GetTimeSeconds() + PresentationDoor->GetOpenDuration() + 0.1f;
+	DoorDeadline = GetWorld()->GetTimeSeconds() + FMath::Max(1.0f, DoorPresentationTimeout);
+	AI->StopMovement();
+	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->MaxWalkSpeed = FMath::Max(1.0f, DoorWalkSpeed);
+	if (bEnteringWorld)
+	{
+		SetActorRotation(DoorTransform.Rotator());
+		SetActorHiddenInGame(true);
+	}
+	GetWorldTimerManager().SetTimer(DoorPresentationTimer, this,
+		&ThisClass::UpdateDoorPresentation, 0.05f, true);
+	ForceNetUpdate();
+	UE_LOG(LogNPGoblinCharacter, Display, TEXT("[GoblinDoor] %s Goblin=%s Door=%s"),
+		bEnteringWorld ? TEXT("SPAWN") : TEXT("DESPAWN"), *GetNameSafe(this), *GetNameSafe(PresentationDoor.Get()));
+	return true;
+}
+
+void ANPGoblinCharacter::UpdateDoorPresentation()
+{
+	if (!HasAuthority() || DoorPresentationPhase == EDoorPresentationPhase::None)
+	{
+		return;
+	}
+	AAIController* AI = Cast<AAIController>(GetController());
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (!AI || Now >= DoorDeadline
+		|| (!IsValid(PresentationDoor) && DoorPresentationPhase != EDoorPresentationPhase::Closing))
+	{
+		UE_LOG(LogNPGoblinCharacter, Warning, TEXT("[GoblinDoor] 이동/문 연출 중단 또는 시간 초과. Goblin=%s"), *GetNameSafe(this));
+		CompleteDoorPresentation();
+		return;
+	}
+
+	if (DoorPresentationPhase == EDoorPresentationPhase::Opening && Now >= DoorPhaseEndTime)
+	{
+		SetActorHiddenInGame(false);
+		FAIMoveRequest MoveRequest;
+		MoveRequest.SetGoalLocation(DoorMoveTarget);
+		MoveRequest.SetAcceptanceRadius(10.0f);
+		MoveRequest.SetReachTestIncludesAgentRadius(false);
+		MoveRequest.SetUsePathfinding(true);
+		MoveRequest.SetProjectGoalLocation(true);
+		MoveRequest.SetAllowPartialPath(false);
+		if (AI->MoveTo(MoveRequest) == EPathFollowingRequestResult::Failed)
+		{
+			CompleteDoorPresentation();
+			return;
+		}
+		DoorPresentationPhase = EDoorPresentationPhase::Walking;
+		ForceNetUpdate();
+	}
+	if (DoorPresentationPhase == EDoorPresentationPhase::Walking)
+	{
+		const FVector Feet = GetActorLocation() - FVector::UpVector * GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+		if (FVector::DistSquared2D(Feet, DoorMoveTarget) <= FMath::Square(25.0f)
+			&& FMath::Abs(Feet.Z - DoorMoveTarget.Z) < 50.0f)
+		{
+			AI->StopMovement();
+			GetCharacterMovement()->StopMovementImmediately();
+			if (LifecycleState == ENPGoblinLifecycleState::Despawning)
+			{
+				SetActorHiddenInGame(true);
+			}
+			PresentationDoor->CloseAndDestroy();
+			DoorPhaseEndTime = Now + PresentationDoor->GetCloseDuration() + 0.1f;
+			DoorPresentationPhase = EDoorPresentationPhase::Closing;
+			ForceNetUpdate();
+		}
+		else if (AI->GetMoveStatus() == EPathFollowingStatus::Idle)
+		{
+			// Aborted/blocked movement must not leave a stationary goblin in a presentation state.
+			CompleteDoorPresentation();
+		}
+	}
+	else if (DoorPresentationPhase == EDoorPresentationPhase::Closing && Now >= DoorPhaseEndTime)
+	{
+		CompleteDoorPresentation();
+	}
+}
+
+void ANPGoblinCharacter::CancelDoorPresentation()
+{
+	GetWorldTimerManager().ClearTimer(DoorPresentationTimer);
+	if (HasAuthority() && IsValid(PresentationDoor))
+	{
+		PresentationDoor->CloseAndDestroy();
+	}
+	PresentationDoor = nullptr;
+	DoorPresentationPhase = EDoorPresentationPhase::None;
+}
+
+void ANPGoblinCharacter::CompleteDoorPresentation()
+{
+	if (AAIController* AI = Cast<AAIController>(GetController()))
+	{
+		AI->StopMovement();
+	}
+	CancelDoorPresentation();
+	if (LifecycleState == ENPGoblinLifecycleState::Spawning)
+	{
+		SetActorHiddenInGame(false);
+		FinishSpawnPresentation();
+	}
+	else if (LifecycleState == ENPGoblinLifecycleState::Despawning)
+	{
+		FinishDespawnPresentation();
 	}
 }
 
@@ -226,6 +476,68 @@ void ANPGoblinCharacter::OnPhotographed_Implementation(
 			CaptureSequence);
 		BP_OnPhotoHPDepleted(Photographer);
 		BeginDespawnPresentation();
+	}
+}
+
+void ANPGoblinCharacter::OnPhotographedFromCamera_Implementation(
+	APlayerState* Photographer,
+	const float Visibility,
+	const int32 CaptureSequence,
+	const FVector CameraLocation,
+	const FVector CameraForward)
+{
+	// The legacy callback has already applied damage and spawned the reward.
+	// A lethal photo (or a BP-triggered despawn) must not start another reaction.
+	if (!CanBePhotographed_Implementation(Photographer) || !bFleeWhenPhotographed)
+	{
+		return;
+	}
+
+	FVector FleeDirection = (GetActorLocation() - CameraLocation).GetSafeNormal2D();
+	if (FleeDirection.IsNearlyZero())
+	{
+		FleeDirection = CameraForward.GetSafeNormal2D();
+	}
+	if (FleeDirection.IsNearlyZero())
+	{
+		FleeDirection = GetActorForwardVector().GetSafeNormal2D();
+	}
+
+	ANPGoblinAIController* GoblinController = Cast<ANPGoblinAIController>(GetController());
+	if (GoblinController && GoblinController->StartPhotoFlee(CameraLocation, FleeDirection))
+	{
+		UE_LOG(LogNPPhoto, Display,
+			TEXT("[GoblinPhoto] ESCAPE Goblin=%s Direction=%s Reaction=%.2fs Flee=%.2fs"),
+			*GetNameSafe(this), *FleeDirection.ToCompactString(),
+			GetPhotoReactionDuration(), GetPhotoFleeDuration());
+		Multicast_PlayPhotoReaction(FleeDirection, GetPhotoReactionDuration());
+	}
+}
+
+void ANPGoblinCharacter::Multicast_PlayPhotoReaction_Implementation(
+	const FVector FleeDirection, const float ReactionDuration)
+{
+	StopPhotoReaction();
+	if (LifecycleState == ENPGoblinLifecycleState::Despawning || GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+
+	if (PhotoReactionMontage && ReactionDuration > 0.0f)
+	{
+		PlayAnimMontage(PhotoReactionMontage);
+		GetWorldTimerManager().SetTimer(PhotoReactionTimer, this,
+			&ThisClass::StopPhotoReaction, ReactionDuration, false);
+	}
+	BP_OnPhotoEscapeStarted(FleeDirection, ReactionDuration);
+}
+
+void ANPGoblinCharacter::StopPhotoReaction()
+{
+	GetWorldTimerManager().ClearTimer(PhotoReactionTimer);
+	if (PhotoReactionMontage)
+	{
+		StopAnimMontage(PhotoReactionMontage);
 	}
 }
 
