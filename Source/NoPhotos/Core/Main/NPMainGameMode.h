@@ -46,6 +46,7 @@ protected:
 	TSubclassOf<UNPPhotoEvidenceService> PhotoEvidenceServiceClass;
 
 private:
+	void PlayPhotoWorldFeedback(const FNPPhotoEvidenceResult& Result);
 	void StartMainGame();
 	void UpdateMainGameTimer();
 	void RefreshPlayerRankings();

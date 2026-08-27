@@ -9,6 +9,7 @@
 #include "Gameplay/Interaction/Components/GrabbableComponent.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Gameplay/Relic/Components/NPRelicOwnershipComponent.h"
+#include "Gameplay/Photo/NPPhotoWorldFeedbackComponent.h"
 #include "Core/NPPlayerState.h"
 #include "Gameplay/Character/Component/NPStablePhysicsMovementComponent.h"
 
@@ -23,6 +24,10 @@ ANPReplicatedStablePhysicsPawn::ANPReplicatedStablePhysicsPawn()
 
 	NetworkPrediction = CreateDefaultSubobject<
 		UNPStablePhysicsNetworkPredictionComponent>(TEXT("NetworkPrediction"));
+
+	PhotoWorldFeedback = CreateDefaultSubobject<
+		UNPPhotoWorldFeedbackComponent>(TEXT("PhotoWorldFeedback"));
+	PhotoWorldFeedback->SetupAttachment(GetRootComponent());
 }
 
 void ANPReplicatedStablePhysicsPawn::BeginPlay()
@@ -64,6 +69,22 @@ void ANPReplicatedStablePhysicsPawn::BeginPlay()
 void ANPReplicatedStablePhysicsPawn::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
+}
+
+void ANPReplicatedStablePhysicsPawn::MulticastPlayPhotographerFeedback_Implementation()
+{
+	if (IsValid(PhotoWorldFeedback))
+	{
+		PhotoWorldFeedback->PlayPhotographerEffect();
+	}
+}
+
+void ANPReplicatedStablePhysicsPawn::MulticastPlayPhotographedFeedback_Implementation()
+{
+	if (IsValid(PhotoWorldFeedback))
+	{
+		PhotoWorldFeedback->PlayPhotographedEffect();
+	}
 }
 
 void ANPReplicatedStablePhysicsPawn::EndPlay(const EEndPlayReason::Type EndPlayReason)

@@ -10,6 +10,7 @@ class UPrimitiveComponent;
 class AController;
 class FLifetimeProperty;
 class UNPStablePhysicsNetworkPredictionComponent;
+class UNPPhotoWorldFeedbackComponent;
 class ANPBaseRelic;
 
 USTRUCT()
@@ -56,6 +57,14 @@ public:
 	FRotator GetServerViewRotation() const { return GetTargetViewRotation(); }
 
 	virtual AActor* GetHeldRelic_Implementation() const override;
+
+	/** 서버가 확정한 촬영자 표시를 현재 관련된 모든 클라이언트에서 재생합니다. */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayPhotographerFeedback();
+
+	/** 서버가 확정한 피촬영자 표시를 현재 관련된 모든 클라이언트에서 재생합니다. */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayPhotographedFeedback();
 
 protected:
 	virtual void BeginPlay() override;
@@ -139,6 +148,10 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category="Network")
 	TObjectPtr<UNPStablePhysicsNetworkPredictionComponent> NetworkPrediction;
+
+	/** 사진 촬영/피촬영 상태를 발밑 데칼로 표시합니다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Photo|World Feedback", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UNPPhotoWorldFeedbackComponent> PhotoWorldFeedback;
 
 	/** 서버에서 이 캐릭터가 현재 잡고 있는 다른 캐릭터를 추적합니다. */
 	UPROPERTY(Transient)

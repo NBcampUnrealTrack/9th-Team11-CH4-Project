@@ -46,6 +46,50 @@ FNPPhotoEvidenceResult UNPPhotoEvidenceService::EvaluatePhoto(
 	}
 
 	APawn* PhotographerPawn = Request.Photographer->GetPawn();
+	const float MaximumDistanceSquared = FMath::Square(MaximumCaptureDistance);
+
+	// 유물 증거 판정과 독립적으로 사진에 들어온 플레이어를 먼저 찾습니다.
+	float BestPlayerVisibility = -1.0f;
+	for (TActorIterator<ANPReplicatedStablePhysicsPawn> Iterator(GetWorld()); Iterator; ++Iterator)
+	{
+		ANPReplicatedStablePhysicsPawn* CandidatePlayer = *Iterator;
+		if (!IsValid(CandidatePlayer)
+			|| CandidatePlayer == PhotographerPawn
+			|| !IsValid(CandidatePlayer->GetPlayerState())
+			|| FVector::DistSquared(
+				Request.CameraLocation,
+				CandidatePlayer->GetActorLocation()) > MaximumDistanceSquared)
+		{
+			continue;
+		}
+
+		const float PlayerVisibility = CalculateActorVisibility(
+			Request,
+			CandidatePlayer,
+			PhotographerPawn);
+		if (PlayerVisibility < MinimumPlayerCaptureVisibility
+			|| PlayerVisibility <= BestPlayerVisibility)
+		{
+			continue;
+		}
+
+		BestPlayerVisibility = PlayerVisibility;
+		Result.bPlayerCaptured = true;
+		Result.CapturedPlayer = CandidatePlayer->GetPlayerState();
+		Result.CapturedPlayerVisibility = PlayerVisibility;
+		Result.ServerCaptureTime = GetWorld()->GetTimeSeconds();
+	}
+
+	if (Result.bPlayerCaptured)
+	{
+		UE_LOG(
+			LogNPPhoto,
+			Log,
+			TEXT("[Evidence] Player captured independently. Player=%s Visibility=%.2f"),
+			*GetNameSafe(Result.CapturedPlayer.Get()),
+			Result.CapturedPlayerVisibility);
+	}
+
 	float BestEvidenceQuality = -1.0f;
 	for (TActorIterator<APawn> Iterator(GetWorld()); Iterator; ++Iterator)
 	{
@@ -81,7 +125,6 @@ FNPPhotoEvidenceResult UNPPhotoEvidenceService::EvaluatePhoto(
 			continue;
 		}
 
-		const float MaximumDistanceSquared = FMath::Square(MaximumCaptureDistance);
 		if (FVector::DistSquared(Request.CameraLocation, CandidateThief->GetActorLocation())
 			> MaximumDistanceSquared
 			|| FVector::DistSquared(Request.CameraLocation, HeldRelic->GetActorLocation())
@@ -134,7 +177,6 @@ FNPPhotoEvidenceResult UNPPhotoEvidenceService::EvaluatePhoto(
 
 	AActor* BestReactiveTarget = nullptr;
 	float BestReactiveVisibility = -1.0f;
-	const float MaximumDistanceSquared = FMath::Square(MaximumCaptureDistance);
 	for (TActorIterator<AActor> Iterator(GetWorld()); Iterator; ++Iterator)
 	{
 		AActor* CandidateTarget = *Iterator;

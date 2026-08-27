@@ -27,6 +27,10 @@ public:
 	UNPPhotoTransferComponent* GetPhotoTransferComponent() const { return PhotoTransferComponent; }
 
 	void PlayPhotoFlash();
+
+	/** 서버가 확정한 피촬영자 자신의 로컬 화면에서 기존 사진 플래시를 재생합니다. */
+	UFUNCTION(Client, Reliable)
+	void ClientPlayPhotographedFlash();
 	
 	UFUNCTION(BlueprintPure, Category = "Room")
 	bool IsListenServerHost() const;
