@@ -116,19 +116,22 @@ void UNPStablePhysicsGrabComponent::BeginAbilityGrip(
 		return;
 	}
 
-	AbilityGripPhysicsComponent = GrabbedComponent;
-	AbilityGripPhysicsBoneName = GrabbedBoneName;
+	AbilityGripPhysicsState.Component = GrabbedComponent;
+	AbilityGripPhysicsState.BoneName = GrabbedBoneName;
 	if (bDisableHeldGravity)
 	{
-		bAbilityGripGravityOverrideActive = true;
-		bPreviousHeldGravityEnabled = HeldBody->bEnableGravity;
+		AbilityGripPhysicsState.bGravityOverridden = true;
+		AbilityGripPhysicsState.bPreviousGravityEnabled =
+			HeldBody->bEnableGravity;
 		HeldBody->SetEnableGravity(false);
 	}
 	if (HeldMass > UE_SMALL_NUMBER)
 	{
-		bAbilityGripMassOverrideActive = true;
-		bPreviousHeldMassOverridden = HeldBody->bOverrideMass;
-		PreviousHeldMassOverride = HeldBody->GetMassOverride();
+		AbilityGripPhysicsState.bMassOverridden = true;
+		AbilityGripPhysicsState.bPreviousMassOverridden =
+			HeldBody->bOverrideMass;
+		AbilityGripPhysicsState.PreviousMassOverride =
+			HeldBody->GetMassOverride();
 		GrabbedComponent->SetMassOverrideInKg(
 			GrabbedBoneName,
 			HeldMass,
@@ -146,28 +149,38 @@ void UNPStablePhysicsGrabComponent::EndAbilityGrip()
 	bAbilityGripActive = false;
 	bAbilityGripPreventsConstraintBreak = false;
 	if (UPrimitiveComponent* PhysicsComponent =
-		AbilityGripPhysicsComponent.Get())
+		AbilityGripPhysicsState.Component.Get())
 	{
 		if (FBodyInstance* HeldBody = PhysicsComponent->GetBodyInstance(
-			AbilityGripPhysicsBoneName))
+			AbilityGripPhysicsState.BoneName))
 		{
-			if (bAbilityGripGravityOverrideActive)
+			const FBodyInstance* HandBody = PhysicsMesh
+				? PhysicsMesh->GetBodyInstance(HandBoneName)
+				: nullptr;
+			if (HandBody)
 			{
-				HeldBody->SetEnableGravity(bPreviousHeldGravityEnabled);
+				HeldBody->SetLinearVelocity(
+					HandBody->GetUnrealWorldVelocity(),
+					false);
+				HeldBody->SetAngularVelocityInRadians(
+					HandBody->GetUnrealWorldAngularVelocityInRadians(),
+					false);
 			}
-			if (bAbilityGripMassOverrideActive)
+			if (AbilityGripPhysicsState.bGravityOverridden)
+			{
+				HeldBody->SetEnableGravity(
+					AbilityGripPhysicsState.bPreviousGravityEnabled);
+			}
+			if (AbilityGripPhysicsState.bMassOverridden)
 			{
 				PhysicsComponent->SetMassOverrideInKg(
-					AbilityGripPhysicsBoneName,
-					PreviousHeldMassOverride,
-					bPreviousHeldMassOverridden);
+					AbilityGripPhysicsState.BoneName,
+					AbilityGripPhysicsState.PreviousMassOverride,
+					AbilityGripPhysicsState.bPreviousMassOverridden);
 			}
 		}
 	}
-	bAbilityGripGravityOverrideActive = false;
-	bAbilityGripMassOverrideActive = false;
-	AbilityGripPhysicsComponent.Reset();
-	AbilityGripPhysicsBoneName = NAME_None;
+	AbilityGripPhysicsState = FAbilityGripPhysicsState();
 	if (GetOwner() && GetOwner()->HasAuthority())
 	{
 		SetLinearBreakable(true, GrabLinearBreakThreshold);

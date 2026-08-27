@@ -97,6 +97,17 @@ protected:
 #pragma endregion
 
 private:
+	struct FAbilityGripPhysicsState
+	{
+		TWeakObjectPtr<UPrimitiveComponent> Component;
+		FName BoneName = NAME_None;
+		float PreviousMassOverride = 0.0f;
+		bool bPreviousGravityEnabled = true;
+		bool bPreviousMassOverridden = false;
+		bool bGravityOverridden = false;
+		bool bMassOverridden = false;
+	};
+
 	UFUNCTION()
 	void HandleConstraintBroken(int32 ConstraintIndex);
 	void HandleForceReleaseAllGrabs();
@@ -137,16 +148,10 @@ private:
 	FVector MovementIntent = FVector::ZeroVector;
 	float JumpIntentRemainingTime = 0.0f;
 	float GrabRetryCooldownRemaining = 0.0f;
-	float PreviousHeldMassOverride = 0.0f;
 	float ReplicatedGrabFrameBlendElapsed = 0.0f;
 	bool bAbilityGripActive = false;
 	bool bAbilityGripPreventsConstraintBreak = false;
-	bool bAbilityGripGravityOverrideActive = false;
-	bool bAbilityGripMassOverrideActive = false;
-	bool bPreviousHeldGravityEnabled = true;
-	bool bPreviousHeldMassOverridden = false;
-	TWeakObjectPtr<UPrimitiveComponent> AbilityGripPhysicsComponent;
-	FName AbilityGripPhysicsBoneName = NAME_None;
+	FAbilityGripPhysicsState AbilityGripPhysicsState;
 	FTransform ReplicatedGrabFrameBlendStart = FTransform::Identity;
 	FTransform ReplicatedGrabFrameBlendTarget = FTransform::Identity;
 
