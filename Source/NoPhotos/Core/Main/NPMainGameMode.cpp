@@ -10,6 +10,7 @@
 #include "Gameplay/Photo/NPPhotoEvidenceService.h"
 #include "Gameplay/Photo/NPPhotoLog.h"
 #include "Gameplay/Photo/NPPhotoRepository.h"
+#include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 #include "Gameplay/Relic/NPRelicDeliveryService.h"
 #include "NPMainGameLog.h"
 #include "NPMainGameState.h"
@@ -55,6 +56,7 @@ FNPPhotoEvidenceResult ANPMainGameMode::HandlePhotoCaptureRequest(const FNPPhoto
 	}
 
 	Result = PhotoEvidenceService->EvaluatePhoto(Request);
+	PlayPhotoWorldFeedback(Result);
 	if (PhotoRepository
 		&& (Result.bSuccess
 			|| Result.bReactiveTargetSuccess
@@ -84,13 +86,52 @@ FNPPhotoEvidenceResult ANPMainGameMode::HandlePhotoCaptureRequest(const FNPPhoto
 	UE_LOG(
 		LogNPPhoto,
 		Log,
-		TEXT("[GameMode] Photo accepted. Photographer=%s RelicEvidence=%s Thief=%s Relic=%s ReactiveTarget=%s"),
+		TEXT("[GameMode] Photo accepted. Photographer=%s PlayerCaptured=%s CapturedPlayer=%s RelicEvidence=%s Thief=%s Relic=%s ReactiveTarget=%s"),
 		*GetNameSafe(Result.Photographer.Get()),
+		Result.bPlayerCaptured ? TEXT("true") : TEXT("false"),
+		*GetNameSafe(Result.CapturedPlayer.Get()),
 		Result.bSuccess ? TEXT("true") : TEXT("false"),
 		*GetNameSafe(Result.Thief.Get()),
 		*GetNameSafe(Result.Relic.Get()),
 		*GetNameSafe(Result.ReactiveTarget.Get()));
 	return Result;
+}
+
+void ANPMainGameMode::PlayPhotoWorldFeedback(
+	const FNPPhotoEvidenceResult& Result)
+{
+	if (!HasAuthority() || !Result.bPlayerCaptured)
+	{
+		return;
+	}
+
+	ANPReplicatedStablePhysicsPawn* PhotographerPawn = IsValid(Result.Photographer.Get())
+		? Cast<ANPReplicatedStablePhysicsPawn>(Result.Photographer->GetPawn())
+		: nullptr;
+	ANPReplicatedStablePhysicsPawn* PhotographedPawn = IsValid(Result.CapturedPlayer.Get())
+		? Cast<ANPReplicatedStablePhysicsPawn>(Result.CapturedPlayer->GetPawn())
+		: nullptr;
+
+	if (IsValid(PhotographerPawn))
+	{
+		PhotographerPawn->MulticastPlayPhotographerFeedback();
+	}
+	if (IsValid(PhotographedPawn))
+	{
+		PhotographedPawn->MulticastPlayPhotographedFeedback();
+		if (ANPMainPlayerController* PhotographedController =
+			Cast<ANPMainPlayerController>(PhotographedPawn->GetController()))
+		{
+			PhotographedController->ClientPlayPhotographedFlash();
+		}
+	}
+
+	UE_LOG(
+		LogNPPhoto,
+		Log,
+		TEXT("[PhotoWorldFeedback] Multicast requested. PhotographerPawn=%s PhotographedPawn=%s"),
+		*GetNameSafe(PhotographerPawn),
+		*GetNameSafe(PhotographedPawn));
 }
 
 void ANPMainGameMode::HandlePhotoStored(

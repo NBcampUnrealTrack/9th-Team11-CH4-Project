@@ -112,6 +112,16 @@ void ANPMainPlayerController::PlayPhotoFlash()
 	UE_LOG(LogNPPhoto, Log, TEXT("[PhotoUI] Flash animation requested."));
 }
 
+void ANPMainPlayerController::ClientPlayPhotographedFlash_Implementation()
+{
+	PlayPhotoFlash();
+	UE_LOG(
+		LogNPPhoto,
+		Log,
+		TEXT("[PhotoUI] Photographed flash received. Controller=%s"),
+		*GetNameSafe(this));
+}
+
 void ANPMainPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();

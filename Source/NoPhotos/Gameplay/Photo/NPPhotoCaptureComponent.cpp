@@ -352,7 +352,9 @@ void UNPPhotoCaptureComponent::ClientReceivePhotoResult_Implementation(
 	UE_LOG(
 		LogNPPhoto,
 		Log,
-		TEXT("[Result] RelicSuccess=%s ReactiveSuccess=%s Reason=%d Thief=%s Relic=%s ReactiveTarget=%s"),
+		TEXT("[Result] PlayerCaptured=%s CapturedPlayer=%s RelicSuccess=%s ReactiveSuccess=%s Reason=%d Thief=%s Relic=%s ReactiveTarget=%s"),
+		Result.bPlayerCaptured ? TEXT("true") : TEXT("false"),
+		*GetNameSafe(Result.CapturedPlayer.Get()),
 		Result.bSuccess ? TEXT("true") : TEXT("false"),
 		Result.bReactiveTargetSuccess ? TEXT("true") : TEXT("false"),
 		static_cast<int32>(Result.FailureReason),
