@@ -36,6 +36,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Photo|Validation", meta=(ClampMin="0.0", ClampMax="1.0"))
 	float MinimumThiefVisibility = 0.5f;
 
+	/** 유물 보유 여부와 무관한 플레이어 촬영 판정의 최소 가시율입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Photo|Validation", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float MinimumPlayerCaptureVisibility = 0.5f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Photo|Validation", meta=(ClampMin="0.0", ClampMax="1.0"))
 	float MinimumRelicVisibility = 0.5f;
 

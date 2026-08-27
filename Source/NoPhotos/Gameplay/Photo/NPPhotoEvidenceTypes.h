@@ -61,6 +61,17 @@ struct NOPHOTOS_API FNPPhotoEvidenceResult
 	UPROPERTY(BlueprintReadOnly, Category="Photo")
 	TObjectPtr<AActor> Relic = nullptr;
 
+	/** 유물 보유 여부와 무관하게 상대 플레이어가 사진에 포착되었는지 나타냅니다. */
+	UPROPERTY(BlueprintReadOnly, Category="Photo")
+	bool bPlayerCaptured = false;
+
+	/** 독립 플레이어 촬영 판정에서 가시율이 가장 높았던 플레이어입니다. */
+	UPROPERTY(BlueprintReadOnly, Category="Photo")
+	TObjectPtr<APlayerState> CapturedPlayer = nullptr;
+
+	UPROPERTY(BlueprintReadOnly, Category="Photo")
+	float CapturedPlayerVisibility = 0.0f;
+
 	UPROPERTY(BlueprintReadOnly, Category="Photo")
 	float ThiefVisibility = 0.0f;
 
