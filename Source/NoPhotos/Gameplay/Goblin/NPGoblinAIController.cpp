@@ -4,7 +4,9 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Navigation/PathFollowingComponent.h"
+#include "NavigationPath.h"
 #include "NavigationSystem.h"
+#include "Gameplay/Photo/NPPhotoLog.h"
 #include "NPGoblinCharacter.h"
 #include "NPGoblinPatrolRoute.h"
 #include "TimerManager.h"
@@ -34,6 +36,7 @@ void ANPGoblinAIController::OnPossess(APawn* InPawn)
 	NextRoamTime = 0.0;
 	NextFleeRepathTime = 0.0;
 	bGameplayEnabled = Goblin->IsGameplayActive();
+	bPhotoFleeActive = false;
 	GetWorldTimerManager().SetTimer(
 		DecisionTimer,
 		this,
@@ -51,6 +54,8 @@ void ANPGoblinAIController::OnPossess(APawn* InPawn)
 void ANPGoblinAIController::OnUnPossess()
 {
 	GetWorldTimerManager().ClearTimer(DecisionTimer);
+	GetWorldTimerManager().ClearTimer(PhotoReactionTimer);
+	bPhotoFleeActive = false;
 	StopMovement();
 	Super::OnUnPossess();
 }
@@ -63,6 +68,8 @@ void ANPGoblinAIController::SetGameplayEnabled(const bool bEnabled)
 	}
 
 	bGameplayEnabled = bEnabled;
+	bPhotoFleeActive = false;
+	GetWorldTimerManager().ClearTimer(PhotoReactionTimer);
 	bHasActivePatrolTarget = false;
 	bReturnMoveRequested = false;
 	NextRoamTime = 0.0;
@@ -85,6 +92,49 @@ void ANPGoblinAIController::SetGameplayEnabled(const bool bEnabled)
 	}
 }
 
+bool ANPGoblinAIController::StartPhotoFlee(
+	const FVector& CameraLocation, const FVector& FleeDirection)
+{
+	ANPGoblinCharacter* Goblin = GetGoblin();
+	UWorld* World = GetWorld();
+	if (!HasAuthority() || !bGameplayEnabled || !Goblin || !World
+		|| !Goblin->IsGameplayActive() || Goblin->GetCurrentPhotoHP() <= 0
+		|| Goblin->GetPhotoFleeDuration() <= 0.0f)
+	{
+		return false;
+	}
+
+	PhotoSourceLocation = CameraLocation;
+	PhotoFleeDirection = FleeDirection.GetSafeNormal2D();
+	if (PhotoFleeDirection.IsNearlyZero())
+	{
+		return false;
+	}
+
+	// A new photo replaces the previous source/direction and restarts the escape window.
+	EnterFleeState();
+	bPhotoFleeActive = true;
+	PhotoReactionEndTime = World->GetTimeSeconds() + Goblin->GetPhotoReactionDuration();
+	PhotoFleeEndTime = PhotoReactionEndTime + Goblin->GetPhotoFleeDuration();
+	if (UCharacterMovementComponent* Movement = Goblin->GetCharacterMovement())
+	{
+		Movement->StopMovementImmediately();
+		Movement->MaxWalkSpeed = Goblin->GetPhotoFleeMoveSpeed();
+	}
+
+	GetWorldTimerManager().ClearTimer(PhotoReactionTimer);
+	if (Goblin->GetPhotoReactionDuration() > 0.0f)
+	{
+		GetWorldTimerManager().SetTimer(PhotoReactionTimer, this,
+			&ThisClass::EvaluateMovement, Goblin->GetPhotoReactionDuration(), false);
+	}
+	else
+	{
+		EvaluateMovement();
+	}
+	return true;
+}
+
 void ANPGoblinAIController::EvaluateMovement()
 {
 	ANPGoblinCharacter* Goblin = GetGoblin();
@@ -99,6 +149,32 @@ void ANPGoblinAIController::EvaluateMovement()
 	const bool bHasPlayer = GatherPlayerLocations(PlayerLocations, NearestDistanceSquared);
 	const float EnterDistanceSquared = FMath::Square(Goblin->GetPlayerDetectionRadius());
 	const float LeaveDistanceSquared = FMath::Square(Goblin->GetFleeReleaseDistance());
+
+	if (bPhotoFleeActive)
+	{
+		const double CurrentTime = World->GetTimeSeconds();
+		if (CurrentTime < PhotoFleeEndTime)
+		{
+			if (CurrentTime >= PhotoReactionEndTime)
+			{
+				TryUpdatePhotoFleeDestination();
+			}
+			// Neither proximity checks nor patrol may override the photo reaction/escape.
+			return;
+		}
+
+		bPhotoFleeActive = false;
+		UE_LOG(LogNPPhoto, Display, TEXT("[GoblinPhoto] ESCAPE_END Goblin=%s"), *GetNameSafe(Goblin));
+		if (bHasPlayer && NearestDistanceSquared < LeaveDistanceSquared)
+		{
+			// Still threatened: continue ordinary avoidance, at the ordinary flee speed.
+			EnterFleeState();
+		}
+		else
+		{
+			LeaveFleeState();
+		}
+	}
 
 	if (MovementState != ENPGoblinMovementState::Flee
 		&& bHasPlayer
@@ -350,6 +426,91 @@ void ANPGoblinAIController::TryUpdateFleeDestination(const TArray<FVector>& Play
 		RequestMoveToLocation(Destination, Goblin->GetFleeAcceptanceRadius());
 	}
 	NextFleeRepathTime = CurrentTime + Goblin->GetFleeRepathInterval();
+}
+
+void ANPGoblinAIController::TryUpdatePhotoFleeDestination()
+{
+	ANPGoblinCharacter* Goblin = GetGoblin();
+	UWorld* World = GetWorld();
+	if (!Goblin || !World || World->GetTimeSeconds() < NextFleeRepathTime)
+	{
+		return;
+	}
+
+	FVector Destination;
+	if (FindPhotoFleeDestination(Destination))
+	{
+		RequestMoveToLocation(Destination, Goblin->GetFleeAcceptanceRadius());
+	}
+	else if (GetMoveStatus() != EPathFollowingStatus::Moving)
+	{
+		UE_LOG(LogNPPhoto, Verbose,
+			TEXT("[GoblinPhoto] No reachable escape destination. Goblin=%s"), *GetNameSafe(Goblin));
+	}
+	NextFleeRepathTime = World->GetTimeSeconds() + Goblin->GetFleeRepathInterval();
+}
+
+bool ANPGoblinAIController::FindPhotoFleeDestination(FVector& OutDestination) const
+{
+	const ANPGoblinCharacter* Goblin = GetGoblin();
+	UWorld* World = GetWorld();
+	UNavigationSystemV1* NavigationSystem = World ? UNavigationSystemV1::GetCurrent(World) : nullptr;
+	if (!Goblin || !NavigationSystem)
+	{
+		return false;
+	}
+
+	const FVector Origin = Goblin->GetActorLocation();
+	const float TravelDistance = Goblin->GetFleeTravelDistance();
+	const float MinimumTravelDistance = Goblin->GetFleeAcceptanceRadius()
+		+ Goblin->GetSimpleCollisionRadius() + 10.0f;
+	const double SourceDistanceSquared = FVector::DistSquared2D(Origin, PhotoSourceLocation);
+	const FVector ProjectionExtent(100.0f, 100.0f, 500.0f);
+	const float Angles[] = { 0.0f, 35.0f, -35.0f, 70.0f, -70.0f, 90.0f, -90.0f };
+	const float DistanceScales[] = { 1.0f, 0.6f, 0.3f };
+	double BestScore = TNumericLimits<double>::Lowest();
+	bool bFoundDestination = false;
+
+	for (const float Angle : Angles)
+	{
+		const FVector Direction = PhotoFleeDirection.RotateAngleAxis(Angle, FVector::UpVector);
+		for (const float DistanceScale : DistanceScales)
+		{
+			FNavLocation Candidate;
+			if (!NavigationSystem->ProjectPointToNavigation(
+				Origin + Direction * TravelDistance * DistanceScale, Candidate, ProjectionExtent))
+			{
+				continue;
+			}
+
+			const FVector Delta = Candidate.Location - Origin;
+			const double Distance = Delta.Size2D();
+			const double Alignment = FVector::DotProduct(Delta.GetSafeNormal2D(), PhotoFleeDirection);
+			if (Distance <= MinimumTravelDistance || Alignment < -0.01
+				|| FVector::DistSquared2D(Candidate.Location, PhotoSourceLocation) < SourceDistanceSquared)
+			{
+				continue;
+			}
+
+			// Prefer the photographed-away direction. Sideways detours are allowed, not targets behind us.
+			const double Score = Alignment * TravelDistance * 2.0 + Distance;
+			if (Score <= BestScore)
+			{
+				continue;
+			}
+			UNavigationPath* Path = UNavigationSystemV1::FindPathToLocationSynchronously(
+				World, Origin, Candidate.Location, GetPawn());
+			if (!Path || !Path->IsValid() || Path->IsPartial())
+			{
+				continue;
+			}
+
+			BestScore = Score;
+			OutDestination = Candidate.Location;
+			bFoundDestination = true;
+		}
+	}
+	return bFoundDestination;
 }
 
 bool ANPGoblinAIController::GatherPlayerLocations(

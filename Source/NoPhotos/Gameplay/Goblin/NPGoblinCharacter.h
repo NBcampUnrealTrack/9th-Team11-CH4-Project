@@ -8,6 +8,8 @@
 class ANPGoblinPatrolRoute;
 class ANPBaseRelic;
 class APlayerState;
+class UAnimMontage;
+class ANPGoblinPresentationDoor;
 
 UENUM(BlueprintType)
 enum class ENPGoblinLifecycleState : uint8
@@ -37,6 +39,7 @@ public:
 	ANPGoblinCharacter();
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	/** Deferred Spawn이 끝나기 전에 호출하여 등장 연출 동안 AI가 움직이지 않게 합니다. */
@@ -89,12 +92,18 @@ public:
 	int32 GetFleeSamplingAttempts() const { return FMath::Max(1, FleeSamplingAttempts); }
 	float GetRoamMoveSpeed() const { return FMath::Max(0.0f, RoamMoveSpeed); }
 	float GetFleeMoveSpeed() const { return FMath::Max(0.0f, FleeMoveSpeed); }
+	float GetPhotoReactionDuration() const { return FMath::Max(0.0f, PhotoReactionDuration); }
+	float GetPhotoFleeDuration() const { return FMath::Max(0.0f, PhotoFleeDuration); }
+	float GetPhotoFleeMoveSpeed() const { return FMath::Max(1.0f, PhotoFleeMoveSpeed); }
 
 	virtual bool CanBePhotographed_Implementation(APlayerState* Photographer) const override;
 	virtual void OnPhotographed_Implementation(
 		APlayerState* Photographer,
 		float Visibility,
 		int32 CaptureSequence) override;
+	virtual void OnPhotographedFromCamera_Implementation(
+		APlayerState* Photographer, float Visibility, int32 CaptureSequence,
+		FVector CameraLocation, FVector CameraForward) override;
 
 	/** 서버에서 플레이어가 이 고블린을 유효하게 촬영할 때마다 발생합니다. */
 	UPROPERTY(BlueprintAssignable, Category = "Goblin|Photo")
@@ -110,6 +119,44 @@ public:
 	int32 GetMaxPhotoHP() const { return FMath::Max(1, MaxPhotoHP); }
 
 protected:
+	/** 켜면 기존 Spawn/Despawn Presentation Started BP 이벤트 대신 코드의 문 출입 연출을 사용합니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Presentation|Door")
+	bool bUseDoorPresentation = true;
+
+	/** 기본 C++ 문을 그대로 사용하거나 해당 클래스를 상속한 BP에서 문짝/재질을 변경합니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Presentation|Door")
+	TSubclassOf<ANPGoblinPresentationDoor> PresentationDoorClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Presentation|Door", meta = (ClampMin = "100", Units = "cm"))
+	float DoorTravelDistance = 250.0f;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Presentation|Door", meta = (ClampMin = "1", Units = "cm/s"))
+	float DoorWalkSpeed = 200.0f;
+	/** NavMesh 이동 실패나 외부 중단 시에도 연출 상태에 갇히지 않는 제한 시간입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Presentation|Door", meta = (ClampMin = "1", Units = "s"))
+	float DoorPresentationTimeout = 8.0f;
+
+	/** 생존한 고블린의 촬영 반응. 서버와 관련 클라이언트에서 호출되며 방향은 월드 XY 방향입니다. */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Goblin|Photo|Escape", meta = (DisplayName = "On Photo Escape Started"))
+	void BP_OnPhotoEscapeStarted(FVector FleeDirection, float ReactionDuration);
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Photo|Escape")
+	bool bFleeWhenPhotographed = true;
+
+	/** 놀란 뒤 도주를 시작하기까지의 정지 시간. 0이면 즉시 도주합니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Photo|Escape", meta = (ClampMin = "0.0", Units = "s"))
+	float PhotoReactionDuration = 0.25f;
+
+	/** 놀람 시간이 끝난 뒤 촬영 반대 방향 도주를 우선하는 시간. 이후 일반 회피/순찰로 돌아갑니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Photo|Escape", meta = (ClampMin = "0.0", Units = "s"))
+	float PhotoFleeDuration = 3.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Photo|Escape", meta = (ClampMin = "1.0", Units = "cm/s"))
+	float PhotoFleeMoveSpeed = 800.0f;
+
+	/** 선택 사항: 제자리 놀람 몽타주. 놀람 시간 종료/퇴장 시 중단됩니다. AnimBP에 해당 Slot이 필요합니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Photo|Escape")
+	TObjectPtr<UAnimMontage> PhotoReactionMontage;
+
 	/** 사진 대미지와 촬영 보상 생성 후 서버에서 BP 고블린에게 전달되는 콜백입니다. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Goblin|Photo", meta = (DisplayName = "On Photographed"))
 	void BP_OnPhotographed(APlayerState* Photographer, float Visibility, int32 CaptureSequence);
@@ -230,6 +277,25 @@ protected:
 	float FleeRouteDistancePenaltyWeight = 0.25f;
 
 private:
+	enum class EDoorPresentationPhase : uint8 { None, Opening, Walking, Closing };
+	bool StartDoorPresentation();
+	bool FindDoorTravelLocation(FVector& OutFloorLocation, FTransform& OutDoorTransform) const;
+	void UpdateDoorPresentation();
+	void CompleteDoorPresentation();
+	void CancelDoorPresentation();
+	EDoorPresentationPhase DoorPresentationPhase = EDoorPresentationPhase::None;
+	FVector DoorMoveTarget = FVector::ZeroVector;
+	double DoorPhaseEndTime = 0.0;
+	double DoorDeadline = 0.0;
+	FTimerHandle DoorPresentationTimer;
+	UPROPERTY(Transient)
+	TObjectPtr<ANPGoblinPresentationDoor> PresentationDoor;
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_PlayPhotoReaction(FVector FleeDirection, float ReactionDuration);
+	void StopPhotoReaction();
+	FTimerHandle PhotoReactionTimer;
+
 	void SetLifecycleState(ENPGoblinLifecycleState NewState);
 	void NotifyLifecycleStateChanged();
 	void TrySpawnPhotographedRelic();
