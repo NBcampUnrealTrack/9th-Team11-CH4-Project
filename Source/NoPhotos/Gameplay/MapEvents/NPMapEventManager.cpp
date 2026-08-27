@@ -173,6 +173,32 @@ void UNPMapEventManagerComponent::UnregisterLocationCollector(
 	LocationCollectors.Remove(Collector);
 }
 
+void UNPMapEventManagerComponent::GetSpawnVolumesForGroup(
+	const FGameplayTag SpawnGroup,
+	TArray<ANPMapEventSpawnVolume*>& OutSpawnVolumes) const
+{
+	OutSpawnVolumes.Reset();
+	if (!HasServerAuthority() || !SpawnGroup.IsValid())
+	{
+		return;
+	}
+
+	for (const ANPMapEventLocationCollector* Collector : LocationCollectors)
+	{
+		if (!IsValid(Collector))
+		{
+			continue;
+		}
+
+		TArray<ANPMapEventSpawnVolume*> CollectorVolumes;
+		Collector->GetSpawnVolumesForGroup(SpawnGroup, CollectorVolumes);
+		for (ANPMapEventSpawnVolume* Volume : CollectorVolumes)
+		{
+			OutSpawnVolumes.AddUnique(Volume);
+		}
+	}
+}
+
 ANPMapEventSpawnPoint* UNPMapEventManagerComponent::FindRandomSpawnPoint(
 	const FGameplayTag SpawnGroup) const
 {

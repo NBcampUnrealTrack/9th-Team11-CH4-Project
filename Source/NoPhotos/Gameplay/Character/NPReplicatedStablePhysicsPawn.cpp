@@ -6,6 +6,8 @@
 #include "Net/UnrealNetwork.h"
 #include "PhysicsEngine/BodyInstance.h"
 #include "Gameplay/AbilitySystem/NPAbilitySystemComponent.h"
+#include "Gameplay/Character/Component/NPInvisibilityComponent.h"
+#include "Gameplay/Character/Component/NPVisionRestrictionComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsNetworkPredictionComponent.h"
 #include "Gameplay/Interaction/Components/GrabbableComponent.h"
@@ -28,6 +30,8 @@ ANPReplicatedStablePhysicsPawn::ANPReplicatedStablePhysicsPawn()
 
 	AbilitySystem = CreateDefaultSubobject<UNPAbilitySystemComponent>(
 		TEXT("AbilitySystem"));
+	Invisibility = CreateDefaultSubobject<UNPInvisibilityComponent>(TEXT("Invisibility"));
+	VisionRestriction = CreateDefaultSubobject<UNPVisionRestrictionComponent>(TEXT("VisionRestriction"));
 }
 
 void ANPReplicatedStablePhysicsPawn::BeginPlay()

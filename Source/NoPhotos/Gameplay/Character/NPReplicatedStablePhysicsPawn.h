@@ -12,6 +12,8 @@ class UAbilitySystemComponent;
 class AController;
 class FLifetimeProperty;
 class UNPAbilitySystemComponent;
+class UNPInvisibilityComponent;
+class UNPVisionRestrictionComponent;
 class UNPStablePhysicsNetworkPredictionComponent;
 class ANPBaseRelic;
 
@@ -157,6 +159,13 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Ability System", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UNPAbilitySystemComponent> AbilitySystem;
+
+	/** GAS 상태를 관찰하여 자기 반투명/타인 비표시를 로컬에서 적용합니다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Invisibility", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UNPInvisibilityComponent> Invisibility;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Vision Restriction", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UNPVisionRestrictionComponent> VisionRestriction;
 
 	UPROPERTY(EditDefaultsOnly, Category="Input")
 	TObjectPtr<UInputAction> RelicUseAction;
