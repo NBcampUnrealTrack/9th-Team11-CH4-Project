@@ -6,6 +6,7 @@
 
 class ANPStablePhysicsPawn;
 class UNPSwingableRelicComponent;
+class UGrabbableComponent;
 
 UCLASS()
 class NOPHOTOS_API UNPRelicUseAbility : public UGameplayAbility
@@ -16,6 +17,12 @@ public:
 	UNPRelicUseAbility();
 
 protected:
+	virtual bool CanActivateAbility(
+		FGameplayAbilitySpecHandle Handle,
+		const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayTagContainer* SourceTags = nullptr,
+		const FGameplayTagContainer* TargetTags = nullptr,
+		FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
 	virtual void ActivateAbility(
 		FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo,
@@ -34,5 +41,7 @@ private:
 
 	TWeakObjectPtr<ANPStablePhysicsPawn> SwingPawn;
 	TWeakObjectPtr<UNPSwingableRelicComponent> SwingableRelicComponent;
+	TWeakObjectPtr<UGrabbableComponent> LockedGrabbableComponent;
 	bool bSwingStarted = false;
+	bool bGrabLockAcquired = false;
 };

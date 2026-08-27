@@ -28,6 +28,7 @@ private:
 		UAbilitySystemComponent* SourceAbilitySystem,
 		const FGameplayEffectSpec& EffectSpec,
 		FActiveGameplayEffectHandle ActiveHandle);
+	void HandleKnockbackEffect(const FGameplayEffectSpec& EffectSpec);
 
 	FGameplayAbilitySpecHandle HeldRelicAbilityHandle;
 	bool bGameplayEffectDelegateBound = false;

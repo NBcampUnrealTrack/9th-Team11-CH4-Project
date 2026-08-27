@@ -120,7 +120,8 @@ private:
 		UPrimitiveComponent* PrimitiveComponent,
 		UGrabbableComponent* GrabbableComponent,
 		FName BoneName,
-		bool bRequireConstraint = true);
+		bool bRequireConstraint = true,
+		bool bIgnoreAdditionalGrabLock = false);
 	void UpdateGrabForce(float DeltaTime);
 	void UpdateReplicatedGrabFrameBlend(float DeltaTime);
 	void ReleaseGrab();

@@ -261,7 +261,12 @@ void UNPStablePhysicsGrabComponent::ApplyReplicatedGrab(
 		BoneName);
 	SetConstraintReferenceFrame(EConstraintFrame::Frame1, InitialFrame1);
 	SetConstraintReferenceFrame(EConstraintFrame::Frame2, Frame2);
-	if (!CommitGrab(PrimitiveComponent, GrabbableComponent, BoneName))
+	if (!CommitGrab(
+		PrimitiveComponent,
+		GrabbableComponent,
+		BoneName,
+		true,
+		true))
 	{
 		return;
 	}
@@ -295,7 +300,12 @@ void UNPStablePhysicsGrabComponent::ApplyReplicatedGrabState(
 	UGrabbableComponent* GrabbableComponent = PrimitiveComponent->GetOwner()
 		? PrimitiveComponent->GetOwner()->FindComponentByClass<UGrabbableComponent>()
 		: nullptr;
-	CommitGrab(PrimitiveComponent, GrabbableComponent, BoneName, false);
+	CommitGrab(
+		PrimitiveComponent,
+		GrabbableComponent,
+		BoneName,
+		false,
+		true);
 }
 
 void UNPStablePhysicsGrabComponent::ClearReplicatedGrab()
@@ -451,10 +461,15 @@ bool UNPStablePhysicsGrabComponent::CommitGrab(
 	UPrimitiveComponent* PrimitiveComponent,
 	UGrabbableComponent* GrabbableComponent,
 	FName BoneName,
-	bool bRequireConstraint)
+	bool bRequireConstraint,
+	bool bIgnoreAdditionalGrabLock)
 {
+	const bool bCanGrab = GrabbableComponent
+		&& (bIgnoreAdditionalGrabLock
+			? GrabbableComponent->CanApplyReplicatedGrab()
+			: GrabbableComponent->CanBeGrabbed());
 	if (!GrabbableComponent
-		|| !GrabbableComponent->CanBeGrabbed()
+		|| !bCanGrab
 		|| (bRequireConstraint
 			&& !ConstraintInstance.IsValidConstraintInstance()))
 	{

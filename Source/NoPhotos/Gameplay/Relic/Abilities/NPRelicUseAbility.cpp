@@ -18,6 +18,37 @@ UNPRelicUseAbility::UNPRelicUseAbility()
 	SetAssetTags(Tags);
 }
 
+bool UNPRelicUseAbility::CanActivateAbility(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayTagContainer* SourceTags,
+	const FGameplayTagContainer* TargetTags,
+	FGameplayTagContainer* OptionalRelevantTags) const
+{
+	if (!ActorInfo
+		|| !Super::CanActivateAbility(
+			Handle,
+			ActorInfo,
+			SourceTags,
+			TargetTags,
+			OptionalRelevantTags))
+	{
+		return false;
+	}
+
+	const AActor* Relic = Cast<AActor>(GetSourceObject(Handle, ActorInfo));
+	const UNPSwingableRelicComponent* SwingableRelic = Relic
+		? Relic->FindComponentByClass<UNPSwingableRelicComponent>()
+		: nullptr;
+	const UGrabbableComponent* GrabbableRelic = Relic
+		? Relic->FindComponentByClass<UGrabbableComponent>()
+		: nullptr;
+	return SwingableRelic
+		&& GrabbableRelic
+		&& GrabbableRelic->GetActiveGrabCount() == 1
+		&& Cast<ANPStablePhysicsPawn>(ActorInfo->AvatarActor.Get());
+}
+
 void UNPRelicUseAbility::ActivateAbility(
 	const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo,
@@ -34,7 +65,7 @@ void UNPRelicUseAbility::ActivateAbility(
 	UNPSwingableRelicComponent* SwingableRelic = Relic
 		? Relic->FindComponentByClass<UNPSwingableRelicComponent>()
 		: nullptr;
-	const UGrabbableComponent* GrabbableRelic = Relic
+	UGrabbableComponent* GrabbableRelic = Relic
 		? Relic->FindComponentByClass<UGrabbableComponent>()
 		: nullptr;
 	ANPStablePhysicsPawn* Pawn = ActorInfo
@@ -42,7 +73,6 @@ void UNPRelicUseAbility::ActivateAbility(
 		: nullptr;
 	if (!SwingableRelic
 		|| !GrabbableRelic
-		|| GrabbableRelic->GetActiveGrabCount() != 1
 		|| !Pawn
 		|| !Pawn->BeginRelicSwing(SwingableRelic->GetSwingSettings()))
 	{
@@ -52,6 +82,16 @@ void UNPRelicUseAbility::ActivateAbility(
 
 	bSwingStarted = true;
 	SwingPawn = Pawn;
+	if (Pawn->HasAuthority())
+	{
+		bGrabLockAcquired = GrabbableRelic->AcquireAdditionalGrabLock();
+		if (!bGrabLockAcquired)
+		{
+			EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+			return;
+		}
+		LockedGrabbableComponent = GrabbableRelic;
+	}
 	SwingableRelicComponent = SwingableRelic;
 	if (SwingableRelicComponent.IsValid() && ActorInfo)
 	{
@@ -98,6 +138,13 @@ void UNPRelicUseAbility::EndAbility(
 	}
 	bSwingStarted = false;
 	SwingPawn.Reset();
+
+	if (bGrabLockAcquired && LockedGrabbableComponent.IsValid())
+	{
+		LockedGrabbableComponent->ReleaseAdditionalGrabLock();
+	}
+	bGrabLockAcquired = false;
+	LockedGrabbableComponent.Reset();
 
 	Super::EndAbility(
 		Handle,

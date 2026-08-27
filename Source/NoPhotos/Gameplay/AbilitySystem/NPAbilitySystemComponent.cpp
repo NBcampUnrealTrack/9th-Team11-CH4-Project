@@ -112,11 +112,12 @@ void UNPAbilitySystemComponent::HandleGameplayEffectApplied(
 	{
 		return;
 	}
+	HandleKnockbackEffect(EffectSpec);
+}
 
-	FGameplayTagContainer AbilityTags;
-	AbilityTags.AddTag(NPGameplayTags::Ability_Relic);
-	CancelAbilities(&AbilityTags);
-
+void UNPAbilitySystemComponent::HandleKnockbackEffect(
+	const FGameplayEffectSpec& EffectSpec)
+{
 	const FHitResult* Hit = EffectSpec.GetContext().GetHitResult();
 	if (!Hit)
 	{
@@ -135,6 +136,10 @@ void UNPAbilitySystemComponent::HandleGameplayEffectApplied(
 	{
 		return;
 	}
+
+	FGameplayTagContainer AbilityTags;
+	AbilityTags.AddTag(NPGameplayTags::Ability_Relic);
+	CancelAbilities(&AbilityTags);
 
 	if (ANPStablePhysicsPawn* TargetPawn =
 		Cast<ANPStablePhysicsPawn>(GetAvatarActor()))
