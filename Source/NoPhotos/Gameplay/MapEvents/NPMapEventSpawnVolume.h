@@ -30,6 +30,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Map Event|Spawn Volume")
 	bool UsesCollectorSpawnGroups() const { return bUseCollectorSpawnGroups; }
 
+	/** 회전/스케일을 반영한 박스 내부 판정입니다. 충돌, Overlap, NavMesh는 필요하지 않습니다. */
+	UFUNCTION(BlueprintPure, Category = "Map Event|Spawn Volume")
+	bool IsInsideSpawnBounds(const FVector& WorldLocation) const;
+
 	/**
 	 * RequiredHalfExtent는 생성할 Actor가 차지할 공간의 반지름입니다.
 	 * 반환 Transform의 위치는 Actor의 바닥 Pivot을 기준으로 합니다.
@@ -83,7 +87,6 @@ protected:
 	bool bRandomizeYaw = false;
 
 private:
-	bool IsInsideSpawnBounds(const FVector& WorldLocation) const;
 	bool TraceGround(const FVector& TestLocation, FHitResult& OutHit) const;
 	bool TryResolveGroundLocation(
 		const FVector& NavigationLocation,

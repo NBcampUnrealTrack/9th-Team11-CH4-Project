@@ -7,5 +7,9 @@ namespace NPGameplayTags
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Relic_Use);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Relic);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Effect_Knockback);
+	/** 투명화 상태. 서버 판정과 클라이언트 표현이 함께 조회합니다. */
+	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Invisible);
+	/** 시야 제한 상태. 투명화 여부와 별도로 조회할 수 있습니다. */
+	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_VisionRestricted);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Knockback_Magnitude);
 }

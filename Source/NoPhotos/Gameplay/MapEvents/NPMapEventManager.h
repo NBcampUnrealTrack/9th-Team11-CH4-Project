@@ -9,6 +9,7 @@
 class ANPMapEvent;
 class ANPMapEventLocationCollector;
 class ANPMapEventSpawnPoint;
+class ANPMapEventSpawnVolume;
 class UNPMapEventCatalog;
 class ULevelStreamingDynamic;
 class UWorld;
@@ -68,6 +69,12 @@ public:
 	/** 로드된 컬렉터가 자신의 Point/Volume 목록을 이 매니저에 제공하도록 등록합니다. */
 	void RegisterLocationCollector(ANPMapEventLocationCollector* Collector);
 	void UnregisterLocationCollector(ANPMapEventLocationCollector* Collector);
+
+	/** 등록된 Collector에서 그룹에 속한 유효 Volume 전체를 중복 없이 조회합니다. */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Map Event|Locations")
+	void GetSpawnVolumesForGroup(
+		FGameplayTag SpawnGroup,
+		TArray<ANPMapEventSpawnVolume*>& OutSpawnVolumes) const;
 
 	/** SpawnGroup에 속한 Point 중 하나를 가중치로 선택합니다. */
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Map Event|Locations")
