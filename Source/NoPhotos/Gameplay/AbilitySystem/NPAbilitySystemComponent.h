@@ -24,6 +24,11 @@ public:
 private:
 	void ActivateRelicUseAbility();
 	void ClearHeldRelicAbility();
+	void HandleGameplayEffectApplied(
+		UAbilitySystemComponent* SourceAbilitySystem,
+		const FGameplayEffectSpec& EffectSpec,
+		FActiveGameplayEffectHandle ActiveHandle);
 
 	FGameplayAbilitySpecHandle HeldRelicAbilityHandle;
+	bool bGameplayEffectDelegateBound = false;
 };

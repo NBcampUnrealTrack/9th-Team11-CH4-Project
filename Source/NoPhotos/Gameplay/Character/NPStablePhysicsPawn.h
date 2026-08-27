@@ -35,7 +35,7 @@ public:
 	/** 외부 게임 규칙이 현재 이동 의도를 즉시 제거할 때 사용합니다. */
 	void StopMovementInput();
 	/** 점프대처럼 외부 게임 규칙이 물리 캐릭터 전체에 즉시 속도 변화를 적용할 때 사용합니다. */
-	void AddExternalVelocityChange(const FVector& VelocityChange);
+	virtual void AddExternalVelocityChange(const FVector& VelocityChange);
 	bool BeginRelicSwing(const FNPRelicSwingSettings& Settings);
 	void EndRelicSwing();
 
@@ -87,10 +87,16 @@ public:
 	UFUNCTION(BlueprintPure, Category="Animation")
 	FVector GetVisualForwardDirection() const;
 
+	/** 로컬 또는 복제된 시점의 수평 정면 방향입니다. */
+	FVector GetViewForwardDirection() const;
+
 	UFUNCTION(BlueprintPure, Category="Animation")
 	FRotator GetVisualFacingRotation() const;
 
 protected:
+	/** 현재 실행 환경의 캐릭터 물리에 속도 변화를 직접 적용합니다. */
+	void ApplyExternalVelocityChangeLocal(const FVector& VelocityChange);
+
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;

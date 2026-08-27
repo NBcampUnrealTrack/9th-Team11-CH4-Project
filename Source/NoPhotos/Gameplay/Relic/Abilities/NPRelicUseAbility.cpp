@@ -4,7 +4,7 @@
 #include "Core/GameplayTag/NPGameplayTags.h"
 #include "Engine/Engine.h"
 #include "Gameplay/Character/NPStablePhysicsPawn.h"
-#include "Gameplay/Relic/Components/NPUsableRelicComponent.h"
+#include "Gameplay/Relic/Components/NPSwingableRelicComponent.h"
 
 UNPRelicUseAbility::UNPRelicUseAbility()
 {
@@ -30,15 +30,15 @@ void UNPRelicUseAbility::ActivateAbility(
 		TriggerEventData);
 
 	AActor* Relic = Cast<AActor>(GetCurrentSourceObject());
-	const UNPUsableRelicComponent* UsableRelic = Relic
-		? Relic->FindComponentByClass<UNPUsableRelicComponent>()
+	UNPSwingableRelicComponent* SwingableRelic = Relic
+		? Relic->FindComponentByClass<UNPSwingableRelicComponent>()
 		: nullptr;
 	ANPStablePhysicsPawn* Pawn = ActorInfo
 		? Cast<ANPStablePhysicsPawn>(ActorInfo->AvatarActor.Get())
 		: nullptr;
-	if (!UsableRelic
+	if (!SwingableRelic
 		|| !Pawn
-		|| !Pawn->BeginRelicSwing(UsableRelic->GetSwingSettings()))
+		|| !Pawn->BeginRelicSwing(SwingableRelic->GetSwingSettings()))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
@@ -46,6 +46,14 @@ void UNPRelicUseAbility::ActivateAbility(
 
 	bSwingStarted = true;
 	SwingPawn = Pawn;
+	SwingableRelicComponent = SwingableRelic;
+	if (SwingableRelicComponent.IsValid() && ActorInfo)
+	{
+		SwingableRelicComponent->BeginHitWindow(
+			Pawn,
+			ActorInfo->AbilitySystemComponent.Get(),
+			Pawn->GetViewForwardDirection());
+	}
 
 	if (ActorInfo && ActorInfo->IsLocallyControlled() && GEngine)
 	{
@@ -58,7 +66,7 @@ void UNPRelicUseAbility::ActivateAbility(
 
 	UAbilityTask_WaitDelay* WaitTask = UAbilityTask_WaitDelay::WaitDelay(
 		this,
-		FMath::Max(UsableRelic->GetSwingSettings().Duration, 0.01f));
+		FMath::Max(SwingableRelic->GetSwingSettings().Duration, 0.01f));
 	WaitTask->OnFinish.AddDynamic(
 		this,
 		&UNPRelicUseAbility::HandleSwingFinished);
@@ -72,6 +80,12 @@ void UNPRelicUseAbility::EndAbility(
 	bool bReplicateEndAbility,
 	bool bWasCancelled)
 {
+	if (SwingableRelicComponent.IsValid())
+	{
+		SwingableRelicComponent->EndHitWindow();
+	}
+	SwingableRelicComponent.Reset();
+
 	if (bSwingStarted && SwingPawn.IsValid())
 	{
 		SwingPawn->EndRelicSwing();

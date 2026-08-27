@@ -5,6 +5,7 @@
 #include "NPRelicUseAbility.generated.h"
 
 class ANPStablePhysicsPawn;
+class UNPSwingableRelicComponent;
 
 UCLASS()
 class NOPHOTOS_API UNPRelicUseAbility : public UGameplayAbility
@@ -32,5 +33,6 @@ private:
 	void HandleSwingFinished();
 
 	TWeakObjectPtr<ANPStablePhysicsPawn> SwingPawn;
+	TWeakObjectPtr<UNPSwingableRelicComponent> SwingableRelicComponent;
 	bool bSwingStarted = false;
 };

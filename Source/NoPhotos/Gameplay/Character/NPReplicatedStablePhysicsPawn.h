@@ -51,6 +51,8 @@ public:
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	virtual void AddExternalVelocityChange(
+		const FVector& VelocityChange) override;
 
 	UFUNCTION(BlueprintPure, Category="Network|Grab")
 	bool IsReplicatedRightHandActive() const { return bReplicatedRightHandActive; }
@@ -85,6 +87,10 @@ private:
 
 	UFUNCTION(Server, Reliable)
 	void ServerSetRightHandActive(bool bActive);
+
+	UFUNCTION(Client, Reliable)
+	void ClientApplyExternalVelocityChange(
+		FVector_NetQuantize10 VelocityChange);
 
 	UFUNCTION()
 	void OnRep_RightHandActive();

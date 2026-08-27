@@ -118,6 +118,27 @@ UAbilitySystemComponent* ANPReplicatedStablePhysicsPawn::GetAbilitySystemCompone
 	return AbilitySystem;
 }
 
+void ANPReplicatedStablePhysicsPawn::AddExternalVelocityChange(
+	const FVector& VelocityChange)
+{
+	if (!HasAuthority() || VelocityChange.IsNearlyZero())
+	{
+		return;
+	}
+
+	ApplyExternalVelocityChangeLocal(VelocityChange);
+	if (IsPlayerControlled() && !IsLocallyControlled())
+	{
+		ClientApplyExternalVelocityChange(VelocityChange);
+	}
+}
+
+void ANPReplicatedStablePhysicsPawn::ClientApplyExternalVelocityChange_Implementation(
+	FVector_NetQuantize10 VelocityChange)
+{
+	ApplyExternalVelocityChangeLocal(FVector(VelocityChange));
+}
+
 void ANPReplicatedStablePhysicsPawn::SetupPlayerInputComponent(
 	UInputComponent* PlayerInputComponent)
 {

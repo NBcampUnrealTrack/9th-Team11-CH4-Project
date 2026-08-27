@@ -16,7 +16,7 @@
 #include "Gameplay/Character/Component/NPStablePhysicsDebugComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsMovementComponent.h"
-#include "Gameplay/Relic/Components/NPUsableRelicComponent.h"
+#include "Gameplay/Relic/Components/NPSwingableRelicComponent.h"
 #include "Gameplay/Photo/NPPhotoLog.h"
 #include "Core/Audio/NPSoundSubsystem.h"
 
@@ -125,7 +125,18 @@ void ANPStablePhysicsPawn::StopMovementInput()
 
 void ANPStablePhysicsPawn::AddExternalVelocityChange(const FVector& VelocityChange)
 {
-	if (!HasAuthority() || !PhysicsMesh || VelocityChange.IsNearlyZero())
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	ApplyExternalVelocityChangeLocal(VelocityChange);
+}
+
+void ANPStablePhysicsPawn::ApplyExternalVelocityChangeLocal(
+	const FVector& VelocityChange)
+{
+	if (!PhysicsMesh || VelocityChange.IsNearlyZero())
 	{
 		return;
 	}
@@ -310,6 +321,11 @@ FVector ANPStablePhysicsPawn::GetVisualForwardDirection() const
 	return PhysicsMovement
 		? PhysicsMovement->GetCurrentFacingDirection()
 		: FVector::ForwardVector;
+}
+
+FVector ANPStablePhysicsPawn::GetViewForwardDirection() const
+{
+	return FRotator(0.0f, GetTargetViewRotation().Yaw, 0.0f).Vector();
 }
 
 FRotator ANPStablePhysicsPawn::GetTargetViewRotation() const

@@ -3,7 +3,9 @@
 #include "Core/GameplayTag/NPGameplayTags.h"
 #include "EnhancedInputComponent.h"
 #include "GameplayAbilitySpec.h"
+#include "Gameplay/Character/NPStablePhysicsPawn.h"
 #include "Gameplay/Relic/Components/NPUsableRelicComponent.h"
+#include "GameplayEffect.h"
 #include "InputAction.h"
 
 UNPAbilitySystemComponent::UNPAbilitySystemComponent()
@@ -18,6 +20,13 @@ void UNPAbilitySystemComponent::InitializeForOwner()
 	if (OwningActor)
 	{
 		InitAbilityActorInfo(OwningActor, OwningActor);
+		if (!bGameplayEffectDelegateBound)
+		{
+			OnGameplayEffectAppliedDelegateToSelf.AddUObject(
+				this,
+				&UNPAbilitySystemComponent::HandleGameplayEffectApplied);
+			bGameplayEffectDelegateBound = true;
+		}
 	}
 }
 
@@ -83,4 +92,50 @@ void UNPAbilitySystemComponent::ClearHeldRelicAbility()
 	CancelAbilityHandle(HeldRelicAbilityHandle);
 	ClearAbility(HeldRelicAbilityHandle);
 	HeldRelicAbilityHandle = FGameplayAbilitySpecHandle();
+}
+
+void UNPAbilitySystemComponent::HandleGameplayEffectApplied(
+	UAbilitySystemComponent*,
+	const FGameplayEffectSpec& EffectSpec,
+	FActiveGameplayEffectHandle)
+{
+	AActor* OwningActor = GetOwner();
+	if (!OwningActor
+		|| !OwningActor->HasAuthority()
+		|| !EffectSpec.Def)
+	{
+		return;
+	}
+	FGameplayTagContainer EffectAssetTags;
+	EffectSpec.GetAllAssetTags(EffectAssetTags);
+	if (!EffectAssetTags.HasTag(NPGameplayTags::Effect_Knockback))
+	{
+		return;
+	}
+
+	const FHitResult* Hit = EffectSpec.GetContext().GetHitResult();
+	if (!Hit)
+	{
+		return;
+	}
+
+	FVector KnockbackDirection = Hit->TraceEnd - Hit->TraceStart;
+	KnockbackDirection.Z = 0.0f;
+	KnockbackDirection.Normalize();
+	const float KnockbackMagnitude = EffectSpec.GetSetByCallerMagnitude(
+		NPGameplayTags::Data_Knockback_Magnitude,
+		false,
+		0.0f);
+	if (KnockbackDirection.IsNearlyZero()
+		|| KnockbackMagnitude <= UE_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	if (ANPStablePhysicsPawn* TargetPawn =
+		Cast<ANPStablePhysicsPawn>(GetAvatarActor()))
+	{
+		TargetPawn->AddExternalVelocityChange(
+			KnockbackDirection * KnockbackMagnitude);
+	}
 }
