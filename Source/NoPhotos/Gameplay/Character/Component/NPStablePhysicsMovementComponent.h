@@ -34,6 +34,8 @@ public:
 	void SetTargetPelvisHeight(float InTargetPelvisHeight);
 	void SetMaxMoveSpeed(float InMaxMoveSpeed);
 	void SetJumpVelocityChange(float InJumpVelocityChange);
+	void SetJumpCooldown(float InJumpCooldown);
+	void SetWalkableSlopeAngle(float InWalkableSlopeAngle);
 	void SetFacingControlSettings(
 		float InAngularStrength,
 		float InAngularDampingRatio,
@@ -151,7 +153,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Ground Support", meta=(ClampMin="0.0"))
 	float GroundProbeRadius = 10.0f;
 
+	float WalkableFloorZ = UE_INV_SQRT_2;
+
 	float JumpVelocityChange = 350.0f;
+	float JumpCooldown = 0.2f;
 
 private:
 	FNPStablePhysicsLocomotionInput ConsumePendingInput();
@@ -195,6 +200,7 @@ private:
 	bool bRelicSwingRotationActive = false;
 	bool bGrounded = false;
 	bool bIsFalling = true;
+	float RemainingJumpCooldown = 0.0f;
 	bool bUseAnimationStateOverride = false;
 	FVector AnimationVelocity = FVector::ZeroVector;
 	FVector AnimationAcceleration = FVector::ZeroVector;

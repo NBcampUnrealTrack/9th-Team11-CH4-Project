@@ -366,6 +366,8 @@ void ANPStablePhysicsPawn::ApplyCharacterProfile()
 	PhysicsMovement->SetTargetPelvisHeight(CharacterProfile->PelvisHeight);
 	PhysicsMovement->SetMaxMoveSpeed(CharacterProfile->MaxMoveSpeed);
 	PhysicsMovement->SetJumpVelocityChange(CharacterProfile->JumpVelocityChange);
+	PhysicsMovement->SetJumpCooldown(CharacterProfile->JumpCooldown);
+	PhysicsMovement->SetWalkableSlopeAngle(CharacterProfile->WalkableSlopeAngle);
 	PhysicsMovement->SetFacingControlSettings(
 		CharacterProfile->FacingAngularStrength,
 		CharacterProfile->FacingAngularDampingRatio,
