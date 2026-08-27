@@ -47,6 +47,18 @@ void UNPStablePhysicsMovementComponent::SetJumpVelocityChange(
 	JumpVelocityChange = FMath::Max(InJumpVelocityChange, 0.0f);
 }
 
+void UNPStablePhysicsMovementComponent::SetJumpCooldown(float InJumpCooldown)
+{
+	JumpCooldown = FMath::Max(InJumpCooldown, 0.0f);
+}
+
+void UNPStablePhysicsMovementComponent::SetWalkableSlopeAngle(
+	float InWalkableSlopeAngle)
+{
+	const float ClampedAngle = FMath::Clamp(InWalkableSlopeAngle, 0.0f, 90.0f);
+	WalkableFloorZ = FMath::Cos(FMath::DegreesToRadians(ClampedAngle));
+}
+
 void UNPStablePhysicsMovementComponent::SetFacingControlSettings(
 	float InAngularStrength,
 	float InAngularDampingRatio,
@@ -206,6 +218,9 @@ void UNPStablePhysicsMovementComponent::TickComponent(
 	FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	RemainingJumpCooldown = FMath::Max(
+		RemainingJumpCooldown - DeltaTime,
+		0.0f);
 
 	if (!PhysicsMesh || !PhysicsMesh->IsSimulatingPhysics(PelvisBodyName))
 	{
@@ -279,14 +294,19 @@ bool UNPStablePhysicsMovementComponent::IsFootGrounded(FName FootBoneName) const
 
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(StablePhysicsGround), false, GetOwner());
 	FHitResult Hit;
-	return GetWorld()->SweepSingleByObjectType(
+	if (!GetWorld()->SweepSingleByObjectType(
 		Hit,
 		Start,
 		End,
 		FQuat::Identity,
 		ObjectQueryParams,
 		FCollisionShape::MakeSphere(GroundProbeRadius),
-		QueryParams);
+		QueryParams))
+	{
+		return false;
+	}
+
+	return Hit.ImpactNormal.Z >= WalkableFloorZ;
 }
 
 bool UNPStablePhysicsMovementComponent::FindPelvisGroundDistance(float& OutGroundDistance) const
@@ -308,7 +328,8 @@ bool UNPStablePhysicsMovementComponent::FindPelvisGroundDistance(float& OutGroun
 		FQuat::Identity,
 		ObjectQueryParams,
 		FCollisionShape::MakeSphere(GroundProbeRadius),
-		QueryParams))
+		QueryParams)
+		|| Hit.ImpactNormal.Z < WalkableFloorZ)
 	{
 		return false;
 	}
@@ -458,7 +479,7 @@ void UNPStablePhysicsMovementComponent::UpdateBalancePhysics()
 
 void UNPStablePhysicsMovementComponent::UpdateJumpPhysics(bool bInJumpRequested)
 {
-	if (!bInJumpRequested || !bGrounded)
+	if (!bInJumpRequested || !bGrounded || RemainingJumpCooldown > 0.0f)
 	{
 		return;
 	}
@@ -470,5 +491,6 @@ void UNPStablePhysicsMovementComponent::UpdateJumpPhysics(bool bInJumpRequested)
 		true);
 	bGrounded = false;
 	bIsFalling = true;
+	RemainingJumpCooldown = JumpCooldown;
 	OnJumpApplied.Broadcast();
 }
