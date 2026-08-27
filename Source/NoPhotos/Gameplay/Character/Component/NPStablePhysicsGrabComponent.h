@@ -32,6 +32,11 @@ public:
 	/** 로컬 예측 Constraint가 게임플레이 Grab 델리게이트를 실행하지 않도록 분리합니다. */
 	void SetGameplayNotificationsEnabled(bool bEnabled);
 	void SetLinearBreakThreshold(float InLinearBreakThreshold);
+	void BeginAbilityGrip(
+		bool bPreventConstraintBreak,
+		bool bDisableHeldGravity,
+		float HeldMass);
+	void EndAbilityGrip();
 	void SetReplicatedGrabFrameBlendDuration(float InBlendDuration);
 	void SetGrabRetryCooldown(float InRetryCooldown);
 	void SetMovementIntent(const FVector& WorldMovementIntent);
@@ -92,6 +97,17 @@ protected:
 #pragma endregion
 
 private:
+	struct FAbilityGripPhysicsState
+	{
+		TWeakObjectPtr<UPrimitiveComponent> Component;
+		FName BoneName = NAME_None;
+		float PreviousMassOverride = 0.0f;
+		bool bPreviousGravityEnabled = true;
+		bool bPreviousMassOverridden = false;
+		bool bGravityOverridden = false;
+		bool bMassOverridden = false;
+	};
+
 	UFUNCTION()
 	void HandleConstraintBroken(int32 ConstraintIndex);
 	void HandleForceReleaseAllGrabs();
@@ -104,7 +120,8 @@ private:
 		UPrimitiveComponent* PrimitiveComponent,
 		UGrabbableComponent* GrabbableComponent,
 		FName BoneName,
-		bool bRequireConstraint = true);
+		bool bRequireConstraint = true,
+		bool bIgnoreAdditionalGrabLock = false);
 	void UpdateGrabForce(float DeltaTime);
 	void UpdateReplicatedGrabFrameBlend(float DeltaTime);
 	void ReleaseGrab();
@@ -133,6 +150,9 @@ private:
 	float JumpIntentRemainingTime = 0.0f;
 	float GrabRetryCooldownRemaining = 0.0f;
 	float ReplicatedGrabFrameBlendElapsed = 0.0f;
+	bool bAbilityGripActive = false;
+	bool bAbilityGripPreventsConstraintBreak = false;
+	FAbilityGripPhysicsState AbilityGripPhysicsState;
 	FTransform ReplicatedGrabFrameBlendStart = FTransform::Identity;
 	FTransform ReplicatedGrabFrameBlendTarget = FTransform::Identity;
 

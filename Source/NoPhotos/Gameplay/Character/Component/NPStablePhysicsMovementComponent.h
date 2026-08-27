@@ -47,6 +47,10 @@ public:
 	void SetFacingDirection(const FVector& InFacingDirection);
 	void InitializeFacingControl(UPhysicsControlComponent* InPhysicsControl);
 	void SetFacingControlEnabled(bool bEnabled);
+	void BeginRelicSwingRotation(
+		float Torque,
+		float MaxAngularSpeedDegrees);
+	void EndRelicSwingRotation();
 
 	/** false이면 상태 조회만 수행하고 실제 물리 Force와 회전은 적용하지 않습니다. */
 	void SetPhysicsUpdatesEnabled(bool bEnabled) { bPhysicsUpdatesEnabled = bEnabled; }
@@ -165,6 +169,7 @@ private:
 		const FVector& InFacingDirection,
 		bool bInHasFacingDirection);
 	void ResetFacingControlTarget();
+	void UpdateRelicSwingRotation();
 	void UpdateBalancePhysics();
 	void UpdateJumpPhysics(bool bInJumpRequested);
 
@@ -178,12 +183,16 @@ private:
 	FQuat FacingTargetOrientation = FQuat::Identity;
 	FName FacingControlName = TEXT("PelvisFacing");
 	float FacingTargetVisualYaw = 0.0f;
+	float RelicSwingTorque = 0.0f;
+	float MaxRelicSwingAngularSpeed = 0.0f;
 	FVector Velocity = FVector::ZeroVector;
 	FVector CurrentAcceleration = FVector::ZeroVector;
 	float CharacterForwardYawOffset = 90.0f;
 	bool bPhysicsUpdatesEnabled = true;
 	bool bFacingControlCreated = false;
 	bool bFacingControlEnabled = false;
+	bool bFacingControlSuppressed = false;
+	bool bRelicSwingRotationActive = false;
 	bool bGrounded = false;
 	bool bIsFalling = true;
 	bool bUseAnimationStateOverride = false;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AbilitySystemInterface.h"
 #include "CoreMinimal.h"
 #include "Engine/EngineTypes.h"
 #include "Gameplay/Character/NPStablePhysicsPawn.h"
@@ -7,8 +8,10 @@
 #include "NPReplicatedStablePhysicsPawn.generated.h"
 
 class UPrimitiveComponent;
+class UAbilitySystemComponent;
 class AController;
 class FLifetimeProperty;
+class UNPAbilitySystemComponent;
 class UNPStablePhysicsNetworkPredictionComponent;
 class ANPBaseRelic;
 
@@ -35,7 +38,10 @@ struct FReplicatedStableGrabState
 
 /** 평상시에는 소유 클라이언트, 공유 Grab 중에는 서버가 이동 물리 기준을 결정합니다. */
 UCLASS()
-class NOPHOTOS_API ANPReplicatedStablePhysicsPawn : public ANPStablePhysicsPawn, public INPRelicHolderInterface
+class NOPHOTOS_API ANPReplicatedStablePhysicsPawn
+	: public ANPStablePhysicsPawn
+	, public INPRelicHolderInterface
+	, public IAbilitySystemInterface
 {
 	GENERATED_BODY()
 	friend class UNPStablePhysicsDebugComponent;
@@ -45,6 +51,9 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	virtual void AddExternalVelocityChange(
+		const FVector& VelocityChange) override;
 
 	UFUNCTION(BlueprintPure, Category="Network|Grab")
 	bool IsReplicatedRightHandActive() const { return bReplicatedRightHandActive; }
@@ -60,8 +69,10 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void PossessedBy(AController* NewController) override;
+	virtual void OnRep_Controller() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
+	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 	virtual void ApplyMoveInput(const FVector& WorldMoveInput) override;
 	virtual void ApplyJumpRequest() override;
 	virtual void ApplyRightHandState(bool bActive) override;
@@ -77,6 +88,10 @@ private:
 
 	UFUNCTION(Server, Reliable)
 	void ServerSetRightHandActive(bool bActive);
+
+	UFUNCTION(Client, Reliable)
+	void ClientApplyExternalVelocityChange(
+		FVector_NetQuantize10 VelocityChange);
 
 	UFUNCTION()
 	void OnRep_RightHandActive();
@@ -139,6 +154,12 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category="Network")
 	TObjectPtr<UNPStablePhysicsNetworkPredictionComponent> NetworkPrediction;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Ability System", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UNPAbilitySystemComponent> AbilitySystem;
+
+	UPROPERTY(EditDefaultsOnly, Category="Input")
+	TObjectPtr<UInputAction> RelicUseAction;
 
 	/** 서버에서 이 캐릭터가 현재 잡고 있는 다른 캐릭터를 추적합니다. */
 	UPROPERTY(Transient)

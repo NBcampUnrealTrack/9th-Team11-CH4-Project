@@ -2,10 +2,20 @@
 
 #include "Components/PrimitiveComponent.h"
 #include "GameFramework/Actor.h"
+#include "Net/UnrealNetwork.h"
 
 UGrabbableComponent::UGrabbableComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+	SetIsReplicatedByDefault(true);
+}
+
+void UGrabbableComponent::GetLifetimeReplicatedProps(
+	TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(UGrabbableComponent, bAdditionalGrabLocked);
 }
 
 void UGrabbableComponent::SetGrabEnabled(bool bEnabled)
@@ -22,6 +32,38 @@ void UGrabbableComponent::ForceReleaseAllGrabs()
 	if (ActiveGrabCount > 0)
 	{
 		OnForceReleaseAllGrabs.Broadcast();
+	}
+}
+
+bool UGrabbableComponent::AcquireAdditionalGrabLock()
+{
+	AActor* OwnerActor = GetOwner();
+	if (!OwnerActor || !OwnerActor->HasAuthority())
+	{
+		return false;
+	}
+
+	++AdditionalGrabLockCount;
+	bAdditionalGrabLocked = true;
+	OwnerActor->ForceNetUpdate();
+	return true;
+}
+
+void UGrabbableComponent::ReleaseAdditionalGrabLock()
+{
+	AActor* OwnerActor = GetOwner();
+	if (!OwnerActor
+		|| !OwnerActor->HasAuthority()
+		|| AdditionalGrabLockCount <= 0)
+	{
+		return;
+	}
+
+	--AdditionalGrabLockCount;
+	if (AdditionalGrabLockCount == 0)
+	{
+		bAdditionalGrabLocked = false;
+		OwnerActor->ForceNetUpdate();
 	}
 }
 

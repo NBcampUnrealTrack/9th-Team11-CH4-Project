@@ -128,6 +128,7 @@ void UNPStablePhysicsMovementComponent::InitializeFacingControl(
 void UNPStablePhysicsMovementComponent::SetFacingControlEnabled(bool bEnabled)
 {
 	const bool bShouldEnable = bEnabled
+		&& !bFacingControlSuppressed
 		&& bOrientRotationToMovement
 		&& bFacingControlCreated;
 	if (!PhysicsControl || bFacingControlEnabled == bShouldEnable)
@@ -145,6 +146,27 @@ void UNPStablePhysicsMovementComponent::SetFacingControlEnabled(bool bEnabled)
 		true,
 		false);
 	bFacingControlEnabled = bShouldEnable;
+}
+
+void UNPStablePhysicsMovementComponent::BeginRelicSwingRotation(
+	float Torque,
+	float MaxAngularSpeedDegrees)
+{
+	RelicSwingTorque = Torque;
+	MaxRelicSwingAngularSpeed = FMath::DegreesToRadians(
+		FMath::Max(MaxAngularSpeedDegrees, 0.0f));
+	bRelicSwingRotationActive = !FMath::IsNearlyZero(RelicSwingTorque);
+	bFacingControlSuppressed = true;
+	SetFacingControlEnabled(false);
+}
+
+void UNPStablePhysicsMovementComponent::EndRelicSwingRotation()
+{
+	bRelicSwingRotationActive = false;
+	RelicSwingTorque = 0.0f;
+	MaxRelicSwingAngularSpeed = 0.0f;
+	bFacingControlSuppressed = false;
+	ResetFacingControlTarget();
 }
 
 FVector UNPStablePhysicsMovementComponent::GetCurrentFacingDirection() const
@@ -223,6 +245,7 @@ void UNPStablePhysicsMovementComponent::SimulateLocomotion(
 		DeltaTime,
 		Input.FacingDirection,
 		Input.bHasFacingDirection);
+	UpdateRelicSwingRotation();
 	UpdateBalancePhysics();
 	UpdateJumpPhysics(Input.bJumpRequested);
 }
@@ -396,6 +419,28 @@ void UNPStablePhysicsMovementComponent::ResetFacingControlTarget()
 			true,
 			false);
 	}
+}
+
+void UNPStablePhysicsMovementComponent::UpdateRelicSwingRotation()
+{
+	if (!bRelicSwingRotationActive || !PhysicsMesh)
+	{
+		return;
+	}
+
+	const float TorqueDirection = FMath::Sign(RelicSwingTorque);
+	const float CurrentAngularSpeed =
+		PhysicsMesh->GetPhysicsAngularVelocityInRadians(PelvisBodyName).Z;
+	const float DirectedAngularSpeed = CurrentAngularSpeed * TorqueDirection;
+	if (MaxRelicSwingAngularSpeed > UE_SMALL_NUMBER
+		&& DirectedAngularSpeed >= MaxRelicSwingAngularSpeed)
+	{
+		return;
+	}
+
+	PhysicsMesh->AddTorqueInRadians(
+		FVector::UpVector * RelicSwingTorque,
+		PelvisBodyName);
 }
 
 void UNPStablePhysicsMovementComponent::UpdateBalancePhysics()

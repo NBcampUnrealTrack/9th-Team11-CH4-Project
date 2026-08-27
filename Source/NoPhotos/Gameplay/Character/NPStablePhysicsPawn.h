@@ -18,6 +18,7 @@ class USpringArmComponent;
 class UNPStablePhysicsDebugComponent;
 class UNPStablePhysicsGrabComponent;
 class UNPStablePhysicsMovementComponent;
+struct FNPRelicSwingSettings;
 struct FInputActionValue;
 
 /** 물리 캐릭터 프로토타입을 위한 안정적인 힘 기반 Pawn입니다. */
@@ -34,7 +35,9 @@ public:
 	/** 외부 게임 규칙이 현재 이동 의도를 즉시 제거할 때 사용합니다. */
 	void StopMovementInput();
 	/** 점프대처럼 외부 게임 규칙이 물리 캐릭터 전체에 즉시 속도 변화를 적용할 때 사용합니다. */
-	void AddExternalVelocityChange(const FVector& VelocityChange);
+	virtual void AddExternalVelocityChange(const FVector& VelocityChange);
+	bool BeginRelicSwing(const FNPRelicSwingSettings& Settings);
+	void EndRelicSwing();
 
 	/** 설정된 사진 촬영 Montage를 한 번 재생합니다. */
 	bool PlayPhotoShotMontage();
@@ -84,10 +87,16 @@ public:
 	UFUNCTION(BlueprintPure, Category="Animation")
 	FVector GetVisualForwardDirection() const;
 
+	/** 로컬 또는 복제된 시점의 수평 정면 방향입니다. */
+	FVector GetViewForwardDirection() const;
+
 	UFUNCTION(BlueprintPure, Category="Animation")
 	FRotator GetVisualFacingRotation() const;
 
 protected:
+	/** 현재 실행 환경의 캐릭터 물리에 속도 변화를 직접 적용합니다. */
+	void ApplyExternalVelocityChangeLocal(const FVector& VelocityChange);
+
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
@@ -213,6 +222,9 @@ protected:
 	FName RightShoulderBoneName = TEXT("clavicle_r");
 
 	UPROPERTY(EditAnywhere, Category="Right Hand IK")
+	FName RightUpperArmBoneName = TEXT("upperarm_r");
+
+	UPROPERTY(EditAnywhere, Category="Right Hand IK")
 	FName RightHandBoneName = TEXT("hand_r");
 
 private:
@@ -223,6 +235,8 @@ private:
 	void RefreshCharacterProfileIfChanged();
 	void InitializePhysicalAnimation();
 	void ApplyPhysicalAnimationGroups();
+	void ApplyRelicSwingPhysicalAnimation(
+		const FNPRelicSwingSettings& Settings);
 	void ConfigurePelvisStability();
 	void UpdateCameraTarget();
 	void UpdatePhotoCamera(float DeltaSeconds);
@@ -237,6 +251,7 @@ private:
 	void StopRightHand();
 
 	bool bRightHandActive = false;
+	bool bRelicSwingActive = false;
 	bool bHasRightHandIKWorldTarget = false;
 	FVector RightHandIKWorldTarget = FVector::ZeroVector;
 	float RightHandReachDistance = 120.0f;

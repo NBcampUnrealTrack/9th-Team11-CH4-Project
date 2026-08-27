@@ -88,6 +88,101 @@ void UNPStablePhysicsGrabComponent::SetLinearBreakThreshold(
 	GrabLinearBreakThreshold = FMath::Max(InLinearBreakThreshold, 0.0f);
 	if (GetOwner() && GetOwner()->HasAuthority())
 	{
+		SetLinearBreakable(
+			!bAbilityGripPreventsConstraintBreak,
+			GrabLinearBreakThreshold);
+	}
+}
+
+void UNPStablePhysicsGrabComponent::BeginAbilityGrip(
+	bool bPreventConstraintBreak,
+	bool bDisableHeldGravity,
+	float HeldMass)
+{
+	bAbilityGripActive = true;
+	bAbilityGripPreventsConstraintBreak = bPreventConstraintBreak;
+	if (GetOwner() && GetOwner()->HasAuthority())
+	{
+		SetLinearBreakable(
+			!bAbilityGripPreventsConstraintBreak,
+			GrabLinearBreakThreshold);
+	}
+
+	FBodyInstance* HeldBody = GrabbedComponent
+		? GrabbedComponent->GetBodyInstance(GrabbedBoneName)
+		: nullptr;
+	if (!HeldBody)
+	{
+		return;
+	}
+
+	AbilityGripPhysicsState.Component = GrabbedComponent;
+	AbilityGripPhysicsState.BoneName = GrabbedBoneName;
+	if (bDisableHeldGravity)
+	{
+		AbilityGripPhysicsState.bGravityOverridden = true;
+		AbilityGripPhysicsState.bPreviousGravityEnabled =
+			HeldBody->bEnableGravity;
+		HeldBody->SetEnableGravity(false);
+	}
+	if (HeldMass > UE_SMALL_NUMBER)
+	{
+		AbilityGripPhysicsState.bMassOverridden = true;
+		AbilityGripPhysicsState.bPreviousMassOverridden =
+			HeldBody->bOverrideMass;
+		AbilityGripPhysicsState.PreviousMassOverride =
+			HeldBody->GetMassOverride();
+		GrabbedComponent->SetMassOverrideInKg(
+			GrabbedBoneName,
+			HeldMass,
+			true);
+	}
+}
+
+void UNPStablePhysicsGrabComponent::EndAbilityGrip()
+{
+	if (!bAbilityGripActive)
+	{
+		return;
+	}
+
+	bAbilityGripActive = false;
+	bAbilityGripPreventsConstraintBreak = false;
+	if (UPrimitiveComponent* PhysicsComponent =
+		AbilityGripPhysicsState.Component.Get())
+	{
+		if (FBodyInstance* HeldBody = PhysicsComponent->GetBodyInstance(
+			AbilityGripPhysicsState.BoneName))
+		{
+			const FBodyInstance* HandBody = PhysicsMesh
+				? PhysicsMesh->GetBodyInstance(HandBoneName)
+				: nullptr;
+			if (HandBody)
+			{
+				HeldBody->SetLinearVelocity(
+					HandBody->GetUnrealWorldVelocity(),
+					false);
+				HeldBody->SetAngularVelocityInRadians(
+					HandBody->GetUnrealWorldAngularVelocityInRadians(),
+					false);
+			}
+			if (AbilityGripPhysicsState.bGravityOverridden)
+			{
+				HeldBody->SetEnableGravity(
+					AbilityGripPhysicsState.bPreviousGravityEnabled);
+			}
+			if (AbilityGripPhysicsState.bMassOverridden)
+			{
+				PhysicsComponent->SetMassOverrideInKg(
+					AbilityGripPhysicsState.BoneName,
+					AbilityGripPhysicsState.PreviousMassOverride,
+					AbilityGripPhysicsState.bPreviousMassOverridden);
+			}
+		}
+	}
+	AbilityGripPhysicsState = FAbilityGripPhysicsState();
+	if (GetOwner() && GetOwner()->HasAuthority())
+	{
 		SetLinearBreakable(true, GrabLinearBreakThreshold);
 	}
 }
@@ -166,7 +261,12 @@ void UNPStablePhysicsGrabComponent::ApplyReplicatedGrab(
 		BoneName);
 	SetConstraintReferenceFrame(EConstraintFrame::Frame1, InitialFrame1);
 	SetConstraintReferenceFrame(EConstraintFrame::Frame2, Frame2);
-	if (!CommitGrab(PrimitiveComponent, GrabbableComponent, BoneName))
+	if (!CommitGrab(
+		PrimitiveComponent,
+		GrabbableComponent,
+		BoneName,
+		true,
+		true))
 	{
 		return;
 	}
@@ -200,7 +300,12 @@ void UNPStablePhysicsGrabComponent::ApplyReplicatedGrabState(
 	UGrabbableComponent* GrabbableComponent = PrimitiveComponent->GetOwner()
 		? PrimitiveComponent->GetOwner()->FindComponentByClass<UGrabbableComponent>()
 		: nullptr;
-	CommitGrab(PrimitiveComponent, GrabbableComponent, BoneName, false);
+	CommitGrab(
+		PrimitiveComponent,
+		GrabbableComponent,
+		BoneName,
+		false,
+		true);
 }
 
 void UNPStablePhysicsGrabComponent::ClearReplicatedGrab()
@@ -356,10 +461,15 @@ bool UNPStablePhysicsGrabComponent::CommitGrab(
 	UPrimitiveComponent* PrimitiveComponent,
 	UGrabbableComponent* GrabbableComponent,
 	FName BoneName,
-	bool bRequireConstraint)
+	bool bRequireConstraint,
+	bool bIgnoreAdditionalGrabLock)
 {
+	const bool bCanGrab = GrabbableComponent
+		&& (bIgnoreAdditionalGrabLock
+			? GrabbableComponent->CanApplyReplicatedGrab()
+			: GrabbableComponent->CanBeGrabbed());
 	if (!GrabbableComponent
-		|| !GrabbableComponent->CanBeGrabbed()
+		|| !bCanGrab
 		|| (bRequireConstraint
 			&& !ConstraintInstance.IsValidConstraintInstance()))
 	{

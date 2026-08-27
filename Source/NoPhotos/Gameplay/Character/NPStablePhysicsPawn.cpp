@@ -16,6 +16,7 @@
 #include "Gameplay/Character/Component/NPStablePhysicsDebugComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsMovementComponent.h"
+#include "Gameplay/Relic/Components/NPSwingableRelicComponent.h"
 #include "Gameplay/Photo/NPPhotoLog.h"
 #include "Core/Audio/NPSoundSubsystem.h"
 
@@ -124,7 +125,18 @@ void ANPStablePhysicsPawn::StopMovementInput()
 
 void ANPStablePhysicsPawn::AddExternalVelocityChange(const FVector& VelocityChange)
 {
-	if (!HasAuthority() || !PhysicsMesh || VelocityChange.IsNearlyZero())
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	ApplyExternalVelocityChangeLocal(VelocityChange);
+}
+
+void ANPStablePhysicsPawn::ApplyExternalVelocityChangeLocal(
+	const FVector& VelocityChange)
+{
+	if (!PhysicsMesh || VelocityChange.IsNearlyZero())
 	{
 		return;
 	}
@@ -136,6 +148,42 @@ void ANPStablePhysicsPawn::AddExternalVelocityChange(const FVector& VelocityChan
 		FullBodyRootName,
 		true,
 		true);
+}
+
+bool ANPStablePhysicsPawn::BeginRelicSwing(
+	const FNPRelicSwingSettings& Settings)
+{
+	if (bRelicSwingActive
+		|| !PhysicsMovement
+		|| !RightHandGrab
+		|| !RightHandGrab->IsHoldingObject())
+	{
+		return false;
+	}
+
+	bRelicSwingActive = true;
+	RightHandGrab->BeginAbilityGrip(
+		Settings.bPreventGrabConstraintBreak,
+		Settings.bDisableHeldRelicGravity,
+		Settings.HeldRelicMass);
+	PhysicsMovement->BeginRelicSwingRotation(
+		Settings.Torque,
+		Settings.MaxAngularSpeed);
+	ApplyRelicSwingPhysicalAnimation(Settings);
+	return true;
+}
+
+void ANPStablePhysicsPawn::EndRelicSwing()
+{
+	if (!bRelicSwingActive)
+	{
+		return;
+	}
+
+	bRelicSwingActive = false;
+	PhysicsMovement->EndRelicSwingRotation();
+	RightHandGrab->EndAbilityGrip();
+	ApplyPhysicalAnimationGroups();
 }
 
 bool ANPStablePhysicsPawn::PlayPhotoShotMontage()
@@ -275,6 +323,11 @@ FVector ANPStablePhysicsPawn::GetVisualForwardDirection() const
 		: FVector::ForwardVector;
 }
 
+FVector ANPStablePhysicsPawn::GetViewForwardDirection() const
+{
+	return FRotator(0.0f, GetTargetViewRotation().Yaw, 0.0f).Vector();
+}
+
 FRotator ANPStablePhysicsPawn::GetTargetViewRotation() const
 {
 	return Controller
@@ -291,6 +344,7 @@ void ANPStablePhysicsPawn::ApplyCharacterProfile()
 
 	FullBodyRootName = CharacterProfile->PelvisBoneName;
 	RightShoulderBoneName = CharacterProfile->RightShoulderBoneName;
+	RightUpperArmBoneName = CharacterProfile->RightUpperArmBoneName;
 	RightHandBoneName = CharacterProfile->RightHandBoneName;
 	CharacterForwardYawOffset = CharacterProfile->CharacterForwardYawOffset;
 	RightHandReachDistance = CharacterProfile->RightHandReachDistance;
@@ -387,6 +441,41 @@ void ANPStablePhysicsPawn::ApplyPhysicalAnimationGroups()
 	}
 }
 
+void ANPStablePhysicsPawn::ApplyRelicSwingPhysicalAnimation(
+	const FNPRelicSwingSettings& Settings)
+{
+	if (!PhysicalAnimation || !PhysicsMesh)
+	{
+		return;
+	}
+
+	if (PhysicsMesh->GetBoneIndex(RightUpperArmBoneName) != INDEX_NONE)
+	{
+		FPhysicalAnimationData ArmData;
+		ArmData.bIsLocalSimulation = true;
+		ArmData.OrientationStrength = Settings.ArmOrientationStrength;
+		ArmData.AngularVelocityStrength =
+			Settings.ArmAngularVelocityStrength;
+		PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(
+			RightUpperArmBoneName,
+			ArmData,
+			true);
+	}
+
+	if (PhysicsMesh->GetBoneIndex(RightHandBoneName) != INDEX_NONE)
+	{
+		FPhysicalAnimationData HandData;
+		HandData.bIsLocalSimulation = true;
+		HandData.OrientationStrength = Settings.HandOrientationStrength;
+		HandData.AngularVelocityStrength =
+			Settings.HandAngularVelocityStrength;
+		PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(
+			RightHandBoneName,
+			HandData,
+			true);
+	}
+}
+
 void ANPStablePhysicsPawn::ConfigurePelvisStability()
 {
 	if (FBodyInstance* PelvisBody = PhysicsMesh->GetBodyInstance(FullBodyRootName))
@@ -447,7 +536,9 @@ void ANPStablePhysicsPawn::UpdateFacingTarget()
 
 void ANPStablePhysicsPawn::UpdateRightHandIK(float DeltaSeconds)
 {
-	const float TargetAlpha = bRightHandActive ? 1.0f : 0.0f;
+	const float TargetAlpha = bRightHandActive && !bRelicSwingActive
+		? 1.0f
+		: 0.0f;
 	RightHandIKAlpha = FMath::FInterpTo(
 		RightHandIKAlpha,
 		TargetAlpha,

@@ -5,6 +5,7 @@
 #include "GrabbableComponent.generated.h"
 
 class UPrimitiveComponent;
+class FLifetimeProperty;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnGrabStarted, UPrimitiveComponent*);
 DECLARE_MULTICAST_DELEGATE_ThreeParams(
@@ -22,9 +23,15 @@ class NOPHOTOS_API UGrabbableComponent : public UActorComponent
 
 public:
 	UGrabbableComponent();
+	virtual void GetLifetimeReplicatedProps(
+		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	UFUNCTION(BlueprintPure, Category="Interaction")
-	bool CanBeGrabbed() const { return bGrabEnabled; }
+	bool CanBeGrabbed() const
+	{
+		return bGrabEnabled && !bAdditionalGrabLocked;
+	}
+	bool CanApplyReplicatedGrab() const { return bGrabEnabled; }
 
 	UFUNCTION(BlueprintPure, Category="Interaction")
 	bool IsGrabbed() const { return bIsGrabbed; }
@@ -42,6 +49,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="Interaction")
 	void ForceReleaseAllGrabs();
+
+	bool AcquireAdditionalGrabLock();
+	void ReleaseAdditionalGrabLock();
 
 	UPrimitiveComponent* ResolveGrabTarget(UPrimitiveComponent* DetectedComponent) const;
 
@@ -61,6 +71,9 @@ private:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Interaction", meta=(AllowPrivateAccess="true"))
 	bool bGrabEnabled = true;
 
+	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category="Interaction", meta=(AllowPrivateAccess="true"))
+	bool bAdditionalGrabLocked = false;
+
 	UPROPERTY(Transient, VisibleInstanceOnly, BlueprintReadOnly, Category="Interaction", meta=(AllowPrivateAccess="true"))
 	bool bIsGrabbed = false;
 
@@ -71,4 +84,5 @@ private:
 	FVector CurrentAngularGrabForce = FVector::ZeroVector;
 
 	int32 ActiveGrabCount = 0;
+	int32 AdditionalGrabLockCount = 0;
 };
