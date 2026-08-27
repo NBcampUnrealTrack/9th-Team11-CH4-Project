@@ -20,14 +20,14 @@ UNPSwingableRelicComponent::UNPSwingableRelicComponent()
 		UNPKnockbackGameplayEffect::StaticClass();
 }
 
-void UNPSwingableRelicComponent::BeginHitWindow(
+void UNPSwingableRelicComponent::StartHitDetection(
 	AActor* InAttackInstigator,
 	UAbilitySystemComponent* InSourceAbilitySystem,
 	const FVector& InCameraDirection)
 {
 	AActor* OwnerActor = GetOwner();
 	const FNPRelicSwingSettings& Settings = GetSwingSettings();
-	if (bHitWindowActive
+	if (bHitDetectionActive
 		|| !OwnerActor
 		|| !OwnerActor->HasAuthority()
 		|| !IsValid(InAttackInstigator)
@@ -57,12 +57,12 @@ void UNPSwingableRelicComponent::BeginHitWindow(
 	HitMesh->OnComponentHit.AddUniqueDynamic(
 		this,
 		&UNPSwingableRelicComponent::HandleRelicHit);
-	bHitWindowActive = true;
+	bHitDetectionActive = true;
 }
 
-void UNPSwingableRelicComponent::EndHitWindow()
+void UNPSwingableRelicComponent::StopHitDetection()
 {
-	if (!bHitWindowActive)
+	if (!bHitDetectionActive)
 	{
 		return;
 	}
@@ -76,7 +76,7 @@ void UNPSwingableRelicComponent::EndHitWindow()
 			bPreviousNotifyRigidBodyCollision);
 	}
 
-	bHitWindowActive = false;
+	bHitDetectionActive = false;
 	AttackInstigator.Reset();
 	SourceAbilitySystem.Reset();
 	CameraDirection = FVector::ForwardVector;
@@ -86,7 +86,7 @@ void UNPSwingableRelicComponent::EndHitWindow()
 void UNPSwingableRelicComponent::EndPlay(
 	const EEndPlayReason::Type EndPlayReason)
 {
-	EndHitWindow();
+	StopHitDetection();
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -102,7 +102,7 @@ void UNPSwingableRelicComponent::HandleRelicHit(
 	UAbilitySystemComponent* SourceASC = SourceAbilitySystem.Get();
 	UWorld* World = GetWorld();
 	const FNPRelicSwingSettings& Settings = GetSwingSettings();
-	if (!bHitWindowActive
+	if (!bHitDetectionActive
 		|| !OwnerActor
 		|| !OwnerActor->HasAuthority()
 		|| !World

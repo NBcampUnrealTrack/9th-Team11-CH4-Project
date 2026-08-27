@@ -76,11 +76,11 @@ public:
 		return SwingSettings;
 	}
 
-	void BeginHitWindow(
+	void StartHitDetection(
 		AActor* InAttackInstigator,
 		UAbilitySystemComponent* InSourceAbilitySystem,
 		const FVector& InCameraDirection);
-	void EndHitWindow();
+	void StopHitDetection();
 
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -104,7 +104,7 @@ private:
 	TWeakObjectPtr<UAbilitySystemComponent> SourceAbilitySystem;
 	FVector CameraDirection = FVector::ForwardVector;
 	TMap<TWeakObjectPtr<AActor>, double> LastHitTimes;
-	bool bHitWindowActive = false;
+	bool bHitDetectionActive = false;
 	bool bPreviousNotifyRigidBodyCollision = false;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic Ability", meta=(AllowPrivateAccess="true"))

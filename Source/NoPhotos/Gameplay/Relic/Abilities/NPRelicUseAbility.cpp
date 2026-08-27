@@ -95,7 +95,7 @@ void UNPRelicUseAbility::ActivateAbility(
 	SwingableRelicComponent = SwingableRelic;
 	if (SwingableRelicComponent.IsValid() && ActorInfo)
 	{
-		SwingableRelicComponent->BeginHitWindow(
+		SwingableRelicComponent->StartHitDetection(
 			Pawn,
 			ActorInfo->AbilitySystemComponent.Get(),
 			Pawn->GetViewForwardDirection());
@@ -128,7 +128,7 @@ void UNPRelicUseAbility::EndAbility(
 {
 	if (SwingableRelicComponent.IsValid())
 	{
-		SwingableRelicComponent->EndHitWindow();
+		SwingableRelicComponent->StopHitDetection();
 	}
 	SwingableRelicComponent.Reset();
 
