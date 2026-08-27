@@ -113,6 +113,10 @@ void UNPAbilitySystemComponent::HandleGameplayEffectApplied(
 		return;
 	}
 
+	FGameplayTagContainer AbilityTags;
+	AbilityTags.AddTag(NPGameplayTags::Ability_Relic);
+	CancelAbilities(&AbilityTags);
+
 	const FHitResult* Hit = EffectSpec.GetContext().GetHitResult();
 	if (!Hit)
 	{

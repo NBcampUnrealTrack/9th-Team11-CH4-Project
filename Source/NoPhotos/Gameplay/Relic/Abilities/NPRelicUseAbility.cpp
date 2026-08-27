@@ -4,6 +4,7 @@
 #include "Core/GameplayTag/NPGameplayTags.h"
 #include "Engine/Engine.h"
 #include "Gameplay/Character/NPStablePhysicsPawn.h"
+#include "Gameplay/Interaction/Components/GrabbableComponent.h"
 #include "Gameplay/Relic/Components/NPSwingableRelicComponent.h"
 
 UNPRelicUseAbility::UNPRelicUseAbility()
@@ -33,10 +34,15 @@ void UNPRelicUseAbility::ActivateAbility(
 	UNPSwingableRelicComponent* SwingableRelic = Relic
 		? Relic->FindComponentByClass<UNPSwingableRelicComponent>()
 		: nullptr;
+	const UGrabbableComponent* GrabbableRelic = Relic
+		? Relic->FindComponentByClass<UGrabbableComponent>()
+		: nullptr;
 	ANPStablePhysicsPawn* Pawn = ActorInfo
 		? Cast<ANPStablePhysicsPawn>(ActorInfo->AvatarActor.Get())
 		: nullptr;
 	if (!SwingableRelic
+		|| !GrabbableRelic
+		|| GrabbableRelic->GetActiveGrabCount() != 1
 		|| !Pawn
 		|| !Pawn->BeginRelicSwing(SwingableRelic->GetSwingSettings()))
 	{
