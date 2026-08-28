@@ -9,6 +9,7 @@ class UInputMappingContext;
 class UNPPhotoCaptureComponent;
 class UNPPhotoFlashWidget;
 class UNPPhotoTransferComponent;
+class UNPNoticeEventWidget;
 class UNPUserWidget;
 class UUserWidget;
 
@@ -87,6 +88,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UNPUserWidget> GameScreenWidgetClass;
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UNPNoticeEventWidget> NoticeEventWidgetClass;
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UNPUserWidget> SelectPictureWidgetClass;
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UNPUserWidget> ResultWidgetClass;
@@ -108,9 +111,12 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UNPPhotoFlashWidget> PhotoFlashWidget;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UNPNoticeEventWidget> NoticeEventWidget;
+
 	UFUNCTION(Server, Reliable)
 	void ServerRequestRestartRoom();
 
-	void ShowSingleScreen(
-		TSubclassOf<UNPUserWidget> WidgetClass);
+	void ShowSingleScreen(TSubclassOf<UNPUserWidget> WidgetClass);
+	void EnsureNoticeEventWidget();
 };

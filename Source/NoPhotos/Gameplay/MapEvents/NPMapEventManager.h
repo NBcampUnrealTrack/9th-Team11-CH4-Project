@@ -28,6 +28,12 @@ struct NOPHOTOS_API FNPActiveMapEventPresentation
 
 	UPROPERTY(BlueprintReadOnly, Category = "Map Event|UI")
 	FText Description;
+	
+	UPROPERTY(BlueprintReadOnly, Category = "Map Event|UI")
+	float EndServerWorldTime = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Map Event|UI")
+	float DurationSeconds = 0.0f;
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FNPActiveMapEventsChangedSignature);
