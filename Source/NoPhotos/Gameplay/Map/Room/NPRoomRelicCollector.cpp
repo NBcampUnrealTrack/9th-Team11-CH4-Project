@@ -9,6 +9,12 @@ ANPRoomRelicCollector::ANPRoomRelicCollector()
 	bReplicates = false;
 }
 
+ANPBaseRelic* ANPRoomRelicCollector::GetQuestRelic() const
+{
+	ANPBaseRelic* QuestRelic = Relics.IsEmpty() ? nullptr : Relics[0].Get();
+	return IsValid(QuestRelic) ? QuestRelic : nullptr;
+}
+
 void ANPRoomRelicCollector::CollectRelics()
 {
 #if WITH_EDITOR

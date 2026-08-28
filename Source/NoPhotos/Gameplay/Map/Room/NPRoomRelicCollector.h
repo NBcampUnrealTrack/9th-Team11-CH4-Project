@@ -19,6 +19,10 @@ public:
 	UFUNCTION(CallInEditor, Category="Room|Relic", meta=(DisplayName="레벨 유물 다시 수집"))
 	void CollectRelics();
 
+	/** 현재 방에서 퀘스트 대상으로 사용할 유물을 반환합니다. */
+	UFUNCTION(BlueprintPure, Category="Room|Relic")
+	ANPBaseRelic* GetQuestRelic() const;
+
 	const TArray<TObjectPtr<ANPBaseRelic>>& GetRelics() const { return Relics; }
 
 protected:
