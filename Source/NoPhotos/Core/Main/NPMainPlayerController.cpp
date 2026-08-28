@@ -16,6 +16,7 @@
 #include "Gameplay/Photo/NPPhotoTransferComponent.h"
 #include "NoPhotos.h"
 #include "SubSystem/NPUIManagerSubsystem.h"
+#include "UI/GameScreen/Event/NPNoticeEventWidget.h"
 #include "UI/NPUserWidget.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Widgets/Input/SVirtualJoystick.h"
@@ -242,6 +243,7 @@ void ANPMainPlayerController::ExitToMainMenu()
 void ANPMainPlayerController::ShowGameScreenUI()
 {
 	ShowSingleScreen(GameScreenWidgetClass);
+	EnsureNoticeEventWidget();
 }
 
 void ANPMainPlayerController::ClientShowGameScreenUI_Implementation()
@@ -338,4 +340,25 @@ void ANPMainPlayerController::ShowSingleScreen(
 
 	UIManager->PopAllWidgets();
 	UIManager->PushWidget(WidgetClass);
+}
+
+void ANPMainPlayerController::EnsureNoticeEventWidget()
+{
+	if (!IsLocalController() || IsValid(NoticeEventWidget))
+	{
+		return;
+	}
+
+	if (!IsValid(NoticeEventWidgetClass))
+	{
+		return;
+	}
+
+	NoticeEventWidget = CreateWidget<UNPNoticeEventWidget>(this, NoticeEventWidgetClass);
+	if (!IsValid(NoticeEventWidget))
+	{
+		return;
+	}
+
+	NoticeEventWidget->AddToPlayerScreen(50);
 }
