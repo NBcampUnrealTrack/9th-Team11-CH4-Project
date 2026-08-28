@@ -52,8 +52,13 @@ void ANPBaseRelic::GetLifetimeReplicatedProps(
 
 int32 ANPBaseRelic::GetBasePrice() const
 {
-	const FNPRelicData* Data = RelicData.GetRow<FNPRelicData>(TEXT("GetBasePrice"));
+	const FNPRelicTableRow* Data = GetRelicTableData();
 	return Data ? FMath::Max(0, Data->Price) : 0;
+}
+
+const FNPRelicTableRow* ANPBaseRelic::GetRelicTableData() const
+{
+	return RelicTableData.GetRow<FNPRelicTableRow>(TEXT("GetRelicTableData"));
 }
 
 void ANPBaseRelic::SetUnlocked(bool bUnlocked)

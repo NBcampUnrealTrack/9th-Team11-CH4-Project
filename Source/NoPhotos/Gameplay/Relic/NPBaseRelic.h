@@ -9,6 +9,7 @@ class UGrabbableComponent;
 class UNPRelicOwnershipComponent;
 class UPrimitiveComponent;
 class FLifetimeProperty;
+struct FNPRelicTableRow;
 
 UCLASS(Abstract, Blueprintable)
 class NOPHOTOS_API ANPBaseRelic : public AActor
@@ -31,6 +32,8 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Relic|Delivery")
 	int32 GetBasePrice() const;
+
+	const FNPRelicTableRow* GetRelicTableData() const;
 
 	UFUNCTION(BlueprintPure, BlueprintAuthorityOnly, Category="Relic|Delivery")
 	int32 GetAccumulatedPhotoPenalty() const { return AccumulatedPhotoPenalty; }
@@ -71,6 +74,9 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic")
 	FDataTableRowHandle RelicData;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic")
+	FDataTableRowHandle RelicTableData;
 
 	UPROPERTY(ReplicatedUsing=OnRep_IsDisplayed, VisibleInstanceOnly, BlueprintReadOnly, Category="Relic")
 	bool bIsDisplayed = true;

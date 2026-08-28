@@ -26,3 +26,18 @@ struct NOPHOTOS_API FNPRelicData : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Relic", meta=(ClampMin="0"))
 	int32 Price = 0;
 };
+
+USTRUCT(BlueprintType)
+struct NOPHOTOS_API FNPRelicTableRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Relic")
+	FText DisplayName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Relic", meta=(MultiLine="true"))
+	FText Description;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Relic", meta=(ClampMin="0"))
+	int32 Price = 0;
+};
