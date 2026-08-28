@@ -25,8 +25,7 @@ ANPBaseRelic* UNPRelicCaseSlotComponent::SpawnRelic(
 	const bool bInitiallyReleased)
 {
 	AActor* Owner = GetOwner();
-	if (!Owner || !Owner->HasAuthority() || IsValid(SpawnedRelic) ||
-		!RelicClass)
+	if (!Owner || !Owner->HasAuthority())
 	{
 		return SpawnedRelic;
 	}
@@ -37,15 +36,29 @@ ANPBaseRelic* UNPRelicCaseSlotComponent::SpawnRelic(
 		return nullptr;
 	}
 
-	FActorSpawnParameters SpawnParameters;
-	SpawnParameters.SpawnCollisionHandlingOverride =
-		ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
 	bIsRelicReleased = bInitiallyReleased;
-	SpawnedRelic = World->SpawnActor<ANPBaseRelic>(
-		RelicClass,
-		GetComponentTransform(),
-		SpawnParameters);
+	if (!IsValid(SpawnedRelic))
+	{
+		if (!RelicClass)
+		{
+			return nullptr;
+		}
+
+		FActorSpawnParameters SpawnParameters;
+		SpawnParameters.OverrideLevel = Owner->GetLevel();
+		SpawnParameters.SpawnCollisionHandlingOverride =
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+		const FTransform SpawnTransform(
+			GetComponentQuat(),
+			GetComponentLocation(),
+			FVector::OneVector);
+		SpawnedRelic = World->SpawnActor<ANPBaseRelic>(
+			RelicClass,
+			SpawnTransform,
+			SpawnParameters);
+	}
+
 	if (!IsValid(SpawnedRelic))
 	{
 		return nullptr;
@@ -56,6 +69,56 @@ ANPBaseRelic* UNPRelicCaseSlotComponent::SpawnRelic(
 	Owner->ForceNetUpdate();
 	return SpawnedRelic;
 }
+
+#if WITH_EDITOR
+ANPBaseRelic* UNPRelicCaseSlotComponent::RecreateRelicInEditor()
+{
+	AActor* Owner = GetOwner();
+	UWorld* World = GetWorld();
+	if (!Owner || !World || World->IsGameWorld())
+	{
+		return SpawnedRelic;
+	}
+
+	Modify();
+	if (IsValid(SpawnedRelic))
+	{
+		SpawnedRelic->Modify();
+		if (!World->EditorDestroyActor(SpawnedRelic, true))
+		{
+			return SpawnedRelic;
+		}
+		SpawnedRelic = nullptr;
+	}
+
+	bIsRelicReleased = false;
+	if (RelicClass)
+	{
+		FActorSpawnParameters SpawnParameters;
+		SpawnParameters.OverrideLevel = Owner->GetLevel();
+		SpawnParameters.ObjectFlags |= RF_Transactional;
+		SpawnParameters.SpawnCollisionHandlingOverride =
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+		const FTransform SpawnTransform(
+			GetComponentQuat(),
+			GetComponentLocation(),
+			FVector::OneVector);
+		SpawnedRelic = World->SpawnActor<ANPBaseRelic>(
+			RelicClass,
+			SpawnTransform,
+			SpawnParameters);
+		if (IsValid(SpawnedRelic))
+		{
+			SpawnedRelic->SetUnlocked(false);
+			ApplyRelicState();
+		}
+	}
+
+	Owner->MarkPackageDirty();
+	return SpawnedRelic;
+}
+#endif
 
 void UNPRelicCaseSlotComponent::ReleaseRelic()
 {

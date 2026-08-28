@@ -27,6 +27,11 @@ public:
 	/** 생성된 유물을 케이스 잠금에서 해제합니다. */
 	void ReleaseRelic();
 
+#if WITH_EDITOR
+	/** 기존 유물을 제거하고 슬롯에 지정된 유물을 에디터 레벨에 생성합니다. */
+	ANPBaseRelic* RecreateRelicInEditor();
+#endif
+
 protected:
 	UFUNCTION()
 	void OnRep_SpawnedRelic();

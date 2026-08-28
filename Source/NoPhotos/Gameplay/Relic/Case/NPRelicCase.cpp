@@ -2,6 +2,7 @@
 
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
+#include "Engine/World.h"
 #include "Gameplay/Relic/Components/NPImpactReceiveComponent.h"
 #include "Gameplay/Relic/Components/NPRelicCaseSlotComponent.h"
 #include "GeometryCollection/GeometryCollectionComponent.h"
@@ -25,6 +26,26 @@ ANPRelicCase::ANPRelicCase()
 
 	RelicScene = CreateDefaultSubobject<USceneComponent>(TEXT("RelicScene"));
 	RelicScene->SetupAttachment(SceneRoot);
+}
+
+void ANPRelicCase::CreateConfiguredRelics()
+{
+#if WITH_EDITOR
+	UWorld* World = GetWorld();
+	if (!World || World->IsGameWorld())
+	{
+		return;
+	}
+
+	CollectRelicSlots();
+	for (UNPRelicCaseSlotComponent* RelicSlot : RelicSlots)
+	{
+		if (IsValid(RelicSlot))
+		{
+			RelicSlot->RecreateRelicInEditor();
+		}
+	}
+#endif
 }
 
 void ANPRelicCase::PostInitializeComponents()

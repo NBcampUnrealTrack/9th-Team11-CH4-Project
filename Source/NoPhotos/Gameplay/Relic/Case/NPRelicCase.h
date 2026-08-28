@@ -21,6 +21,10 @@ class NOPHOTOS_API ANPRelicCase
 public:
 	ANPRelicCase();
 
+	/** 슬롯에 지정된 유물을 에디터 레벨에 다시 생성합니다. */
+	UFUNCTION(CallInEditor, Category = "Relic Case|Editor", meta = (DisplayName = "지정 유물 생성"))
+	void CreateConfiguredRelics();
+
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
