@@ -2,6 +2,7 @@
 
 #include "GameFramework/Pawn.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Gameplay/Character/Component/NPInvisibilityComponent.h"
 #include "GameFramework/PlayerState.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
@@ -73,7 +74,10 @@ void UNPNameplateComponent::UpdateNameplateVisibility()
 		return;
 	}
 
-	const bool bShouldBeVisible = !OwnerPawn->IsLocallyControlled()	&& !bHiddenByGameplay;
+	//GAS를 통해 서버에서 가시여부 결정 후 클라이언트에 복제
+	const UNPInvisibilityComponent* InvisibilityComponent = OwnerPawn->FindComponentByClass<UNPInvisibilityComponent>();
+	const bool bHiddenByInvisibility = IsValid(InvisibilityComponent) && InvisibilityComponent->IsInvisible();
+	const bool bShouldBeVisible = !OwnerPawn->IsLocallyControlled() && !bHiddenByGameplay && !bHiddenByInvisibility;
 	SetVisibility(bShouldBeVisible, true);
 }
 
@@ -94,6 +98,5 @@ void UNPNameplateComponent::UpdateFacingCamera()
 		GetComponentLocation(),
 		CameraManager->GetCameraLocation());
 
-	// 위·아래에서 볼 때도 읽히도록 Pitch와 Yaw 모두 카메라를 향하게 합니다.
 	SetWorldRotation(LookAtRotation);
 }
