@@ -430,6 +430,12 @@ void UNPStablePhysicsCharacterProfile::PostEditChangeProperty(
 			JumpVelocityChange)
 		|| PropertyName == GET_MEMBER_NAME_CHECKED(
 			UNPStablePhysicsCharacterProfile,
+			JumpCooldown)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(
+			UNPStablePhysicsCharacterProfile,
+			WalkableSlopeAngle)
+		|| PropertyName == GET_MEMBER_NAME_CHECKED(
+			UNPStablePhysicsCharacterProfile,
 			GrabLinearBreakThreshold)
 		|| PropertyName == GET_MEMBER_NAME_CHECKED(
 			UNPStablePhysicsCharacterProfile,

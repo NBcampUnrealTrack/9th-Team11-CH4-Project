@@ -490,6 +490,8 @@ void UNPMapEventManagerComponent::HandleManagedEventStarted(ANPMapEvent* MapEven
 	}
 	Presentation.Title = MapEvent->GetEventDisplayName();
 	Presentation.Description = MapEvent->GetEventDescription();
+	Presentation.EndServerWorldTime = MapEvent->GetEventEndServerWorldTime();
+	Presentation.DurationSeconds = MapEvent->GetEventDuration();
 
 	ActiveEventPresentations.RemoveAll(
 		[EventId = Presentation.EventId](const FNPActiveMapEventPresentation& Existing)
