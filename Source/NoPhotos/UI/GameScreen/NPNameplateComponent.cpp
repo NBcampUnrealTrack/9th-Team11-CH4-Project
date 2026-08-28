@@ -24,15 +24,18 @@ void UNPNameplateComponent::BeginPlay()
 	RefreshNameplate();
 }
 
-void UNPNameplateComponent::TickComponent(
-	float DeltaTime,
-	ELevelTick TickType,
-	FActorComponentTickFunction* ThisTickFunction)
+void UNPNameplateComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
 	RefreshNameplate();
 	UpdateFacingCamera();
+}
+
+void UNPNameplateComponent::SetNameplateVisible(bool bShouldBeVisible)
+{
+	bHiddenByGameplay = !bShouldBeVisible;
+	UpdateNameplateVisibility();
 }
 
 bool UNPNameplateComponent::RefreshNameplate()
@@ -43,12 +46,7 @@ bool UNPNameplateComponent::RefreshNameplate()
 		return false;
 	}
 
-	// 각 클라이언트는 자신이 조종하는 Pawn의 이름표만 로컬에서 숨깁니다.
-	const bool bShouldBeVisible = !OwnerPawn->IsLocallyControlled();
-	if (IsVisible() != bShouldBeVisible)
-	{
-		SetVisibility(bShouldBeVisible);
-	}
+	UpdateNameplateVisibility();
 
 	UNPUserNameWidget* CurrentWidget = Cast<UNPUserNameWidget>(GetUserWidgetObject());
 	APlayerState* CurrentPlayerState = OwnerPawn->GetPlayerState<APlayerState>();
@@ -65,6 +63,18 @@ bool UNPNameplateComponent::RefreshNameplate()
 	}
 
 	return true;
+}
+
+void UNPNameplateComponent::UpdateNameplateVisibility()
+{
+	APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	if (!IsValid(OwnerPawn))
+	{
+		return;
+	}
+
+	const bool bShouldBeVisible = !OwnerPawn->IsLocallyControlled()	&& !bHiddenByGameplay;
+	SetVisibility(bShouldBeVisible, true);
 }
 
 void UNPNameplateComponent::UpdateFacingCamera()
