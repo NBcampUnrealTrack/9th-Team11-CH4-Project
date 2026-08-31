@@ -2,9 +2,8 @@
 
 #include "Animation/WidgetAnimation.h"
 #include "Components/TextBlock.h"
+#include "Data/Structs/NPRelicData.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
-
-#define LOCTEXT_NAMESPACE "NPRelicInfoWidget"
 
 void UNPRelicInfoWidget::SetRelicInfo(ANPBaseRelic* Relic)
 {
@@ -15,11 +14,25 @@ void UNPRelicInfoWidget::SetRelicInfo(ANPBaseRelic* Relic)
 		return;
 	}
 
-	// 유물명, 설명은 없길래 일단 가격만 설정해둠
-	const int32 Price = Relic->GetBasePrice();
-	if (Price > 0 && IsValid(RelicScoreText))
+	const FNPRelicTableRow* RelicData = Relic->GetRelicTableData();
+	if (!RelicData)
 	{
-		RelicScoreText->SetText(FText::AsNumber(Price));
+		return;
+	}
+
+	if (!RelicData->DisplayName.IsEmpty() && IsValid(RelicNameText))
+	{
+		RelicNameText->SetText(RelicData->DisplayName);
+	}
+
+	if (!RelicData->Description.IsEmpty() && IsValid(RelicDescriptionText))
+	{
+		RelicDescriptionText->SetText(RelicData->Description);
+	}
+
+	if (IsValid(RelicScoreText))
+	{
+		RelicScoreText->SetText(FText::AsNumber(FMath::Max(0, RelicData->Price)));
 	}
 }
 
@@ -27,17 +40,17 @@ void UNPRelicInfoWidget::ResetRelicInfo()
 {
 	if (IsValid(RelicNameText))
 	{
-		RelicNameText->SetText(LOCTEXT("DefaultRelicName", "유물명"));
+		RelicNameText->SetText(FText::FromString(TEXT("유물명")));
 	}
 
 	if (IsValid(RelicScoreText))
 	{
-		RelicScoreText->SetText(LOCTEXT("DefaultRelicPrice", "가격"));
+		RelicScoreText->SetText(FText::FromString(TEXT("가격")));
 	}
 
 	if (IsValid(RelicDescriptionText))
 	{
-		RelicDescriptionText->SetText(LOCTEXT("DefaultRelicDescription", "유물 설명"));
+		RelicDescriptionText->SetText(FText::FromString(TEXT("유물 설명")));
 	}
 }
 
@@ -56,5 +69,3 @@ void UNPRelicInfoWidget::OnPopRequested_Implementation()
 		PlayAnimation(OutAnimation, 0.0f, 1, EUMGSequencePlayMode::Forward);
 	}
 }
-
-#undef LOCTEXT_NAMESPACE
