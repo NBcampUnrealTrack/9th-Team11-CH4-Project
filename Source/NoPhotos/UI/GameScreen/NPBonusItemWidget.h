@@ -5,6 +5,9 @@
 #include "NPBonusItemWidget.generated.h"
 
 class UTextBlock;
+class UImage;
+class ANPBaseRelic;
+class UNPShowRelicLocationComponent;
 
 UCLASS()
 class NOPHOTOS_API UNPBonusItemWidget : public UNPUserWidget
@@ -14,10 +17,30 @@ class NOPHOTOS_API UNPBonusItemWidget : public UNPUserWidget
 public:
 	UNPBonusItemWidget(const FObjectInitializer& ObjectInitializer);
 
-	// 추후 MVVM 바인딩 시 아이템 정보(이름)를 세팅할 함수
 	void SetItemName(const FString& InItemName);
+	void SetItemColor(const FLinearColor& InItemColor);
+	void SetRelic(ANPBaseRelic* InRelic);
+	void RefreshReturnedState();
+
+protected:
+	virtual void NativeDestruct() override;
 
 private:
+	UFUNCTION()
+	void HandleRelicReturned();
+
+	void UpdateReturnedState();
+	void SetReturnedState(bool bIsReturned);
+
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> ItemNameText;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UImage> StrikeThroughLine;
+
+	TWeakObjectPtr<ANPBaseRelic> AssignedRelic;
+	TWeakObjectPtr<UNPShowRelicLocationComponent> BoundRelicLocationComponent;
+	FLinearColor ActiveItemColor = FLinearColor::White;
+	bool bHasReturnedState = false;
+	bool bIsReturned = false;
 };
