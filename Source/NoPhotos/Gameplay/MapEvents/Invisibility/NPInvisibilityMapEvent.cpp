@@ -14,8 +14,8 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "MaterialShared.h"
 #include "Net/UnrealNetwork.h"
-#include "NPMapEventManager.h"
-#include "NPMapEventSpawnVolume.h"
+#include "Gameplay/MapEvents/NPMapEventManager.h"
+#include "Gameplay/MapEvents/NPMapEventSpawnVolume.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 

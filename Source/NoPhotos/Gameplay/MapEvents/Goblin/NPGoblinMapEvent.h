@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "Gameplay/Goblin/NPGoblinCharacter.h"
 #include "GameplayTagContainer.h"
-#include "NPMapEvent.h"
+#include "Gameplay/MapEvents/NPMapEvent.h"
 #include "NPGoblinMapEvent.generated.h"
 
 class ANPGoblinPatrolRoute;

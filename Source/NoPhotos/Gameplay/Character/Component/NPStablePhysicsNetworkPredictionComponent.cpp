@@ -10,6 +10,7 @@
 #include "PhysicsEngine/BodyInstance.h"
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsMovementComponent.h"
+#include "Gameplay/Character/Component/NPControlReversalComponent.h"
 
 UNPStablePhysicsNetworkPredictionComponent::UNPStablePhysicsNetworkPredictionComponent()
 {
@@ -59,14 +60,20 @@ void UNPStablePhysicsNetworkPredictionComponent::SetServerAuthoritativeInteracti
 }
 
 void UNPStablePhysicsNetworkPredictionComponent::SendMoveInput(
-	const FVector& WorldMoveInput)
+	const FVector& WorldMoveInput, float InputViewYaw)
 {
 	if (!GetOwner() || GetOwner()->HasAuthority())
 	{
 		return;
 	}
 
+	if (WorldMoveInput.ContainsNaN() || !FMath::IsFinite(InputViewYaw))
+	{
+		SendStopMove();
+		return;
+	}
 	PendingMoveInput = WorldMoveInput.GetClampedToMaxSize(1.0f);
+	PendingMoveViewYaw = FRotator::NormalizeAxis(InputViewYaw);
 }
 
 void UNPStablePhysicsNetworkPredictionComponent::SendStopMove()
@@ -78,6 +85,7 @@ void UNPStablePhysicsNetworkPredictionComponent::SendStopMove()
 
 	++LocalInputSequence;
 	PendingMoveInput = FVector::ZeroVector;
+	PendingMoveViewYaw = 0.0f;
 	InputSendAccumulator = 0.0f;
 	ServerStopMove(LocalInputSequence);
 }
@@ -145,7 +153,8 @@ void UNPStablePhysicsNetworkPredictionComponent::TickComponent(
 
 void UNPStablePhysicsNetworkPredictionComponent::ServerSetMoveInput_Implementation(
 	uint16 InputSequence,
-	FVector_NetQuantizeNormal WorldMoveInput)
+	FVector_NetQuantizeNormal WorldMoveInput,
+	float InputViewYaw)
 {
 	if (!Movement)
 	{
@@ -153,12 +162,17 @@ void UNPStablePhysicsNetworkPredictionComponent::ServerSetMoveInput_Implementati
 	}
 
 	const FVector ReceivedInput = FVector(WorldMoveInput);
-	if (ReceivedInput.ContainsNaN() || !AcceptInputSequence(InputSequence))
+	if (ReceivedInput.ContainsNaN() || !FMath::IsFinite(InputViewYaw) || !AcceptInputSequence(InputSequence))
 	{
 		return;
 	}
 
 	const FVector ClampedInput = ReceivedInput.GetClampedToMaxSize(1.0f);
+	if (UNPControlReversalComponent* Reversal = GetOwner()->FindComponentByClass<UNPControlReversalComponent>())
+	{
+		Reversal->ApplyRawMovementInput(ClampedInput, InputViewYaw);
+		return;
+	}
 	Movement->SetMoveInput(ClampedInput);
 	if (Grab)
 	{
@@ -174,6 +188,12 @@ void UNPStablePhysicsNetworkPredictionComponent::ServerStopMove_Implementation(
 		return;
 	}
 
+	if (UNPControlReversalComponent* Reversal = GetOwner()->FindComponentByClass<UNPControlReversalComponent>())
+	{
+		// 정지 시 원본 캐시도 비워야 이후 태그 변경으로 이전 이동이 되살아나지 않습니다.
+		Reversal->ApplyRawMovementInput(FVector::ZeroVector, 0.0f);
+		return;
+	}
 	Movement->SetMoveInput(FVector::ZeroVector);
 	if (Grab)
 	{
@@ -631,7 +651,7 @@ void UNPStablePhysicsNetworkPredictionComponent::SendPendingMoveInput(
 
 	InputSendAccumulator = FMath::Fmod(InputSendAccumulator, SafeSendInterval);
 	++LocalInputSequence;
-	ServerSetMoveInput(LocalInputSequence, PendingMoveInput);
+	ServerSetMoveInput(LocalInputSequence, PendingMoveInput, PendingMoveViewYaw);
 }
 
 void UNPStablePhysicsNetworkPredictionComponent::SendClientRootState(

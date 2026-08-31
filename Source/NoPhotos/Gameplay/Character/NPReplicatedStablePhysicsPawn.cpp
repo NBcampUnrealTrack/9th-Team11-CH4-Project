@@ -7,6 +7,7 @@
 #include "PhysicsEngine/BodyInstance.h"
 #include "Gameplay/AbilitySystem/NPAbilitySystemComponent.h"
 #include "Gameplay/Character/Component/NPInvisibilityComponent.h"
+#include "Gameplay/Character/Component/NPControlReversalComponent.h"
 #include "Gameplay/Character/Component/NPVisionRestrictionComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsNetworkPredictionComponent.h"
@@ -37,6 +38,7 @@ ANPReplicatedStablePhysicsPawn::ANPReplicatedStablePhysicsPawn()
 		TEXT("AbilitySystem"));
 	Invisibility = CreateDefaultSubobject<UNPInvisibilityComponent>(TEXT("Invisibility"));
 	VisionRestriction = CreateDefaultSubobject<UNPVisionRestrictionComponent>(TEXT("VisionRestriction"));
+	ControlReversal = CreateDefaultSubobject<UNPControlReversalComponent>(TEXT("ControlReversal"));
 }
 
 void ANPReplicatedStablePhysicsPawn::BeginPlay()
@@ -292,20 +294,26 @@ void ANPReplicatedStablePhysicsPawn::UpdateServerReplicatedState()
 
 void ANPReplicatedStablePhysicsPawn::ApplyMoveInput(const FVector& WorldMoveInput)
 {
-	const FVector ClampedMoveInput = WorldMoveInput.GetClampedToMaxSize(1.0f);
-	if (HasAuthority())
+	if (!HasAuthority() && !IsLocallyControlled())
+	{
+		return;
+	}
+
+	const float InputViewYaw = GetTargetViewRotation().Yaw;
+	const FVector ClampedMoveInput = WorldMoveInput.ContainsNaN() || !FMath::IsFinite(InputViewYaw)
+		? FVector::ZeroVector : WorldMoveInput.GetClampedToMaxSize(1.0f);
+	if (IsValid(ControlReversal))
+	{
+		ControlReversal->ApplyRawMovementInput(ClampedMoveInput, InputViewYaw);
+	}
+	else
 	{
 		Super::ApplyMoveInput(ClampedMoveInput);
-		return;
 	}
-
-	if (!IsLocallyControlled())
+	if (HasAuthority())
 	{
 		return;
 	}
-
-	// 소유 클라이언트에서도 즉시 물리를 적용하고 동일 입력을 서버에 전달합니다.
-	Super::ApplyMoveInput(ClampedMoveInput);
 
 	if (ClampedMoveInput.IsNearlyZero())
 	{
@@ -318,7 +326,8 @@ void ANPReplicatedStablePhysicsPawn::ApplyMoveInput(const FVector& WorldMoveInpu
 	}
 
 	bClientWasMoving = true;
-	NetworkPrediction->SendMoveInput(ClampedMoveInput);
+	// 반전 전 입력과 그 입력의 시점 기준을 함께 전송합니다. 서버는 서버 GAS 상태로 한 번만 변환합니다.
+	NetworkPrediction->SendMoveInput(ClampedMoveInput, InputViewYaw);
 }
 
 void ANPReplicatedStablePhysicsPawn::ApplyJumpRequest()

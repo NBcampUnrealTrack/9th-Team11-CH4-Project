@@ -1,6 +1,6 @@
 #include "NPRelicBonusMapEvent.h"
 
-#include "NPMapEventManager.h"
+#include "Gameplay/MapEvents/NPMapEventManager.h"
 #include "NPRelicBonusCountdownActor.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"

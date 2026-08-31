@@ -46,7 +46,7 @@ public:
 		UNPStablePhysicsGrabComponent* InGrab,
 		FName InRootBodyName);
 
-	void SendMoveInput(const FVector& WorldMoveInput);
+	void SendMoveInput(const FVector& WorldMoveInput, float InputViewYaw);
 	void SendStopMove();
 	void SendJumpRequest();
 	void SetExternalGrabActive(bool bActive) { bExternalGrabActive = bActive; }
@@ -65,7 +65,8 @@ private:
 	UFUNCTION(Server, Unreliable)
 	void ServerSetMoveInput(
 		uint16 InputSequence,
-		FVector_NetQuantizeNormal WorldMoveInput);
+		FVector_NetQuantizeNormal WorldMoveInput,
+		float InputViewYaw);
 
 	UFUNCTION(Server, Reliable)
 	void ServerStopMove(uint16 InputSequence);
@@ -187,6 +188,7 @@ private:
 
 	FName RootBodyName = NAME_None;
 	FVector PendingMoveInput = FVector::ZeroVector;
+	float PendingMoveViewYaw = 0.0f;
 	uint16 LocalInputSequence = 0;
 	uint16 LastServerInputSequence = 0;
 	uint16 LocalRootStateSequence = 0;

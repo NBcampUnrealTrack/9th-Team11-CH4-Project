@@ -4,7 +4,9 @@
 
 서버의 기존 SpawnVolume 판정 → `UNPInvisibilityGameplayEffect` → `State.VisionRestricted` 복제 → Pawn의 `VisionRestriction` 컴포넌트 → 조작 중인 로컬 카메라에 후처리 안개.
 
-영역 밖에서는 효과가 없고, 영역 안에서만 안개가 적용됩니다. 영역 이탈/이벤트 종료/기존 Pawn 종료 때 자신이 추가한 CameraModifier만 제거합니다. 겹친 볼륨, 중도 참가, 리스폰은 기존 이벤트의 GE 수명 관리를 따릅니다. 원격 Pawn과 Dedicated Server는 상태만 처리합니다. 관전/별도 CameraActor를 ViewTarget으로 쓰는 화면에는 적용하지 않습니다.
+영역 진입 시 로컬 안개 강도가 0 → 1로 증가하고, 이탈/이벤트 종료 시 현재 강도 → 0으로 감소합니다. 기본 전환 시간은 각각 1초입니다. 복원이 완료되면 자신이 추가한 CameraModifier만 제거합니다. 전환 중 재진입/이탈해도 현재 강도에서 이어가며, 겹친 효과가 태그를 유지하면 복원을 시작하지 않습니다. 원격 Pawn과 Dedicated Server는 상태만 처리합니다. Pawn 종료나 관전/다른 ViewTarget으로 전환할 때는 즉시 정리하여 다른 카메라로 안개가 번지지 않게 합니다.
+
+**기존 머티리얼을 쓰고 있다면 `FogStrength` Scalar Parameter(기본 0)를 추가하고, 기존 Lerp Alpha에 곱해야 합니다.** 새 파라미터가 없으면 경고를 출력하고 화면 안개를 적용하지 않습니다. 서버 태그와 캐릭터 투명화는 그대로 유지됩니다. 에셋은 자동 수정하지 않습니다.
 
 **코드만 반영하면 안개가 보이지 않습니다. 아래 머티리얼을 사용자가 생성·지정해야 합니다.** 블루프린트 그래프 작업이나 맵의 ExponentialHeightFog 추가는 필요하지 않습니다.
 
@@ -32,11 +34,13 @@
 | SceneDepth | 입력 핀은 연결하지 않음. 현재 픽셀의 전방 깊이 |
 | Scalar Parameter | 이름 `FogStartDistance`, 기본값 `300` |
 | Scalar Parameter | 이름 `FogEndDistance`, 기본값 `1000` |
+| Scalar Parameter | 이름 `FogStrength`, 기본값 `0` |
 | Vector Parameter | 이름 `FogColor`, RGB 기본값 `(0.12, 0.14, 0.16)` |
 | Subtract | 2개 |
 | Max | 1개, B = `1` |
 | Divide | 1개 |
 | Saturate | 1개 |
+| Multiply | 1개 |
 | LinearInterpolate (Lerp) | 1개 |
 | ComponentMask | 2개, 각각 RGB만 체크 |
 
@@ -46,7 +50,7 @@
 2. 두 번째 Subtract: A = `FogEndDistance`, B = `FogStartDistance`.
 3. Max: A = 두 번째 Subtract 결과, B = `1`.
 4. Divide: A = 첫 번째 Subtract 결과, B = Max 결과.
-5. Divide → Saturate → Lerp의 Alpha.
+5. Divide → Saturate → Multiply의 A, `FogStrength` → Multiply의 B. Multiply 출력 → Lerp의 Alpha.
 6. `SceneTexture:PostProcessInput0`의 Color → RGB ComponentMask → Lerp의 A.
 7. `FogColor` → RGB ComponentMask → Lerp의 B.
 8. Lerp → 머티리얼 출력의 **Emissive Color**. 저장/적용합니다.
@@ -54,13 +58,13 @@
 식으로는 다음과 같습니다. Custom 노드를 추가하라는 뜻이 아니라 위 노드 연결의 요약입니다.
 
 ```text
-FogAlpha = saturate((SceneDepth - FogStartDistance) / max(FogEndDistance - FogStartDistance, 1))
+FogAlpha = saturate((SceneDepth - FogStartDistance) / max(FogEndDistance - FogStartDistance, 1)) * FogStrength
 OutputRGB = lerp(PostProcessInput0.rgb, FogColor.rgb, FogAlpha)
 ```
 
-기본값 기준 깊이 300cm에서는 원래 색, 650cm에서는 원래 색과 안개색의 중간, 1000cm 이상에서는 안개색입니다. 가까운 물체는 보이고 먼 배경이 가려집니다. 머티리얼 미리보기 구 대신 실제 플레이 화면에서 확인해야 합니다.
+FogStrength가 1인 제한 완료 상태에서는 깊이 300cm까지 원래 색, 650cm에서는 원래 색과 안개색의 중간, 1000cm 이상에서는 안개색입니다. FogStrength가 0이면 모든 깊이에서 원래 화면이며, 중간 강도에서는 안개가 서서히 짙어지거나 걷힙니다. 머티리얼 미리보기 구 대신 실제 플레이 화면에서 확인해야 합니다.
 
-파라미터 이름은 코드와 정확히 같아야 합니다. 런타임에는 코드가 이 세 값을 덮어쓰므로 튜닝은 아래 Pawn 컴포넌트에서 합니다. [Epic 후처리 머티리얼 문서](https://dev.epicgames.com/documentation/unreal-engine/post-process-materials-in-unreal-engine?application_version=5.7)도 참고할 수 있습니다.
+파라미터 이름은 코드와 정확히 같아야 합니다. 런타임에는 코드가 거리·색·강도를 덮어쓰므로 튜닝은 아래 Pawn 컴포넌트에서 합니다. [Epic 후처리 머티리얼 문서](https://dev.epicgames.com/documentation/unreal-engine/post-process-materials-in-unreal-engine?application_version=5.7)도 참고할 수 있습니다.
 
 ## 2. 캐릭터 BP에서 지정하기
 
@@ -80,6 +84,17 @@ Max View Distance는 Fog Start Distance보다 크게 설정합니다. 코드도 
 
 기존 투명화 이벤트 BP, DA, Collector/Volume 그룹 설정은 유지합니다. 안개 머티리얼은 **이벤트 BP가 아닌 Pawn의 VisionRestriction**에 지정합니다.
 
+### 진입/복원 속도
+
+같은 컴포넌트의 **Vision Restriction → Transition**에서 설정합니다.
+
+| 항목 | 기본값 | 의미 |
+|---|---|---|
+| Fog Fade In Duration | 1초 | 안개 강도 0 → 1 시간 |
+| Fog Fade Out Duration | 1초 | 안개 강도 1 → 0 시간 |
+
+0이면 즉시 전환합니다. 중간 강도에서 방향을 바꾸면 현재 강도에서 같은 속도로 이어가므로 남은 비율만큼 시간이 걸립니다. 로컬 화면은 매 프레임 갱신하고 복원 완료 시 Tick과 CameraModifier를 정리합니다. 거리/FOV가 아닌 최종 안개 불투명도가 변화하며, 외부에서 보이는 영역 안개와 캐릭터 투명화 타이밍은 그대로입니다.
+
 ## 3. 팀원 연결 계약 — 아직 사진/UI에는 연결하지 않음
 
 Pawn에서 `UNPVisionRestrictionComponent`를 찾아 사용합니다.
@@ -90,8 +105,11 @@ Pawn에서 `UNPVisionRestrictionComponent`를 찾아 사용합니다.
 | GetMaxViewDistance() | 현재 최대 전방 깊이(cm). 비활성이면 **0 = 제한 없음** |
 | GetVisionRestrictionSettings() | 보정된 시작/최대 거리와 색. 활성 여부와 무관하게 설정 반환 |
 | OnVisionRestrictionChanged(bool) | 상태 진입/해제 알림. 최초 연결 시 상태도 직접 조회 |
+| GetVisionFogStrength() | 로컬 화면의 현재 안개 강도(0~1). 서버 판정용 아님 |
 
 서버에서는 촬영자의 ASC `NPGameplayTags::State_VisionRestricted` 또는 위 컴포넌트를 조회합니다. 클라이언트 화면의 머티리얼 유무는 서버 상태를 바꾸지 않습니다. 머티리얼 미설정이어도 태그와 거리 API는 활성 상태를 반환합니다.
+
+태그/IsVisionRestricted/GetMaxViewDistance/상태 알림은 이전처럼 즉시 변경됩니다. 로컬 페이드 강도는 복제하지 않으며, 진입 중에는 상태가 활성인데 화면은 부분 안개이고 이탈 중에는 상태가 비활성인데 화면에 잔여 안개가 있을 수 있습니다. 사진/UI/서버 촬영 판정은 이번 작업에서 변경하지 않습니다. 사진 담당자가 화면과 동일한 연출을 원하면 거리·색과 함께 FogStrength도 SceneCapture에 적용해야 하며, 서버 판정의 전환 정책은 별도로 정해야 합니다.
 
 **거리 기준은 구형 반경이 아니라 SceneDepth와 같은 카메라 전방 깊이입니다.** 화면 가장자리는 카메라와의 직선거리가 더 길 수 있습니다. 서버 담당자가 같은 경계를 적용하려면 검증한 촬영 원점과 전방 벡터를 기준으로 계산합니다.
 
@@ -118,4 +136,7 @@ ViewDepth = Dot(TargetPosition - ValidatedCameraLocation, ValidatedCameraForward
 7. 원경/하늘/유리/파티클/자기 반투명 메시/유물 및 사용 중인 AA·해상도 스케일에서 실제 렌더링 확인.
 8. 머티리얼을 비우거나 파라미터 이름을 틀리게 하면 `LogNPVisionRestriction` 경고가 Pawn당 한 번 나오고, 투명화와 서버 상태는 유지되는지 확인.
 
-빌드/PIE/에셋 수정은 수행하지 않았습니다. 소스와 엔진 API의 정적 검토만 진행했습니다.
+9. 진입 후 1초 동안 점점 짙어지고 이탈 후 1초 동안 걷히는지. 0.2초 만에 이탈/재진입해도 강도가 갑자기 뛰지 않는지 확인.
+10. Fade In/Out Duration을 서로 다르게 설정하거나 0으로 설정한 경우 확인. 영역 안에서 이벤트 종료 시 잔여 안개가 완전히 걷힌 뒤 제거되는지 확인.
+
+빌드/PIE/에셋 수정 및 Unreal 자동화 실행은 수행하지 않았습니다. 전환 계산 테스트 소스는 `NPVisionRestrictionTests.cpp`의 `NoPhotos.MapEvents.Invisibility.VisionFogTransition`입니다. 실제 머티리얼/복제/CameraModifier 수명은 위 수동 확인이 필요합니다.
