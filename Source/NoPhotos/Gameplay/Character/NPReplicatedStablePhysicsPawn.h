@@ -69,6 +69,12 @@ public:
 
 	virtual AActor* GetHeldRelic_Implementation() const override;
 
+	/** 로컬 실제 카메라 정보를 서버에 전달하여 조준 유물 발사를 요청합니다. */
+	UFUNCTION(Server, Reliable)
+	void ServerRequestAimableRelicFire(
+		FVector_NetQuantize10 CameraLocation,
+		FVector_NetQuantizeNormal CameraForward);
+
 	/** 서버가 확정한 촬영자 표시를 현재 관련된 모든 클라이언트에서 재생합니다. */
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastPlayPhotographerFeedback();

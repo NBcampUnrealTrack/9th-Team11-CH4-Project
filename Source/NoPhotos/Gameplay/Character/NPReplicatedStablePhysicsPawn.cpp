@@ -6,6 +6,7 @@
 #include "Net/UnrealNetwork.h"
 #include "PhysicsEngine/BodyInstance.h"
 #include "Gameplay/AbilitySystem/NPAbilitySystemComponent.h"
+#include "Core/GameplayTag/NPGameplayTags.h"
 #include "Gameplay/Character/Component/NPInvisibilityComponent.h"
 #include "Gameplay/Character/Component/NPVisionRestrictionComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
@@ -13,9 +14,11 @@
 #include "Gameplay/Interaction/Components/GrabbableComponent.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Gameplay/Relic/Components/NPRelicOwnershipComponent.h"
+#include "Gameplay/Relic/Components/NPAimableRelicComponent.h"
 #include "Gameplay/Photo/NPPhotoWorldFeedbackComponent.h"
 #include "Core/NPPlayerState.h"
 #include "Gameplay/Character/Component/NPStablePhysicsMovementComponent.h"
+#include "NoPhotos.h"
 
 ANPReplicatedStablePhysicsPawn::ANPReplicatedStablePhysicsPawn()
 {
@@ -386,6 +389,85 @@ void ANPReplicatedStablePhysicsPawn::ServerSetViewRotation_Implementation(
 		FRotator::DecompressAxisFromShort(CompressedPitch),
 		FRotator::DecompressAxisFromShort(CompressedYaw),
 		0.0f));
+}
+
+void ANPReplicatedStablePhysicsPawn::ServerRequestAimableRelicFire_Implementation(
+	FVector_NetQuantize10 CameraLocation,
+	FVector_NetQuantizeNormal CameraForward)
+{
+	ANPBaseRelic* HeldRelic = Cast<ANPBaseRelic>(
+		ReplicatedGrabState.GrabbedActor);
+	UNPAimableRelicComponent* AimableRelic = HeldRelic
+		? HeldRelic->FindComponentByClass<UNPAimableRelicComponent>()
+		: nullptr;
+	UGrabbableComponent* Grabbable = HeldRelic
+		? HeldRelic->FindComponentByClass<UGrabbableComponent>()
+		: nullptr;
+	if (!IsValid(HeldRelic)
+		|| !IsValid(AimableRelic)
+		|| !IsValid(Grabbable)
+		|| Grabbable->GetActiveGrabCount() != 1
+		|| !IsValid(AbilitySystem)
+		|| !AbilitySystem->HasMatchingGameplayTag(
+			NPGameplayTags::State_Relic_Aiming))
+	{
+		UE_LOG(
+			LogNoPhotos,
+			Warning,
+			TEXT("[AimableRelic] Server request rejected: invalid held relic, grab count, ASC, or aiming state. Pawn=%s Relic=%s GrabCount=%d Aiming=%s"),
+			*GetNameSafe(this),
+			*GetNameSafe(HeldRelic),
+			Grabbable ? Grabbable->GetActiveGrabCount() : 0,
+			AbilitySystem
+				&& AbilitySystem->HasMatchingGameplayTag(
+					NPGameplayTags::State_Relic_Aiming)
+				? TEXT("true")
+				: TEXT("false"));
+		return;
+	}
+
+	const FVector RequestLocation(CameraLocation);
+	const FVector RequestForward = FVector(CameraForward).GetSafeNormal();
+	const FNPRelicAimSettings& Settings = AimableRelic->GetAimSettings();
+	const float CameraDistanceFromPawn = FVector::Distance(
+		RequestLocation,
+		GetActorLocation());
+	const FVector ServerForward = GetServerViewRotation().Vector().GetSafeNormal();
+	const float DirectionDot = FVector::DotProduct(
+		RequestForward,
+		ServerForward);
+	const float MinimumDirectionDot = FMath::Cos(FMath::DegreesToRadians(
+		Settings.MaximumCameraDirectionError));
+	if (RequestLocation.ContainsNaN()
+		|| RequestForward.IsNearlyZero()
+		|| CameraDistanceFromPawn > Settings.MaximumCameraDistanceFromPawn
+		|| DirectionDot < MinimumDirectionDot)
+	{
+		UE_LOG(
+			LogNoPhotos,
+			Warning,
+			TEXT("[AimableRelic] Server request rejected: invalid camera. Pawn=%s DistanceFromPawn=%.1f MaximumDistance=%.1f DirectionDot=%.3f RequiredDot=%.3f"),
+			*GetNameSafe(this),
+			CameraDistanceFromPawn,
+			Settings.MaximumCameraDistanceFromPawn,
+			DirectionDot,
+			MinimumDirectionDot);
+		return;
+	}
+
+	UE_LOG(
+		LogNoPhotos,
+		Log,
+		TEXT("[AimableRelic] Server camera validated. Pawn=%s Relic=%s Location=%s Forward=%s"),
+		*GetNameSafe(this),
+		*GetNameSafe(HeldRelic),
+		*RequestLocation.ToCompactString(),
+		*RequestForward.ToCompactString());
+	AimableRelic->TryFire(
+		this,
+		AbilitySystem,
+		RequestLocation,
+		RequestForward);
 }
 
 void ANPReplicatedStablePhysicsPawn::ServerSetRightHandActive_Implementation(

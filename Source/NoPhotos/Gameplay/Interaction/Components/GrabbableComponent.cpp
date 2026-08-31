@@ -91,6 +91,7 @@ void UGrabbableComponent::NotifyGrabStarted(UPrimitiveComponent* GrabbedComponen
 
 	++ActiveGrabCount;
 	bIsGrabbed = true;
+	OnActiveGrabCountChanged.Broadcast(ActiveGrabCount);
 	if (ActiveGrabCount == 1)
 	{
 		CurrentLinearGrabForce = FVector::ZeroVector;
@@ -126,6 +127,7 @@ void UGrabbableComponent::NotifyGrabEnded()
 
 	--ActiveGrabCount;
 	bIsGrabbed = ActiveGrabCount > 0;
+	OnActiveGrabCountChanged.Broadcast(ActiveGrabCount);
 	if (bIsGrabbed)
 	{
 		return;

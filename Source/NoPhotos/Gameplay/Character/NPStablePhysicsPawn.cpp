@@ -268,7 +268,7 @@ void ANPStablePhysicsPawn::SetPhotoViewActive(const bool bActive)
 	if (PhysicsMesh)
 	{
 		// 다른 플레이어에게는 계속 보이고, 이 Pawn을 소유한 로컬 화면에서만 숨깁니다.
-		PhysicsMesh->SetOwnerNoSee(bPhotoViewActive);
+		PhysicsMesh->SetOwnerNoSee(bPhotoViewActive || bRelicAimViewActive);
 	}
 	UE_LOG(
 		LogNPPhoto,
@@ -276,6 +276,20 @@ void ANPStablePhysicsPawn::SetPhotoViewActive(const bool bActive)
 		TEXT("[PhotoMode] Pawn view changed. Pawn=%s Active=%s"),
 		*GetNameSafe(this),
 		bPhotoViewActive ? TEXT("true") : TEXT("false"));
+}
+
+void ANPStablePhysicsPawn::SetRelicAimViewActive(const bool bActive)
+{
+	if (!IsLocallyControlled() || bRelicAimViewActive == bActive)
+	{
+		return;
+	}
+
+	bRelicAimViewActive = bActive;
+	if (PhysicsMesh)
+	{
+		PhysicsMesh->SetOwnerNoSee(bPhotoViewActive || bRelicAimViewActive);
+	}
 }
 
 bool ANPStablePhysicsPawn::IsPhotoViewReady() const
@@ -505,13 +519,19 @@ void ANPStablePhysicsPawn::UpdatePhotoCamera(const float DeltaSeconds)
 {
 	const float TargetArmLength = bPhotoViewActive
 		? PhotoCameraArmLength
-		: DefaultCameraArmLength;
+		: bRelicAimViewActive
+			? RelicAimCameraArmLength
+			: DefaultCameraArmLength;
 	const float TargetHeight = bPhotoViewActive
 		? PhotoCameraTargetHeight
-		: CameraTargetHeight;
+		: bRelicAimViewActive
+			? RelicAimCameraTargetHeight
+			: CameraTargetHeight;
 	const float TargetFOV = bPhotoViewActive
 		? PhotoCameraFOV
-		: DefaultCameraFOV;
+		: bRelicAimViewActive
+			? RelicAimCameraFOV
+			: DefaultCameraFOV;
 
 	CameraBoom->TargetArmLength = FMath::FInterpTo(
 		CameraBoom->TargetArmLength,

@@ -21,15 +21,20 @@ public:
 		UInputAction* RelicUseAction);
 	void SetHeldRelic(AActor* Relic);
 
+	/** PlayerController의 문맥 입력 라우터가 호출합니다. */
+	void ActivateRelicAimAbility();
+	void CancelRelicAimAbility();
+	void ActivateRelicFireAbility();
+
 private:
 	void ActivateRelicUseAbility();
-	void ClearHeldRelicAbility();
+	void ClearHeldRelicAbilities();
 	void HandleGameplayEffectApplied(
 		UAbilitySystemComponent* SourceAbilitySystem,
 		const FGameplayEffectSpec& EffectSpec,
 		FActiveGameplayEffectHandle ActiveHandle);
 	void HandleKnockbackEffect(const FGameplayEffectSpec& EffectSpec);
 
-	FGameplayAbilitySpecHandle HeldRelicAbilityHandle;
+	TArray<FGameplayAbilitySpecHandle> HeldRelicAbilityHandles;
 	bool bGameplayEffectDelegateBound = false;
 };
