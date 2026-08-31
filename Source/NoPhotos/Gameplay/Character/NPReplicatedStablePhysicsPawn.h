@@ -13,6 +13,7 @@ class AController;
 class FLifetimeProperty;
 class UNPAbilitySystemComponent;
 class UNPInvisibilityComponent;
+class UNPControlReversalComponent;
 class UNPVisionRestrictionComponent;
 class UNPStablePhysicsNetworkPredictionComponent;
 class UNPPhotoWorldFeedbackComponent;
@@ -175,6 +176,10 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Vision Restriction", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UNPVisionRestrictionComponent> VisionRestriction;
+
+	/** GAS 상태에 따라 원본 이동 입력의 전후/좌우 성분을 반전합니다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Control Reversal", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UNPControlReversalComponent> ControlReversal;
 
 	UPROPERTY(EditDefaultsOnly, Category="Input")
 	TObjectPtr<UInputAction> RelicUseAction;

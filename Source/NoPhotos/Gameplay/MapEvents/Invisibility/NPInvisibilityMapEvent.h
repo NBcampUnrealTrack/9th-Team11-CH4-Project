@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "ActiveGameplayEffectHandle.h"
 #include "GameplayTagContainer.h"
-#include "NPMapEvent.h"
+#include "Gameplay/MapEvents/NPMapEvent.h"
 #include "NPInvisibilityMapEvent.generated.h"
 
 class UAbilitySystemComponent;

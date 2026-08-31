@@ -11,5 +11,7 @@ namespace NPGameplayTags
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Invisible);
 	/** 시야 제한 상태. 투명화 여부와 별도로 조회할 수 있습니다. */
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_VisionRestricted);
+	/** 수평면 이동(W/S, A/D)을 반전합니다. 시점과 점프 입력은 유지합니다. */
+	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_ControlsMirrored);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Knockback_Magnitude);
 }

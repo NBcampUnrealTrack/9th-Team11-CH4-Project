@@ -73,6 +73,13 @@ public:
 	UFUNCTION(BlueprintPure, Category="Vision Restriction")
 	float GetMaxViewDistance() const;
 
+	/** 로컬 화면 전용 강도(0~1). 서버 제한 상태/촬영 판정용 값이 아닙니다. */
+	UFUNCTION(BlueprintPure, Category="Vision Restriction")
+	float GetVisionFogStrength() const { return CurrentFogStrength; }
+
+	static float AdvanceFogStrength(float CurrentStrength, bool bRestricted, float DeltaTime,
+		float FadeInDuration, float FadeOutDuration);
+
 	/** 최초 연결 시에는 IsVisionRestricted()도 조회합니다. */
 	UPROPERTY(BlueprintAssignable, Category="Vision Restriction")
 	FNPVisionRestrictionChangedSignature OnVisionRestrictionChanged;
@@ -91,9 +98,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Vision Restriction|Fog")
 	FNPVisionRestrictionSettings FogSettings;
 
+	/** 안개 강도가 0에서 1까지 증가하는 시간. 0이면 즉시 제한합니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Vision Restriction|Transition", meta=(ClampMin="0.0", Units="s"))
+	float FogFadeInDuration = 1.0f;
+
+	/** 안개 강도가 1에서 0까지 감소하는 시간. 0이면 즉시 복원합니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Vision Restriction|Transition", meta=(ClampMin="0.0", Units="s"))
+	float FogFadeOutDuration = 1.0f;
+
 private:
 	void HandleVisionTagChanged(FGameplayTag Tag, int32 NewCount);
-	void RefreshPresentation();
+	void RefreshPresentation(float DeltaTime = 0.0f);
 	void RemovePresentation();
 
 	UPROPERTY(Transient)
@@ -111,4 +126,5 @@ private:
 	FDelegateHandle VisionTagHandle;
 	bool bIsVisionRestricted = false;
 	bool bWarnedInvalidMaterial = false;
+	float CurrentFogStrength = 0.0f;
 };

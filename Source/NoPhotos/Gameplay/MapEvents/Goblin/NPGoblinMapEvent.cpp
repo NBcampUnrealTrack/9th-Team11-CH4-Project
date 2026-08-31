@@ -5,7 +5,7 @@
 #include "Gameplay/Goblin/NPGoblinCharacter.h"
 #include "Gameplay/Goblin/NPGoblinPatrolRoute.h"
 #include "Kismet/GameplayStatics.h"
-#include "NPMapEventManager.h"
+#include "Gameplay/MapEvents/NPMapEventManager.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogNPGoblinMapEvent, Log, All);
 

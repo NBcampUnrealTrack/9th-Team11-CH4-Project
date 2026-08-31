@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
-#include "NPMapEvent.h"
+#include "Gameplay/MapEvents/NPMapEvent.h"
 #include "NPRelicBonusMapEvent.generated.h"
 
 class ANPRelicReturnZone;

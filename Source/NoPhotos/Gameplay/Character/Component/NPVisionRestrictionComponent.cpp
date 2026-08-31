@@ -9,6 +9,7 @@
 #include "Materials/Material.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "Materials/MaterialParameters.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogNPVisionRestriction, Log, All);
 
@@ -17,6 +18,7 @@ namespace NPVisionFog
 	const FName StartDistance(TEXT("FogStartDistance"));
 	const FName EndDistance(TEXT("FogEndDistance"));
 	const FName Color(TEXT("FogColor"));
+	const FName Strength(TEXT("FogStrength"));
 }
 
 void UNPVisionRestrictionCameraModifier::Initialize(APawn* InPawn, UMaterialInstanceDynamic* InMaterial)
@@ -42,7 +44,7 @@ UNPVisionRestrictionComponent::UNPVisionRestrictionComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
-	PrimaryComponentTick.TickInterval = 0.1f;
+	PrimaryComponentTick.TickInterval = 0.0f;
 }
 
 void UNPVisionRestrictionComponent::BeginPlay()
@@ -79,7 +81,22 @@ void UNPVisionRestrictionComponent::TickComponent(
 	float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-	RefreshPresentation();
+	RefreshPresentation(DeltaTime);
+}
+
+float UNPVisionRestrictionComponent::AdvanceFogStrength(float CurrentStrength, bool bRestricted,
+	float DeltaTime, float FadeInDuration, float FadeOutDuration)
+{
+	const float Current = FMath::IsFinite(CurrentStrength) ? FMath::Clamp(CurrentStrength, 0.0f, 1.0f) : 0.0f;
+	const float Target = bRestricted ? 1.0f : 0.0f;
+	const float Duration = bRestricted ? FadeInDuration : FadeOutDuration;
+	if (!FMath::IsFinite(Duration) || Duration <= 0.0f)
+	{
+		return Target;
+	}
+	const float Step = FMath::IsFinite(DeltaTime) ? FMath::Max(0.0f, DeltaTime) / Duration : 0.0f;
+	// 목표만 뒤집고 현재 강도는 유지하므로 빠른 재진입/이탈에서도 튀지 않습니다.
+	return bRestricted ? FMath::Min(1.0f, Current + Step) : FMath::Max(0.0f, Current - Step);
 }
 
 FNPVisionRestrictionSettings UNPVisionRestrictionComponent::GetVisionRestrictionSettings() const
@@ -100,7 +117,8 @@ void UNPVisionRestrictionComponent::HandleVisionTagChanged(FGameplayTag, int32 N
 	const bool bNewRestricted = NewCount > 0;
 	const bool bChanged = bIsVisionRestricted != bNewRestricted;
 	bIsVisionRestricted = bNewRestricted;
-	SetComponentTickEnabled(bIsVisionRestricted && GetNetMode() != NM_DedicatedServer);
+	// 태그가 해제되어도 로컬 안개가 완전히 빠질 때까지 Tick을 유지합니다.
+	SetComponentTickEnabled((bIsVisionRestricted || CurrentFogStrength > 0.0f) && GetNetMode() != NM_DedicatedServer);
 	RefreshPresentation();
 	if (bChanged)
 	{
@@ -108,26 +126,30 @@ void UNPVisionRestrictionComponent::HandleVisionTagChanged(FGameplayTag, int32 N
 	}
 }
 
-void UNPVisionRestrictionComponent::RefreshPresentation()
+void UNPVisionRestrictionComponent::RefreshPresentation(float DeltaTime)
 {
 	APawn* Pawn = Cast<APawn>(GetOwner());
 	APlayerController* PC = Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
 	APlayerCameraManager* CameraManager = PC ? PC->PlayerCameraManager.Get() : nullptr;
-	if (!bIsVisionRestricted || GetNetMode() == NM_DedicatedServer || !Pawn
+	// 로컬 연출은 매 프레임, 원격 Pawn의 소유권 변경 확인은 기존처럼 0.1초 간격입니다.
+	SetComponentTickInterval(Pawn && Pawn->IsLocallyControlled() ? 0.0f : 0.1f);
+	if ((!bIsVisionRestricted && CurrentFogStrength <= 0.0f) || GetNetMode() == NM_DedicatedServer || !Pawn
 		|| !Pawn->IsLocallyControlled() || !PC || !PC->IsLocalController()
 		|| !IsValid(CameraManager) || CameraManager->GetViewTarget() != Pawn)
 	{
 		RemovePresentation();
+		SetComponentTickEnabled(bIsVisionRestricted && GetNetMode() != NM_DedicatedServer);
 		return;
 	}
 
 	if (AppliedCameraManager.Get() != CameraManager || !IsValid(CameraModifier))
 	{
 		RemovePresentation();
-	}
-	else
-	{
-		return;
+		if (!bIsVisionRestricted)
+		{
+			SetComponentTickEnabled(false);
+			return;
+		}
 	}
 
 	if (!FogMaterialInstance)
@@ -138,16 +160,18 @@ void UNPVisionRestrictionComponent::RefreshPresentation()
 			&& VisionFogMaterial->GetMaterial()->MaterialDomain == MD_PostProcess
 			&& VisionFogMaterial->GetScalarParameterValue(FMaterialParameterInfo(NPVisionFog::StartDistance), UnusedScalar)
 			&& VisionFogMaterial->GetScalarParameterValue(FMaterialParameterInfo(NPVisionFog::EndDistance), UnusedScalar)
+			&& VisionFogMaterial->GetScalarParameterValue(FMaterialParameterInfo(NPVisionFog::Strength), UnusedScalar)
 			&& VisionFogMaterial->GetVectorParameterValue(FMaterialParameterInfo(NPVisionFog::Color), UnusedColor);
 		if (!bValidMaterial)
 		{
 			if (!bWarnedInvalidMaterial)
 			{
 				UE_LOG(LogNPVisionRestriction, Warning,
-					TEXT("안개 머티리얼 설정 확인: Pawn=%s Material=%s. Post Process 도메인과 FogStartDistance/FogEndDistance/FogColor 파라미터가 필요합니다. 시야 제한 상태는 유지됩니다."),
+					TEXT("안개 머티리얼 설정 확인: Pawn=%s Material=%s. Post Process 도메인과 FogStartDistance/FogEndDistance/FogColor/FogStrength 파라미터가 필요합니다. 기존 Lerp Alpha에 FogStrength를 곱하세요. 서버 시야 제한 상태는 유지됩니다."),
 					*GetNameSafe(Pawn), *GetNameSafe(VisionFogMaterial));
 				bWarnedInvalidMaterial = true;
 			}
+			SetComponentTickInterval(0.1f);
 			return;
 		}
 
@@ -160,19 +184,37 @@ void UNPVisionRestrictionComponent::RefreshPresentation()
 		FogMaterialInstance->SetScalarParameterValue(NPVisionFog::StartDistance, Settings.FogStartDistance);
 		FogMaterialInstance->SetScalarParameterValue(NPVisionFog::EndDistance, Settings.MaxViewDistance);
 		FogMaterialInstance->SetVectorParameterValue(NPVisionFog::Color, Settings.FogColor);
+		FogMaterialInstance->SetScalarParameterValue(NPVisionFog::Strength, 0.0f);
 	}
 
-	CameraModifier = Cast<UNPVisionRestrictionCameraModifier>(
-		CameraManager->AddNewCameraModifier(UNPVisionRestrictionCameraModifier::StaticClass()));
-	if (CameraModifier)
+	if (!IsValid(CameraModifier))
 	{
+		CameraModifier = Cast<UNPVisionRestrictionCameraModifier>(
+			CameraManager->AddNewCameraModifier(UNPVisionRestrictionCameraModifier::StaticClass()));
+		if (!CameraModifier)
+		{
+			return;
+		}
 		CameraModifier->Initialize(Pawn, FogMaterialInstance);
 		AppliedCameraManager = CameraManager;
+	}
+	CurrentFogStrength = AdvanceFogStrength(CurrentFogStrength, bIsVisionRestricted, DeltaTime,
+		FogFadeInDuration, FogFadeOutDuration);
+	FogMaterialInstance->SetScalarParameterValue(NPVisionFog::Strength, CurrentFogStrength);
+	if (!bIsVisionRestricted && CurrentFogStrength <= 0.0f)
+	{
+		RemovePresentation();
+		SetComponentTickEnabled(false);
 	}
 }
 
 void UNPVisionRestrictionComponent::RemovePresentation()
 {
+	CurrentFogStrength = 0.0f;
+	if (IsValid(FogMaterialInstance))
+	{
+		FogMaterialInstance->SetScalarParameterValue(NPVisionFog::Strength, 0.0f);
+	}
 	if (IsValid(CameraModifier))
 	{
 		CameraModifier->DisableModifier(true);

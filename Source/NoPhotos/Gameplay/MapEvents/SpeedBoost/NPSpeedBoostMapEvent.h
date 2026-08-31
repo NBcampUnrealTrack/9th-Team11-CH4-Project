@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "NPMapEvent.h"
+#include "Gameplay/MapEvents/NPMapEvent.h"
 #include "NPSpeedBoostMapEvent.generated.h"
 
 class ANPStablePhysicsPawn;
