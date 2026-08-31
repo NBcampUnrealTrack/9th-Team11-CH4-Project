@@ -9,6 +9,36 @@
 #include "Net/UnrealNetwork.h"
 #include "SubSystem/Room/NPRoomGenerateSubsystem.h"
 
+namespace
+{
+void BuildQuestRelicCombinations(
+	const int32 RelicCount,
+	const int32 RelicsPerPlayer,
+	const int32 StartIndex,
+	TArray<int32>& CurrentCombination,
+	TArray<TArray<int32>>& OutCombinations)
+{
+	if (CurrentCombination.Num() == RelicsPerPlayer)
+	{
+		OutCombinations.Add(CurrentCombination);
+		return;
+	}
+
+	const int32 RemainingCount = RelicsPerPlayer - CurrentCombination.Num();
+	for (int32 Index = StartIndex; Index <= RelicCount - RemainingCount; ++Index)
+	{
+		CurrentCombination.Add(Index);
+		BuildQuestRelicCombinations(
+			RelicCount,
+			RelicsPerPlayer,
+			Index + 1,
+			CurrentCombination,
+			OutCombinations);
+		CurrentCombination.Pop();
+	}
+}
+}
+
 UNPBonusRelicComponent::UNPBonusRelicComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
@@ -197,16 +227,24 @@ bool UNPBonusRelicComponent::DistributeQuestRelicsToPlayers()
 		PlayerControllers.Swap(Index, FMath::RandRange(0, Index));
 	}
 
-	TArray<int32> QuestRelicIndices;
-	QuestRelicIndices.Reserve(QuestRelics.Num());
-	for (int32 Index = 0; Index < QuestRelics.Num(); ++Index)
+	TArray<TArray<int32>> Combinations;
+	TArray<int32> CurrentCombination;
+	BuildQuestRelicCombinations(
+		QuestRelics.Num(),
+		QuestRelicsPerPlayer,
+		0,
+		CurrentCombination,
+		Combinations);
+	if (Combinations.IsEmpty())
 	{
-		QuestRelicIndices.Add(Index);
+		return false;
 	}
-	for (int32 Index = QuestRelicIndices.Num() - 1; Index > 0; --Index)
-	{
-		QuestRelicIndices.Swap(Index, FMath::RandRange(0, Index));
-	}
+
+	TArray<int32> RelicAssignmentCounts;
+	RelicAssignmentCounts.Init(0, QuestRelics.Num());
+	TArray<int32> CombinationUseCounts;
+	CombinationUseCounts.Init(0, Combinations.Num());
+	TArray<TArray<int32>> PreviousAssignments;
 
 	bool bAssignedAnyPlayer = false;
 	for (int32 PlayerIndex = 0; PlayerIndex < PlayerControllers.Num(); ++PlayerIndex)
@@ -217,16 +255,78 @@ bool UNPBonusRelicComponent::DistributeQuestRelicsToPlayers()
 			continue;
 		}
 
-		TArray<ANPBaseRelic*> AssignedRelics;
-		AssignedRelics.Reserve(QuestRelicsPerPlayer);
-		const int32 StartIndex = PlayerIndex % QuestRelicIndices.Num();
-		for (int32 Offset = 0; Offset < QuestRelicsPerPlayer; ++Offset)
+		int32 BestCombinationIndex = INDEX_NONE;
+		int32 BestUseCount = MAX_int32;
+		int32 BestAssignmentSpread = MAX_int32;
+		int32 BestOverlap = MAX_int32;
+
+		for (int32 CombinationIndex = 0; CombinationIndex < Combinations.Num(); ++CombinationIndex)
 		{
-			const int32 RelicIndex = QuestRelicIndices[(StartIndex + Offset) % QuestRelicIndices.Num()];
+			const TArray<int32>& Candidate = Combinations[CombinationIndex];
+			int32 ProjectedMinCount = MAX_int32;
+			int32 ProjectedMaxCount = MIN_int32;
+			for (int32 RelicIndex = 0; RelicIndex < QuestRelics.Num(); ++RelicIndex)
+			{
+				const int32 ProjectedCount = RelicAssignmentCounts[RelicIndex]
+					+ (Candidate.Contains(RelicIndex) ? 1 : 0);
+				ProjectedMinCount = FMath::Min(ProjectedMinCount, ProjectedCount);
+				ProjectedMaxCount = FMath::Max(ProjectedMaxCount, ProjectedCount);
+			}
+
+			int32 TotalOverlap = 0;
+			for (const TArray<int32>& PreviousAssignment : PreviousAssignments)
+			{
+				for (const int32 RelicIndex : Candidate)
+				{
+					TotalOverlap += PreviousAssignment.Contains(RelicIndex) ? 1 : 0;
+				}
+			}
+
+			const int32 CandidateUseCount = CombinationUseCounts[CombinationIndex];
+			const int32 AssignmentSpread = ProjectedMaxCount - ProjectedMinCount;
+			const bool bIsBetterCandidate =
+				CandidateUseCount < BestUseCount
+				|| (CandidateUseCount == BestUseCount
+					&& AssignmentSpread < BestAssignmentSpread)
+				|| (CandidateUseCount == BestUseCount
+					&& AssignmentSpread == BestAssignmentSpread
+					&& TotalOverlap < BestOverlap)
+				|| (CandidateUseCount == BestUseCount
+					&& AssignmentSpread == BestAssignmentSpread
+					&& TotalOverlap == BestOverlap
+					&& FMath::RandBool());
+			if (bIsBetterCandidate)
+			{
+				BestCombinationIndex = CombinationIndex;
+				BestUseCount = CandidateUseCount;
+				BestAssignmentSpread = AssignmentSpread;
+				BestOverlap = TotalOverlap;
+			}
+		}
+
+		if (BestCombinationIndex == INDEX_NONE)
+		{
+			continue;
+		}
+
+		const TArray<int32>& SelectedCombination = Combinations[BestCombinationIndex];
+		TArray<ANPBaseRelic*> AssignedRelics;
+		AssignedRelics.Reserve(SelectedCombination.Num());
+		for (const int32 RelicIndex : SelectedCombination)
+		{
 			AssignedRelics.Add(QuestRelics[RelicIndex]);
 		}
 
-		bAssignedAnyPlayer |= PlayerQuestComponent->SetAssignedQuestRelics(AssignedRelics);
+		if (PlayerQuestComponent->SetAssignedQuestRelics(AssignedRelics))
+		{
+			++CombinationUseCounts[BestCombinationIndex];
+			PreviousAssignments.Add(SelectedCombination);
+			for (const int32 RelicIndex : SelectedCombination)
+			{
+				++RelicAssignmentCounts[RelicIndex];
+			}
+			bAssignedAnyPlayer = true;
+		}
 	}
 
 	return bAssignedAnyPlayer;
