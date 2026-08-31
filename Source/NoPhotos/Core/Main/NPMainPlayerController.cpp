@@ -2,6 +2,7 @@
 
 #include "Core/Main/NPMainGameMode.h"
 #include "Core/Main/NPMainGameState.h"
+#include "Core/Chat/NPChatComponent.h"
 #include "Core/Room/NPRoomSubsystem.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/PrimitiveComponent.h"
@@ -33,6 +34,7 @@ ANPMainPlayerController::ANPMainPlayerController()
 {
 	PhotoCaptureComponent = CreateDefaultSubobject<UNPPhotoCaptureComponent>(TEXT("PhotoCaptureComponent"));
 	PhotoTransferComponent = CreateDefaultSubobject<UNPPhotoTransferComponent>(TEXT("PhotoTransferComponent"));
+	ChatComponent = CreateDefaultSubobject<UNPChatComponent>(TEXT("ChatComponent"));
 
 	static ConstructorHelpers::FObjectFinder<UInputMappingContext>
 	DefaultMapping(TEXT("/Game/Input/IMC_Default.IMC_Default"));
@@ -145,6 +147,10 @@ void ANPMainPlayerController::ClientPlayPhotographedFlash_Implementation()
 void ANPMainPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
+	if (ChatComponent)
+	{
+		ChatComponent->BindChatInput(InputComponent);
+	}
 
 	if (IsLocalPlayerController())
 	{

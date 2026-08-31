@@ -13,6 +13,7 @@ class UNPPhotoTransferComponent;
 class UNPNoticeEventWidget;
 class UNPUserWidget;
 class UUserWidget;
+class UNPChatComponent;
 
 UCLASS()
 class NOPHOTOS_API ANPMainPlayerController : public APlayerController
@@ -27,6 +28,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Photo")
 	UNPPhotoTransferComponent* GetPhotoTransferComponent() const { return PhotoTransferComponent; }
+
+	UFUNCTION(BlueprintPure, Category = "Chat")
+	UNPChatComponent* GetChatComponent() const { return ChatComponent; }
 
 	void PlayPhotoFlash();
 
@@ -113,6 +117,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Photo", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UNPPhotoTransferComponent> PhotoTransferComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Chat", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UNPChatComponent> ChatComponent;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNPPhotoFlashWidget> PhotoFlashWidget;
