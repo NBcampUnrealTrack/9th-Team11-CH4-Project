@@ -6,6 +6,8 @@
 #include "NPChatWidget.generated.h"
 
 class UEditableTextBox;
+class UBackgroundBlur;
+class UBorder;
 class UTextBlock;
 class UVerticalBox;
 
@@ -25,6 +27,12 @@ private:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UEditableTextBox> ChatInput;
 
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UBackgroundBlur> ChatBackgroundBlur;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UBorder> ChatBackgroundDim;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UNPChatComponent> ChatComponent;
 
@@ -39,4 +47,6 @@ private:
 
 	UFUNCTION()
 	void HandleTextCommitted(const FText& Text, ETextCommit::Type CommitMethod);
+
+	void SetChatBackgroundVisible(bool bVisible);
 };

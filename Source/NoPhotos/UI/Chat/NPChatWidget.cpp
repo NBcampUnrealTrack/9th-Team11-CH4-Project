@@ -1,5 +1,7 @@
 #include "UI/Chat/NPChatWidget.h"
 
+#include "Components/BackgroundBlur.h"
+#include "Components/Border.h"
 #include "Components/EditableTextBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
@@ -33,6 +35,7 @@ void UNPChatWidget::NativeConstruct()
 	else
 	{
 		ChatInput->SetVisibility(ESlateVisibility::Collapsed);
+		SetChatBackgroundVisible(false);
 	}
 }
 
@@ -71,6 +74,9 @@ void UNPChatWidget::RefreshMessages(const TArray<FNPChatMessage>& Messages)
 	{
 		UTextBlock* MessageText = NewObject<UTextBlock>(this);
 		MessageText->SetText(Message.ToDisplayText());
+		FSlateFontInfo FontInfo = MessageText->GetFont();
+		FontInfo.Size = 18;
+		MessageText->SetFont(FontInfo);
 		MessageList->AddChildToVerticalBox(MessageText);
 	}
 }
@@ -83,6 +89,7 @@ void UNPChatWidget::OpenChatInput()
 	}
 
 	ChatInput->SetVisibility(ESlateVisibility::Visible);
+	SetChatBackgroundVisible(true);
 	ChatInput->SetKeyboardFocus();
 
 	if (APlayerController* PlayerController = GetOwningPlayer())
@@ -100,6 +107,7 @@ void UNPChatWidget::CloseChatInput()
 		ChatInput->SetText(FText::GetEmpty());
 		ChatInput->SetVisibility(ESlateVisibility::Collapsed);
 	}
+	SetChatBackgroundVisible(false);
 
 	UGameInstance* GameInstance = GetGameInstance();
 	UNPUIManagerSubsystem* UIManager = GameInstance
@@ -126,4 +134,20 @@ void UNPChatWidget::HandleTextCommitted(const FText& Text, const ETextCommit::Ty
 
 	ChatInput->SetText(FText::GetEmpty());
 	ChatInput->SetKeyboardFocus();
+}
+
+void UNPChatWidget::SetChatBackgroundVisible(const bool bVisible)
+{
+	const ESlateVisibility BackgroundVisibility  = bVisible
+		? ESlateVisibility::HitTestInvisible
+		: ESlateVisibility::Collapsed;
+
+	if (IsValid(ChatBackgroundBlur))
+	{
+		ChatBackgroundBlur->SetVisibility(BackgroundVisibility );
+	}
+	if (IsValid(ChatBackgroundDim))
+	{
+		ChatBackgroundDim->SetVisibility(BackgroundVisibility );
+	}
 }
