@@ -6,6 +6,7 @@
 
 class UVerticalBox;
 class UNPBonusItemWidget;
+class UNPPlayerBonusQuestComponent;
 
 UCLASS()
 class NOPHOTOS_API UNPBonusRelicWidget : public UNPUserWidget
@@ -17,6 +18,7 @@ public:
 
 protected:
 	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
 
 private:
 	UPROPERTY(meta = (BindWidget))
@@ -25,5 +27,11 @@ private:
 	UPROPERTY(EditAnywhere, Category = "UI|BonusRelic")
 	TSubclassOf<UNPBonusItemWidget> BonusItemWidgetClass;
 
+	TWeakObjectPtr<UNPPlayerBonusQuestComponent> BoundBonusQuestComponent;
+	TArray<TObjectPtr<UNPBonusItemWidget>> CreatedItemWidgets;
+
+	UFUNCTION()
+	void HandleAssignedQuestRelicsChanged();
+	void BindToBonusQuestComponent();
 	void InitBonusItemList();
 };
