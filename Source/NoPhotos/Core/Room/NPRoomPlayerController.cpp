@@ -7,6 +7,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputMappingContext.h"
 #include "Blueprint/UserWidget.h"
+#include "Core/Chat/NPChatComponent.h"
 #include "Core/Component/NPRoomPlayerComponent.h"
 #include "Core/Room/NPRoomCheatManager.h"
 #include "Engine/GameInstance.h"
@@ -19,6 +20,7 @@ ANPRoomPlayerController::ANPRoomPlayerController()
 	: ChangeInputAction(nullptr)
 {
 	RoomComponent = CreateDefaultSubobject<UNPRoomPlayerComponent>(TEXT("RoomComponent"));
+	ChatComponent = CreateDefaultSubobject<UNPChatComponent>(TEXT("ChatComponent"));
 	CheatClass = UNPRoomCheatManager::StaticClass();
 }
 
@@ -104,6 +106,10 @@ void ANPRoomPlayerController::SetupInputComponent()
 	}
 
 	SetCharacterInputMappingEnabled(true);
+	if (ChatComponent)
+	{
+		ChatComponent->BindChatInput(InputComponent);
+	}
 
 	if (UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(InputComponent))
 	{

@@ -11,6 +11,7 @@ class UNPUserWidget;
 class UUserWidget;
 class UInputMappingContext;
 class UInputAction;
+class UNPChatComponent;
 
 /** 대기방의 방 기능, UI와 입력을 담당하는 PlayerController입니다. */
 UCLASS()
@@ -23,6 +24,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Room")
 	UNPRoomPlayerComponent* GetRoomComponent() const { return RoomComponent; }
+
+	UFUNCTION(BlueprintPure, Category = "Chat")
+	UNPChatComponent* GetChatComponent() const { return ChatComponent; }
 
 	UFUNCTION(BlueprintCallable, Category = "Room")
 	void RequestStartGame();
@@ -59,6 +63,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UNPRoomPlayerComponent> RoomComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UNPChatComponent> ChatComponent;
 
 	UPROPERTY(EditAnywhere, Category = "Input|Input Mappings")
 	TArray<TObjectPtr<UInputMappingContext>> DefaultMappingContexts;
