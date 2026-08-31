@@ -88,10 +88,7 @@ void UNPPullGimmickComponent::HandleGrabForceUpdated(
 		return;
 	}
 
-	const FVector WorldPullDirection = GetOwner()
-		->GetActorTransform()
-		.TransformVectorNoScale(PullDirection)
-		.GetSafeNormal();
+	const FVector WorldPullDirection = PullDirection.GetSafeNormal();
 	const float PullForce = FVector::DotProduct(
 		LinearForce,
 		WorldPullDirection);
