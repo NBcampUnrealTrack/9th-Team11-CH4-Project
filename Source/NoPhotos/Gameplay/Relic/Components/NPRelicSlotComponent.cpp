@@ -1,4 +1,4 @@
-#include "Gameplay/Relic/Components/NPRelicCaseSlotComponent.h"
+#include "Gameplay/Relic/Components/NPRelicSlotComponent.h"
 
 #include "Components/PrimitiveComponent.h"
 #include "Engine/World.h"
@@ -6,22 +6,29 @@
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Net/UnrealNetwork.h"
 
-UNPRelicCaseSlotComponent::UNPRelicCaseSlotComponent()
+UNPRelicSlotComponent::UNPRelicSlotComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 	SetIsReplicatedByDefault(true);
 }
 
-void UNPRelicCaseSlotComponent::GetLifetimeReplicatedProps(
+void UNPRelicSlotComponent::GetLifetimeReplicatedProps(
 	TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	DOREPLIFETIME(UNPRelicCaseSlotComponent, SpawnedRelic);
-	DOREPLIFETIME(UNPRelicCaseSlotComponent, bIsRelicReleased);
+	DOREPLIFETIME(UNPRelicSlotComponent, SpawnedRelic);
+	DOREPLIFETIME(UNPRelicSlotComponent, bIsRelicReleased);
 }
 
-ANPBaseRelic* UNPRelicCaseSlotComponent::SpawnRelic(
+void UNPRelicSlotComponent::CreateRelicInEditor()
+{
+#if WITH_EDITOR
+	RecreateRelicInEditor();
+#endif
+}
+
+ANPBaseRelic* UNPRelicSlotComponent::SpawnRelic(
 	const bool bInitiallyReleased)
 {
 	AActor* Owner = GetOwner();
@@ -71,7 +78,7 @@ ANPBaseRelic* UNPRelicCaseSlotComponent::SpawnRelic(
 }
 
 #if WITH_EDITOR
-ANPBaseRelic* UNPRelicCaseSlotComponent::RecreateRelicInEditor()
+ANPBaseRelic* UNPRelicSlotComponent::RecreateRelicInEditor()
 {
 	AActor* Owner = GetOwner();
 	UWorld* World = GetWorld();
@@ -120,7 +127,7 @@ ANPBaseRelic* UNPRelicCaseSlotComponent::RecreateRelicInEditor()
 }
 #endif
 
-void UNPRelicCaseSlotComponent::ReleaseRelic()
+void UNPRelicSlotComponent::ReleaseRelic()
 {
 	AActor* Owner = GetOwner();
 	if (!Owner || !Owner->HasAuthority() || bIsRelicReleased)
@@ -137,17 +144,17 @@ void UNPRelicCaseSlotComponent::ReleaseRelic()
 	Owner->ForceNetUpdate();
 }
 
-void UNPRelicCaseSlotComponent::OnRep_SpawnedRelic()
+void UNPRelicSlotComponent::OnRep_SpawnedRelic()
 {
 	ApplyRelicState();
 }
 
-void UNPRelicCaseSlotComponent::OnRep_IsRelicReleased()
+void UNPRelicSlotComponent::OnRep_IsRelicReleased()
 {
 	ApplyRelicState();
 }
 
-void UNPRelicCaseSlotComponent::ApplyRelicState()
+void UNPRelicSlotComponent::ApplyRelicState()
 {
 	if (!IsValid(SpawnedRelic))
 	{

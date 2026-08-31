@@ -8,7 +8,7 @@
 class FLifetimeProperty;
 class UGeometryCollectionComponent;
 class UNPImpactReceiveComponent;
-class UNPRelicCaseSlotComponent;
+class UNPRelicSlotComponent;
 class USceneComponent;
 
 UCLASS(Blueprintable)
@@ -93,7 +93,7 @@ protected:
 
 	/** RelicScene 아래에서 수집된 유물 슬롯들입니다. */
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "Relic Case|Components")
-	TArray<TObjectPtr<UNPRelicCaseSlotComponent>> RelicSlots;
+	TArray<TObjectPtr<UNPRelicSlotComponent>> RelicSlots;
 
 	UPROPERTY(ReplicatedUsing = OnRep_IsBroken, VisibleInstanceOnly, BlueprintReadOnly, Category = "Relic Case|State")
 	bool bIsBroken = false;

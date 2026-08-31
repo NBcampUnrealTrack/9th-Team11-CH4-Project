@@ -4,7 +4,7 @@
 #include "Components/SceneComponent.h"
 #include "Engine/World.h"
 #include "Gameplay/Relic/Components/NPImpactReceiveComponent.h"
-#include "Gameplay/Relic/Components/NPRelicCaseSlotComponent.h"
+#include "Gameplay/Relic/Components/NPRelicSlotComponent.h"
 #include "GeometryCollection/GeometryCollectionComponent.h"
 #include "Net/UnrealNetwork.h"
 
@@ -38,7 +38,7 @@ void ANPRelicCase::CreateConfiguredRelics()
 	}
 
 	CollectRelicSlots();
-	for (UNPRelicCaseSlotComponent* RelicSlot : RelicSlots)
+	for (UNPRelicSlotComponent* RelicSlot : RelicSlots)
 	{
 		if (IsValid(RelicSlot))
 		{
@@ -216,9 +216,9 @@ void ANPRelicCase::CollectRelicSlots()
 {
 	RelicSlots.Reset();
 
-	TArray<UNPRelicCaseSlotComponent*> FoundRelicSlots;
+	TArray<UNPRelicSlotComponent*> FoundRelicSlots;
 	GetComponents(FoundRelicSlots);
-	for (UNPRelicCaseSlotComponent* RelicSlot : FoundRelicSlots)
+	for (UNPRelicSlotComponent* RelicSlot : FoundRelicSlots)
 	{
 		if (IsValid(RelicSlot) && RelicSlot->IsAttachedTo(RelicScene))
 		{
@@ -338,7 +338,7 @@ void ANPRelicCase::SpawnContainedRelics()
 		return;
 	}
 
-	for (UNPRelicCaseSlotComponent* RelicSlot : RelicSlots)
+	for (UNPRelicSlotComponent* RelicSlot : RelicSlots)
 	{
 		if (IsValid(RelicSlot))
 		{
@@ -354,7 +354,7 @@ void ANPRelicCase::ReleaseContainedRelics()
 		return;
 	}
 
-	for (UNPRelicCaseSlotComponent* RelicSlot : RelicSlots)
+	for (UNPRelicSlotComponent* RelicSlot : RelicSlots)
 	{
 		if (IsValid(RelicSlot))
 		{

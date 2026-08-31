@@ -19,6 +19,10 @@ public:
 	UFUNCTION(CallInEditor, Category="Room|Relic", meta=(DisplayName="레벨 유물 다시 수집"))
 	void CollectRelics();
 
+	/** 같은 레벨의 모든 유물 슬롯을 생성한 뒤 배치된 유물을 다시 수집합니다. */
+	UFUNCTION(CallInEditor, Category = "Room|Relic", meta = (DisplayName = "슬롯 유물 생성 및 수집"))
+	void CreateSlotRelicsAndCollect();
+
 	/** 현재 방에서 퀘스트 대상으로 사용할 유물을 반환합니다. */
 	UFUNCTION(BlueprintPure, Category="Room|Relic")
 	ANPBaseRelic* GetQuestRelic() const;
