@@ -54,7 +54,7 @@ void UNPAbilitySystemComponent::SetHeldRelic(AActor* Relic)
 		return;
 	}
 
-	ClearHeldRelicAbility();
+	ClearHeldRelicAbilities();
 	if (!IsValid(Relic))
 	{
 		return;
@@ -62,17 +62,26 @@ void UNPAbilitySystemComponent::SetHeldRelic(AActor* Relic)
 
 	const UNPUsableRelicComponent* UsableRelic =
 		Relic->FindComponentByClass<UNPUsableRelicComponent>();
-	if (!UsableRelic || !UsableRelic->GetUseAbilityClass())
+	if (!UsableRelic)
 	{
 		return;
 	}
 
-	FGameplayAbilitySpec AbilitySpec(
-		UsableRelic->GetUseAbilityClass(),
-		1,
-		INDEX_NONE,
-		Relic);
-	HeldRelicAbilityHandle = GiveAbility(AbilitySpec);
+	for (const TSubclassOf<UGameplayAbility>& AbilityClass :
+		UsableRelic->GetUseAbilityClasses())
+	{
+		if (!AbilityClass)
+		{
+			continue;
+		}
+
+		FGameplayAbilitySpec AbilitySpec(
+			AbilityClass,
+			1,
+			INDEX_NONE,
+			Relic);
+		HeldRelicAbilityHandles.Add(GiveAbility(AbilitySpec));
+	}
 }
 
 void UNPAbilitySystemComponent::ActivateRelicUseAbility()
@@ -82,16 +91,38 @@ void UNPAbilitySystemComponent::ActivateRelicUseAbility()
 	TryActivateAbilitiesByTag(AbilityTags);
 }
 
-void UNPAbilitySystemComponent::ClearHeldRelicAbility()
+void UNPAbilitySystemComponent::ActivateRelicAimAbility()
 {
-	if (!HeldRelicAbilityHandle.IsValid())
-	{
-		return;
-	}
+	FGameplayTagContainer AbilityTags;
+	AbilityTags.AddTag(NPGameplayTags::Input_Relic_Aim);
+	TryActivateAbilitiesByTag(AbilityTags);
+}
 
-	CancelAbilityHandle(HeldRelicAbilityHandle);
-	ClearAbility(HeldRelicAbilityHandle);
-	HeldRelicAbilityHandle = FGameplayAbilitySpecHandle();
+void UNPAbilitySystemComponent::CancelRelicAimAbility()
+{
+	FGameplayTagContainer AbilityTags;
+	AbilityTags.AddTag(NPGameplayTags::Ability_Relic_Aim);
+	CancelAbilities(&AbilityTags);
+}
+
+void UNPAbilitySystemComponent::ActivateRelicFireAbility()
+{
+	FGameplayTagContainer AbilityTags;
+	AbilityTags.AddTag(NPGameplayTags::Input_Relic_Fire);
+	TryActivateAbilitiesByTag(AbilityTags);
+}
+
+void UNPAbilitySystemComponent::ClearHeldRelicAbilities()
+{
+	for (const FGameplayAbilitySpecHandle& AbilityHandle : HeldRelicAbilityHandles)
+	{
+		if (AbilityHandle.IsValid())
+		{
+			CancelAbilityHandle(AbilityHandle);
+			ClearAbility(AbilityHandle);
+		}
+	}
+	HeldRelicAbilityHandles.Reset();
 }
 
 void UNPAbilitySystemComponent::HandleGameplayEffectApplied(
@@ -124,9 +155,8 @@ void UNPAbilitySystemComponent::HandleKnockbackEffect(
 		return;
 	}
 
-	FVector KnockbackDirection = Hit->TraceEnd - Hit->TraceStart;
-	KnockbackDirection.Z = 0.0f;
-	KnockbackDirection.Normalize();
+	const FVector KnockbackDirection =
+		(Hit->TraceEnd - Hit->TraceStart).GetSafeNormal();
 	const float KnockbackMagnitude = EffectSpec.GetSetByCallerMagnitude(
 		NPGameplayTags::Data_Knockback_Magnitude,
 		false,

@@ -2,9 +2,9 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Abilities/GameplayAbility.h"
 #include "NPUsableRelicComponent.generated.h"
 
-class UGameplayAbility;
 UCLASS(ClassGroup=(Relic), meta=(BlueprintSpawnableComponent))
 class NOPHOTOS_API UNPUsableRelicComponent : public UActorComponent
 {
@@ -13,18 +13,17 @@ class NOPHOTOS_API UNPUsableRelicComponent : public UActorComponent
 public:
 	UNPUsableRelicComponent();
 
-	TSubclassOf<UGameplayAbility> GetUseAbilityClass() const
+	const TArray<TSubclassOf<UGameplayAbility>>& GetUseAbilityClasses() const
 	{
-		return UseAbilityClass;
+		return UseAbilityClasses;
 	}
 
 protected:
-	void SetUseAbilityClass(TSubclassOf<UGameplayAbility> InAbilityClass)
-	{
-		UseAbilityClass = InAbilityClass;
-	}
+	void SetUseAbilityClass(TSubclassOf<UGameplayAbility> InAbilityClass);
+	void SetUseAbilityClasses(
+		const TArray<TSubclassOf<UGameplayAbility>>& InAbilityClasses);
 
 private:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic Ability", meta=(AllowPrivateAccess="true"))
-	TSubclassOf<UGameplayAbility> UseAbilityClass;
+	TArray<TSubclassOf<UGameplayAbility>> UseAbilityClasses;
 };

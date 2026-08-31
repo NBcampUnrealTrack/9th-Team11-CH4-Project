@@ -4,6 +4,8 @@
 #include "Core/Main/NPMainGameState.h"
 #include "Core/Room/NPRoomSubsystem.h"
 #include "Blueprint/UserWidget.h"
+#include "Components/PrimitiveComponent.h"
+#include "Core/GameplayTag/NPGameplayTags.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/GameInstance.h"
@@ -14,6 +16,10 @@
 #include "Gameplay/Photo/NPPhotoFlashWidget.h"
 #include "Gameplay/Photo/NPPhotoLog.h"
 #include "Gameplay/Photo/NPPhotoTransferComponent.h"
+#include "Gameplay/AbilitySystem/NPAbilitySystemComponent.h"
+#include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
+#include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
+#include "Gameplay/Relic/Components/NPAimableRelicComponent.h"
 #include "NoPhotos.h"
 #include "SubSystem/NPUIManagerSubsystem.h"
 #include "UI/GameScreen/Event/NPNoticeEventWidget.h"
@@ -22,7 +28,6 @@
 #include "Widgets/Input/SVirtualJoystick.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
-#include "UObject/ConstructorHelpers.h"
 
 ANPMainPlayerController::ANPMainPlayerController()
 {
@@ -36,10 +41,16 @@ ANPMainPlayerController::ANPMainPlayerController()
 		MouseLookMapping(TEXT("/Game/Input/IMC_MouseLook.IMC_MouseLook"));
 
 	static ConstructorHelpers::FObjectFinder<UInputAction>
-		PhotoModeAction(TEXT("/Game/Input/Actions/IA_PhotoMode.IA_PhotoMode"));
+		AimInputAction(TEXT("/Game/Input/Actions/IA_Aim.IA_Aim"));
+	static ConstructorHelpers::FObjectFinder<UInputAction>
+		LegacyPhotoModeAction(
+			TEXT("/Game/Input/Actions/IA_PhotoMode.IA_PhotoMode"));
 
 	static ConstructorHelpers::FObjectFinder<UInputAction>
-		PhotoShotAction(TEXT("/Game/Input/Actions/IA_PhotoShot.IA_PhotoShot"));
+		FireInputAction(TEXT("/Game/Input/Actions/IA_Fire.IA_Fire"));
+	static ConstructorHelpers::FObjectFinder<UInputAction>
+		LegacyPhotoShotAction(
+			TEXT("/Game/Input/Actions/IA_PhotoShot.IA_PhotoShot"));
 
 	if (DefaultMapping.Succeeded())
 	{
@@ -51,14 +62,22 @@ ANPMainPlayerController::ANPMainPlayerController()
 		DefaultMappingContexts.Add(MouseLookMapping.Object);
 	}
 
-	if (PhotoModeAction.Succeeded())
+	if (AimInputAction.Succeeded())
 	{
-		TogglePhotoModeAction = PhotoModeAction.Object;
+		AimAction = AimInputAction.Object;
+	}
+	else if (LegacyPhotoModeAction.Succeeded())
+	{
+		AimAction = LegacyPhotoModeAction.Object;
 	}
 
-	if (PhotoShotAction.Succeeded())
+	if (FireInputAction.Succeeded())
 	{
-		TakePhotoAction = PhotoShotAction.Object;
+		FireAction = FireInputAction.Object;
+	}
+	else if (LegacyPhotoShotAction.Succeeded())
+	{
+		FireAction = LegacyPhotoShotAction.Object;
 	}
 }
 
@@ -153,52 +172,143 @@ void ANPMainPlayerController::SetupInputComponent()
 		return;
 	}
 
-	if (TogglePhotoModeAction)
+	if (AimAction)
 	{
-		EnhancedInputComponent->BindAction(TogglePhotoModeAction, ETriggerEvent::Started,
-			this, &ANPMainPlayerController::HandleTogglePhotoModeInput);
-		UE_LOG(LogNPPhoto, Log, TEXT("[Input] Photo mode action bound. Action=%s"), *GetNameSafe(TogglePhotoModeAction));
+		EnhancedInputComponent->BindAction(
+			AimAction,
+			ETriggerEvent::Started,
+			this,
+			&ANPMainPlayerController::HandleAimStarted);
+		EnhancedInputComponent->BindAction(
+			AimAction,
+			ETriggerEvent::Completed,
+			this,
+			&ANPMainPlayerController::HandleAimReleased);
+		EnhancedInputComponent->BindAction(
+			AimAction,
+			ETriggerEvent::Canceled,
+			this,
+			&ANPMainPlayerController::HandleAimReleased);
+		UE_LOG(
+			LogNPPhoto,
+			Log,
+			TEXT("[Input] Shared aim action bound. Action=%s"),
+			*GetNameSafe(AimAction));
 	}
 	else
 	{
-		UE_LOG(LogNPPhoto, Warning, TEXT("[Input] TogglePhotoModeAction is not assigned."));
+		UE_LOG(LogNPPhoto, Warning, TEXT("[Input] AimAction is not assigned."));
 	}
 
-	if (TakePhotoAction)
+	if (FireAction)
 	{
-		EnhancedInputComponent->BindAction(TakePhotoAction, ETriggerEvent::Started,
-			this, &ANPMainPlayerController::HandleTakePhotoInput);
-		UE_LOG(LogNPPhoto, Log, TEXT("[Input] Photo shot action bound. Action=%s"), *GetNameSafe(TakePhotoAction));
+		EnhancedInputComponent->BindAction(
+			FireAction,
+			ETriggerEvent::Started,
+			this,
+			&ANPMainPlayerController::HandleFireStarted);
+		UE_LOG(
+			LogNPPhoto,
+			Log,
+			TEXT("[Input] Shared fire action bound. Action=%s"),
+			*GetNameSafe(FireAction));
 	}
 	else
 	{
-		UE_LOG(LogNPPhoto, Warning, TEXT("[Input] TakePhotoAction is not assigned."));
+		UE_LOG(LogNPPhoto, Warning, TEXT("[Input] FireAction is not assigned."));
 	}
 }
 
-void ANPMainPlayerController::HandleTogglePhotoModeInput()
+void ANPMainPlayerController::HandleAimStarted()
 {
 	if (!PhotoCaptureComponent)
 	{
 		UE_LOG(LogNPPhoto, Error, TEXT("[Input] PhotoCaptureComponent is null."));
 		return;
 	}
+
+	if (IsHoldingAimableRelic())
+	{
+		if (PhotoCaptureComponent->IsPhotoModeActive())
+		{
+			PhotoCaptureComponent->ExitPhotoMode();
+		}
+		if (UNPAbilitySystemComponent* AbilitySystem =
+			ResolveRelicAbilitySystem())
+		{
+			AbilitySystem->ActivateRelicAimAbility();
+		}
+		return;
+	}
+
 	PhotoCaptureComponent->TogglePhotoMode();
 	UE_LOG(LogNPPhoto, Log, TEXT("[Input] Photo mode toggled. Active=%s"),
 		PhotoCaptureComponent->IsPhotoModeActive() ? TEXT("true") : TEXT("false"));
 }
 
-void ANPMainPlayerController::HandleTakePhotoInput()
+void ANPMainPlayerController::HandleAimReleased()
 {
-	UE_LOG(LogNPPhoto, Log, TEXT("[Input] Photo input received. Controller=%s Local=%s"),
-		*GetNameSafe(this), IsLocalController() ? TEXT("true") : TEXT("false"));
+	if (UNPAbilitySystemComponent* AbilitySystem =
+		ResolveRelicAbilitySystem())
+	{
+		AbilitySystem->CancelRelicAimAbility();
+	}
+}
+
+void ANPMainPlayerController::HandleFireStarted()
+{
 	if (!PhotoCaptureComponent)
 	{
 		UE_LOG(LogNPPhoto, Error, TEXT("[Input] PhotoCaptureComponent is null."));
 		return;
 	}
+
+	if (UNPAbilitySystemComponent* AbilitySystem =
+		ResolveRelicAbilitySystem();
+		AbilitySystem
+		&& AbilitySystem->HasMatchingGameplayTag(
+			NPGameplayTags::State_Relic_Aiming))
+	{
+		AbilitySystem->ActivateRelicFireAbility();
+		return;
+	}
+
+	if (!PhotoCaptureComponent->IsPhotoModeActive())
+	{
+		return;
+	}
+
+	UE_LOG(LogNPPhoto, Log, TEXT("[Input] Photo input received. Controller=%s Local=%s"),
+		*GetNameSafe(this), IsLocalController() ? TEXT("true") : TEXT("false"));
 	const bool bStarted = PhotoCaptureComponent->TakePhoto();
 	UE_LOG(LogNPPhoto, Log, TEXT("[Input] TakePhoto result=%s"), bStarted ? TEXT("success") : TEXT("failed"));
+}
+
+bool ANPMainPlayerController::IsHoldingAimableRelic() const
+{
+	const APawn* ControlledPawn = GetPawn();
+	const UNPStablePhysicsGrabComponent* GrabComponent = ControlledPawn
+		? ControlledPawn->FindComponentByClass<UNPStablePhysicsGrabComponent>()
+		: nullptr;
+	const UPrimitiveComponent* GrabbedComponent = GrabComponent
+		? GrabComponent->GetGrabbedComponent()
+		: nullptr;
+	const AActor* GrabbedActor = GrabbedComponent
+		? GrabbedComponent->GetOwner()
+		: nullptr;
+	return GrabbedActor
+		&& GrabbedActor->FindComponentByClass<UNPAimableRelicComponent>();
+}
+
+UNPAbilitySystemComponent*
+ANPMainPlayerController::ResolveRelicAbilitySystem() const
+{
+	const ANPReplicatedStablePhysicsPawn* StablePawn =
+		Cast<ANPReplicatedStablePhysicsPawn>(GetPawn());
+	return StablePawn
+		? Cast<UNPAbilitySystemComponent>(
+			StablePawn->GetAbilitySystemComponent())
+		: nullptr;
 }
 
 bool ANPMainPlayerController::ShouldUseTouchControls() const

@@ -15,6 +15,7 @@ DECLARE_MULTICAST_DELEGATE_ThreeParams(
 	float);
 DECLARE_MULTICAST_DELEGATE(FOnGrabEnded);
 DECLARE_MULTICAST_DELEGATE(FOnForceReleaseAllGrabs);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnActiveGrabCountChanged, int32);
 
 UCLASS(ClassGroup=(Interaction), meta=(BlueprintSpawnableComponent))
 class NOPHOTOS_API UGrabbableComponent : public UActorComponent
@@ -66,6 +67,7 @@ public:
 	FOnGrabForceUpdated OnGrabForceUpdated;
 	FOnGrabEnded OnGrabEnded;
 	FOnForceReleaseAllGrabs OnForceReleaseAllGrabs;
+	FOnActiveGrabCountChanged OnActiveGrabCountChanged;
 
 private:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Interaction", meta=(AllowPrivateAccess="true"))

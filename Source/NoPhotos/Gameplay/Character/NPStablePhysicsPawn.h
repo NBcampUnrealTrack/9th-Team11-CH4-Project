@@ -47,12 +47,17 @@ public:
 
 	/** 로컬 플레이어의 3인칭/사진 1인칭 카메라 전환을 시작합니다. */
 	void SetPhotoViewActive(bool bActive);
+	/** 로컬 플레이어의 조준 유물 카메라 전환을 시작하거나 종료합니다. */
+	void SetRelicAimViewActive(bool bActive);
 
 	UFUNCTION(BlueprintPure, Category="Photo")
 	bool IsPhotoViewActive() const { return bPhotoViewActive; }
 
 	UFUNCTION(BlueprintPure, Category="Photo")
 	bool IsPhotoViewReady() const;
+
+	UFUNCTION(BlueprintPure, Category="Relic|Aim")
+	bool IsRelicAimViewActive() const { return bRelicAimViewActive; }
 
 	UPROPERTY(BlueprintReadOnly, Transient, Category="Right Hand IK")
 	FVector RightHandIKLocation = FVector::ZeroVector;
@@ -200,6 +205,15 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Camera|Photo", meta=(ClampMin="0.1"))
 	float PhotoCameraBlendSpeed = 10.0f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Camera|Relic Aim", meta=(ClampMin="0.0"))
+	float RelicAimCameraArmLength = 0.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Camera|Relic Aim", meta=(ClampMin="0.0"))
+	float RelicAimCameraTargetHeight = 120.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Camera|Relic Aim", meta=(ClampMin="1.0", ClampMax="179.0"))
+	float RelicAimCameraFOV = 60.0f;
+
 #pragma region Pawn Debug Settings
 	UPROPERTY(EditAnywhere, Category="Facing Debug")
 	bool bDrawFacingDebug = true;
@@ -263,6 +277,7 @@ private:
 	float SpineLeanBackStartViewPitch = 10.0f;
 	float SpinePitchInterpSpeed = 8.0f;
 	bool bPhotoViewActive = false;
+	bool bRelicAimViewActive = false;
 	float DefaultCameraArmLength = 400.0f;
 	float DefaultCameraFOV = 90.0f;
 	float CurrentCameraTargetHeight = 60.0f;

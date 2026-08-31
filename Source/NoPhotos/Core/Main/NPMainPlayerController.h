@@ -6,6 +6,7 @@
 
 class UInputAction;
 class UInputMappingContext;
+class UNPAbilitySystemComponent;
 class UNPPhotoCaptureComponent;
 class UNPPhotoFlashWidget;
 class UNPPhotoTransferComponent;
@@ -61,11 +62,13 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Photo")
-	TObjectPtr<UInputAction> TogglePhotoModeAction;
+	/** 사진 모드와 조준 유물이 함께 사용하는 조준 입력입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Aim and Fire")
+	TObjectPtr<UInputAction> AimAction;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Photo")
-	TObjectPtr<UInputAction> TakePhotoAction;
+	/** 사진 촬영과 조준 유물 발사가 함께 사용하는 실행 입력입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Aim and Fire")
+	TObjectPtr<UInputAction> FireAction;
 
 	UPROPERTY(EditAnywhere, Category = "Input|Input Mappings")
 	TArray<TObjectPtr<UInputMappingContext>> DefaultMappingContexts;
@@ -98,8 +101,11 @@ protected:
 	TSoftObjectPtr<UWorld> MainMenuLevel;
 
 private:
-	void HandleTogglePhotoModeInput();
-	void HandleTakePhotoInput();
+	void HandleAimStarted();
+	void HandleAimReleased();
+	void HandleFireStarted();
+	bool IsHoldingAimableRelic() const;
+	UNPAbilitySystemComponent* ResolveRelicAbilitySystem() const;
 	bool ShouldUseTouchControls() const;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Photo", meta = (AllowPrivateAccess = "true"))
