@@ -34,6 +34,7 @@ public:
 	int32 GetBasePrice() const;
 
 	const FNPRelicTableRow* GetRelicTableData() const;
+	void SetRelicTableData(const FDataTableRowHandle& InRelicTableData);
 
 	UFUNCTION(BlueprintPure, BlueprintAuthorityOnly, Category="Relic|Delivery")
 	int32 GetAccumulatedPhotoPenalty() const { return AccumulatedPhotoPenalty; }
@@ -72,10 +73,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<UNPRelicOwnershipComponent> OwnershipComponent;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic")
-	FDataTableRowHandle RelicData;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Relic", meta=(RowType="/Script/NoPhotos.NPRelicTableRow"))
 	FDataTableRowHandle RelicTableData;
 
 	UPROPERTY(ReplicatedUsing=OnRep_IsDisplayed, VisibleInstanceOnly, BlueprintReadOnly, Category="Relic")
