@@ -8,12 +8,20 @@
 #include "Gameplay/Character/Component/NPControlReversalComponent.h"
 #include "Gameplay/AbilitySystem/Effects/NPPossessionGameplayEffect.h"
 #include "Gameplay/Relic/Case/NPRelicCase.h"
+#include "Gameplay/MapEvents/NPMapEventManager.h"
+#include "Gameplay/MapEvents/NPMapEventSpawnPoint.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "NPGhostFollowerActor.h"
 #include "TimerManager.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogNPPossessionEvent, Log, All);
+
+ANPPossessionMapEvent::ANPPossessionMapEvent()
+{
+	LocationSource = ENPMapEventLocationSource::Point;
+	RoamingGhostSpawnGroup = FGameplayTag::RequestGameplayTag(FName(TEXT("Possession")), false);
+}
 
 void ANPPossessionMapEvent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -30,11 +38,252 @@ void ANPPossessionMapEvent::BeginPlay()
 
 void ANPPossessionMapEvent::ApplyEventState_Implementation(bool bNewActive)
 {
+	UE_LOG(LogNPPossessionEvent, Display,
+		TEXT("[PossessionTrace] ApplyEventState 진입: Event=%s Class=%s NewActive=%d Authority=%d BegunPlay=%d CurrentActive=%d"),
+		*GetNameSafe(this), *GetNameSafe(GetClass()), bNewActive ? 1 : 0,
+		HasAuthority() ? 1 : 0, HasActorBegunPlay() ? 1 : 0, IsEventActive() ? 1 : 0);
 	Super::ApplyEventState_Implementation(bNewActive);
 	if (HasActorBegunPlay())
 	{
 		UpdateTrackingState();
 	}
+	if (HasAuthority())
+	{
+		if (bNewActive)
+		{
+			BeginNextChaseCycle();
+		}
+		else
+		{
+			GetWorldTimerManager().ClearTimer(ChaseCycleTimer);
+			CurrentChaseTarget.Reset();
+			PreviousChaseTarget.Reset();
+			DestroyRoamingGhost();
+		}
+	}
+}
+
+void ANPPossessionMapEvent::BeginNextChaseCycle()
+{
+	if (!HasAuthority() || !IsEventActive() || IsActorBeingDestroyed())
+	{
+		return;
+	}
+
+	GetWorldTimerManager().ClearTimer(ChaseCycleTimer);
+	FTransform RestartTransform;
+	bool bHasRestartTransform = false;
+	bool bRestartingAfterPossession = false;
+	for (ANPStablePhysicsPawn* AffectedPlayer : AffectedPlayers)
+	{
+		if (IsValid(AffectedPlayer) && !AffectedPlayer->IsActorBeingDestroyed())
+		{
+			RestartTransform = AffectedPlayer->GetActorTransform();
+			bHasRestartTransform = true;
+			bRestartingAfterPossession = true;
+			break;
+		}
+	}
+	if (!bHasRestartTransform && IsValid(SpawnedRoamingGhost))
+	{
+		RestartTransform = SpawnedRoamingGhost->GetActorTransform();
+		bHasRestartTransform = true;
+	}
+
+	PreviousChaseTarget = CurrentChaseTarget;
+	CurrentChaseTarget.Reset();
+	DestroyRoamingGhost();
+	if (!AffectedPlayers.IsEmpty())
+	{
+		AffectedPlayers.Reset();
+		ForceNetUpdate();
+		RefreshAppliedEffects();
+		RefreshLocalGhosts();
+	}
+
+	const float ContactDelay = bRestartingAfterPossession && FMath::IsFinite(PostPossessionContactDelay)
+		? FMath::Max(0.0f, PostPossessionContactDelay) : 0.0f;
+	SpawnRoamingGhost(bHasRestartTransform ? &RestartTransform : nullptr, ContactDelay);
+	ANPStablePhysicsPawn* NewTarget = SelectRandomChaseTarget();
+	if (IsValid(SpawnedRoamingGhost) && IsValid(NewTarget)
+		&& SpawnedRoamingGhost->SetRoamingChaseTarget(NewTarget))
+	{
+		CurrentChaseTarget = NewTarget;
+		UE_LOG(LogNPPossessionEvent, Display,
+			TEXT("Roaming 유령 추격 시작: Ghost=%s Target=%s Duration=%.2fs Start=%s"),
+			*GetNameSafe(SpawnedRoamingGhost), *GetNameSafe(NewTarget),
+			ChaseTargetDuration, *SpawnedRoamingGhost->GetActorLocation().ToCompactString());
+	}
+	else
+	{
+		UE_LOG(LogNPPossessionEvent, Warning,
+			TEXT("Roaming 유령 추격 대상 없음: Ghost=%s. 다음 주기에 다시 검색합니다."),
+			*GetNameSafe(SpawnedRoamingGhost));
+	}
+
+	const float CycleDuration = FMath::IsFinite(ChaseTargetDuration)
+		? FMath::Max(0.1f, ChaseTargetDuration) : 10.0f;
+	GetWorldTimerManager().SetTimer(
+		ChaseCycleTimer, this, &ThisClass::BeginNextChaseCycle, CycleDuration, false);
+}
+
+ANPStablePhysicsPawn* ANPPossessionMapEvent::SelectRandomChaseTarget() const
+{
+	UWorld* World = GetWorld();
+	if (!HasAuthority() || !World)
+	{
+		return nullptr;
+	}
+
+	TArray<ANPStablePhysicsPawn*> Candidates;
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		const APlayerController* PC = It->Get();
+		ANPStablePhysicsPawn* Pawn = IsValid(PC) ? Cast<ANPStablePhysicsPawn>(PC->GetPawn()) : nullptr;
+		if (IsValid(Pawn) && !Pawn->IsActorBeingDestroyed() && Pawn->HasActorBegunPlay())
+		{
+			Candidates.AddUnique(Pawn);
+		}
+	}
+	if (Candidates.Num() > 1 && PreviousChaseTarget.IsValid())
+	{
+		Candidates.Remove(PreviousChaseTarget.Get());
+	}
+	return Candidates.IsEmpty() ? nullptr : Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
+}
+
+void ANPPossessionMapEvent::SpawnRoamingGhost(
+	const FTransform* OverrideTransform,
+	const float ContactDelay)
+{
+	UE_LOG(LogNPPossessionEvent, Display,
+		TEXT("[PossessionTrace] SpawnRoamingGhost 진입: Event=%s Authority=%d Active=%d ExistingGhost=%s"),
+		*GetNameSafe(this), HasAuthority() ? 1 : 0, IsEventActive() ? 1 : 0,
+		*GetNameSafe(SpawnedRoamingGhost));
+	if (!HasAuthority() || !IsEventActive() || IsValid(SpawnedRoamingGhost))
+	{
+		UE_LOG(LogNPPossessionEvent, Warning,
+			TEXT("[PossessionTrace] SpawnRoamingGhost 중단: Authority=%d Active=%d ExistingGhostValid=%d ExistingGhost=%s"),
+			HasAuthority() ? 1 : 0, IsEventActive() ? 1 : 0,
+			IsValid(SpawnedRoamingGhost) ? 1 : 0, *GetNameSafe(SpawnedRoamingGhost));
+		return;
+	}
+
+	UNPMapEventManagerComponent* EventManager = GetOwner()
+		? GetOwner()->FindComponentByClass<UNPMapEventManagerComponent>()
+		: nullptr;
+	const TSubclassOf<ANPGhostFollowerActor> SelectedGhostClass = RoamingGhostClass
+		? RoamingGhostClass : GhostClass;
+	ANPMapEventSpawnPoint* SpawnPoint = !OverrideTransform && EventManager && RoamingGhostSpawnGroup.IsValid()
+		? EventManager->FindRandomSpawnPoint(RoamingGhostSpawnGroup)
+		: nullptr;
+	UE_LOG(LogNPPossessionEvent, Display,
+		TEXT("[PossessionTrace] 유령 생성 설정 확인: Manager=%s GhostClass=%s Group=%s GroupValid=%d InitialPoint=%s"),
+		*GetNameSafe(EventManager), *GetNameSafe(SelectedGhostClass.Get()),
+		*RoamingGhostSpawnGroup.ToString(), RoamingGhostSpawnGroup.IsValid() ? 1 : 0,
+		*GetNameSafe(SpawnPoint));
+	FGameplayTag SelectedSpawnGroup = RoamingGhostSpawnGroup;
+	if (!OverrideTransform && EventManager && !SpawnPoint)
+	{
+		const FGameplayTag CommonSpawnGroup = FGameplayTag::RequestGameplayTag(FName(TEXT("Common")), false);
+		SpawnPoint = EventManager->FindRandomSpawnPoint(CommonSpawnGroup);
+		if (SpawnPoint)
+		{
+			SelectedSpawnGroup = CommonSpawnGroup;
+			UE_LOG(LogNPPossessionEvent, Warning,
+				TEXT("Possession 그룹 Point가 없어 Common Point를 사용합니다: Point=%s"),
+				*GetNameSafe(SpawnPoint));
+		}
+	}
+	if (!EventManager || !SelectedGhostClass || !RoamingGhostSpawnGroup.IsValid()
+		|| (!OverrideTransform && !SpawnPoint))
+	{
+		UE_LOG(LogNPPossessionEvent, Error,
+			TEXT("빙의 유령 Point 생성 실패: Manager=%s Class=%s Group=%s Point=%s"),
+			*GetNameSafe(EventManager), *GetNameSafe(SelectedGhostClass.Get()),
+			*RoamingGhostSpawnGroup.ToString(), *GetNameSafe(SpawnPoint));
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const FTransform SpawnTransform = OverrideTransform
+		? *OverrideTransform : SpawnPoint->GetActorTransform();
+	ANPGhostFollowerActor* Ghost = World->SpawnActorDeferred<ANPGhostFollowerActor>(
+		SelectedGhostClass,
+		SpawnTransform,
+		this,
+		nullptr,
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	if (!Ghost || !Ghost->InitializeRoamingGhost())
+	{
+		if (Ghost)
+		{
+			Ghost->Destroy();
+		}
+		UE_LOG(LogNPPossessionEvent, Error, TEXT("빙의 유령 초기화 실패: Class=%s Point=%s"),
+			*GetNameSafe(SelectedGhostClass.Get()), *GetNameSafe(SpawnPoint));
+		return;
+	}
+	Ghost->SetRoamingContactDelay(ContactDelay);
+
+	SpawnedRoamingGhost = Ghost;
+	UGameplayStatics::FinishSpawningActor(Ghost, SpawnTransform);
+	if (!IsValid(Ghost) || Ghost->IsActorBeingDestroyed())
+	{
+		SpawnedRoamingGhost = nullptr;
+		return;
+	}
+	Ghost->ForceNetUpdate();
+	UE_LOG(LogNPPossessionEvent, Display,
+		TEXT("빙의 유령 생성 성공: Ghost=%s Point=%s Group=%s Location=%s Restart=%d ContactDelay=%.2fs"),
+		*GetNameSafe(Ghost), *GetNameSafe(SpawnPoint), *SelectedSpawnGroup.ToString(),
+		*Ghost->GetActorLocation().ToCompactString(), OverrideTransform ? 1 : 0, ContactDelay);
+}
+
+void ANPPossessionMapEvent::DestroyRoamingGhost()
+{
+	ANPGhostFollowerActor* Ghost = SpawnedRoamingGhost;
+	SpawnedRoamingGhost = nullptr;
+	if (HasAuthority() && IsValid(Ghost))
+	{
+		Ghost->ConsumeRoamingGhost();
+	}
+}
+
+void ANPPossessionMapEvent::HandleRoamingGhostContact(
+	ANPGhostFollowerActor* Ghost,
+	ANPStablePhysicsPawn* PlayerPawn)
+{
+	if (!HasAuthority() || !IsEventActive() || Ghost != SpawnedRoamingGhost
+		|| !IsValid(Ghost) || !IsValid(PlayerPawn) || PlayerPawn->IsActorBeingDestroyed()
+		|| !PlayerPawn->IsPlayerControlled())
+	{
+		return;
+	}
+
+	SpawnedRoamingGhost = nullptr;
+	AffectedPlayers.AddUnique(PlayerPawn);
+	ForceNetUpdate();
+
+	Ghost->ConsumeRoamingGhost();
+	RefreshAppliedEffects();
+	RefreshLocalGhosts();
+	GetWorldTimerManager().ClearTimer(ChaseCycleTimer);
+	const float SafePossessionDuration = FMath::IsFinite(PossessionDuration)
+		? FMath::Max(0.1f, PossessionDuration) : 5.0f;
+	GetWorldTimerManager().SetTimer(
+		ChaseCycleTimer, this, &ThisClass::BeginNextChaseCycle,
+		SafePossessionDuration, false);
+
+	UE_LOG(LogNPPossessionEvent, Display,
+		TEXT("빙의 유령 접촉 적용 완료: Player=%s AffectedCount=%d ReverseInput=%d Duration=%.2fs"),
+		*GetNameSafe(PlayerPawn), AffectedPlayers.Num(), bReverseHorizontalInput ? 1 : 0,
+		SafePossessionDuration);
 }
 
 void ANPPossessionMapEvent::UpdateTrackingState()
@@ -72,7 +321,9 @@ void ANPPossessionMapEvent::RefreshPlayersAndGhosts()
 	{
 		return;
 	}
-	if ((!GhostClass || GhostClass->HasAnyClassFlags(CLASS_Abstract)) && !bWarnedMissingGhostClass)
+	if (!AffectedPlayers.IsEmpty()
+		&& (!GhostClass || GhostClass->HasAnyClassFlags(CLASS_Abstract))
+		&& !bWarnedMissingGhostClass)
 	{
 		UE_LOG(LogNPPossessionEvent, Warning, TEXT("빙의 유령 클래스 없음: Event=%s. 이벤트 BP의 GhostClass에 NPGhostFollowerActor 자식 BP를 지정하세요."), *GetName());
 		bWarnedMissingGhostClass = true;
@@ -84,20 +335,35 @@ void ANPPossessionMapEvent::RefreshPlayersAndGhosts()
 		{
 			return;
 		}
-		TArray<TObjectPtr<ANPStablePhysicsPawn>> CurrentPlayers;
-		for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+		if (bEnableGhostAndControlEffects)
 		{
-			const APlayerController* PC = It->Get();
-			ANPStablePhysicsPawn* Pawn = IsValid(PC) ? Cast<ANPStablePhysicsPawn>(PC->GetPawn()) : nullptr;
-			if (IsValid(Pawn) && !Pawn->IsActorBeingDestroyed() && Pawn->HasActorBegunPlay())
+			TArray<TObjectPtr<ANPStablePhysicsPawn>> CurrentPlayers;
+			for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
 			{
-				CurrentPlayers.AddUnique(Pawn);
+				const APlayerController* PC = It->Get();
+				ANPStablePhysicsPawn* Pawn = IsValid(PC) ? Cast<ANPStablePhysicsPawn>(PC->GetPawn()) : nullptr;
+				if (IsValid(Pawn) && !Pawn->IsActorBeingDestroyed() && Pawn->HasActorBegunPlay())
+				{
+					CurrentPlayers.AddUnique(Pawn);
+				}
+			}
+			if (CurrentPlayers != AffectedPlayers)
+			{
+				AffectedPlayers = MoveTemp(CurrentPlayers);
+				ForceNetUpdate();
 			}
 		}
-		if (CurrentPlayers != AffectedPlayers)
+		else
 		{
-			AffectedPlayers = MoveTemp(CurrentPlayers);
-			ForceNetUpdate();
+			const int32 RemovedCount = AffectedPlayers.RemoveAll(
+				[](const ANPStablePhysicsPawn* Pawn)
+				{
+					return !IsValid(Pawn) || Pawn->IsActorBeingDestroyed();
+				});
+			if (RemovedCount > 0)
+			{
+				ForceNetUpdate();
+			}
 		}
 		RefreshAppliedEffects();
 	}
@@ -320,6 +586,12 @@ void ANPPossessionMapEvent::RefreshLocalGhosts()
 		if (IsValid(Ghost) && Ghost->InitializeFollower(Target))
 		{
 			UGameplayStatics::FinishSpawningActor(Ghost, Ghost->GetActorTransform());
+			// BP Construction 이후에도 서버의 화면용 Follower가 클라이언트로 복제되지 않게 보장합니다.
+			if (IsValid(Ghost))
+			{
+				Ghost->SetReplicates(false);
+				Ghost->SetReplicateMovement(false);
+			}
 			if (IsValid(Ghost) && IsEventActive() && !IsActorBeingDestroyed())
 			{
 				LocalGhosts.Add(TargetKey, Ghost);
@@ -367,10 +639,14 @@ void ANPPossessionMapEvent::ClearLocalGhosts(bool bImmediately)
 void ANPPossessionMapEvent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	GetWorldTimerManager().ClearTimer(PlayerRefreshTimer);
+	GetWorldTimerManager().ClearTimer(ChaseCycleTimer);
 	RemoveTemporaryCaseUnlocks();
 	RemoveAppliedEffects();
+	DestroyRoamingGhost();
 	// 게임 중 이벤트 액터 파괴는 페이드, 레벨/PIE 종료는 지연 없이 정리합니다.
 	ClearLocalGhosts(EndPlayReason != EEndPlayReason::Destroyed);
 	AffectedPlayers.Reset();
+	CurrentChaseTarget.Reset();
+	PreviousChaseTarget.Reset();
 	Super::EndPlay(EndPlayReason);
 }

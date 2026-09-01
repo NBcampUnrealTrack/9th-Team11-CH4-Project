@@ -50,6 +50,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Relic Slot", meta = (RowType = "/Script/NoPhotos.NPRelicTableRow"))
 	FDataTableRowHandle RelicData;
 
+	/** 생성 직후 케이스 잠금과 관계없이 잡을 수 있게 합니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Relic Slot")
+	bool bInitiallyAccessible = false;
+
+	/** 생성 직후 전시 상태를 해제하고 물리 시뮬레이션을 시작합니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Relic Slot")
+	bool bSimulatePhysicsOnSpawn = false;
+
 	UPROPERTY(ReplicatedUsing = OnRep_SpawnedRelic, VisibleInstanceOnly, BlueprintReadOnly, Category = "Relic Slot")
 	TObjectPtr<ANPBaseRelic> SpawnedRelic;
 

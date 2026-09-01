@@ -44,7 +44,9 @@ ANPBaseRelic* UNPRelicSlotComponent::SpawnRelic(
 		return nullptr;
 	}
 
-	bIsRelicReleased = bInitiallyReleased;
+	bIsRelicReleased = bInitiallyReleased
+		|| bInitiallyAccessible
+		|| bSimulatePhysicsOnSpawn;
 	if (!IsValid(SpawnedRelic))
 	{
 		SpawnedRelic = CreateConfiguredRelic(RF_NoFlags);
@@ -55,8 +57,15 @@ ANPBaseRelic* UNPRelicSlotComponent::SpawnRelic(
 		return nullptr;
 	}
 
+	const bool bShouldSimulatePhysics = bSimulatePhysicsOnSpawn
+		|| SpawnedRelic->ShouldStartWithPhysicsEnabled();
+	bIsRelicReleased = bIsRelicReleased || bShouldSimulatePhysics;
 	SpawnedRelic->SetUnlocked(bIsRelicReleased);
 	ApplyRelicState();
+	if (bShouldSimulatePhysics)
+	{
+		SpawnedRelic->ReleaseWithVelocityImpulse(FVector::ZeroVector);
+	}
 	Owner->ForceNetUpdate();
 	return SpawnedRelic;
 }
@@ -82,12 +91,19 @@ ANPBaseRelic* UNPRelicSlotComponent::RecreateRelicInEditor()
 		SpawnedRelic = nullptr;
 	}
 
-	bIsRelicReleased = false;
+	bIsRelicReleased = bInitiallyAccessible || bSimulatePhysicsOnSpawn;
 	SpawnedRelic = CreateConfiguredRelic(RF_Transactional);
 	if (IsValid(SpawnedRelic))
 	{
-		SpawnedRelic->SetUnlocked(false);
+		const bool bShouldSimulatePhysics = bSimulatePhysicsOnSpawn
+			|| SpawnedRelic->ShouldStartWithPhysicsEnabled();
+		bIsRelicReleased = bIsRelicReleased || bShouldSimulatePhysics;
+		SpawnedRelic->SetUnlocked(bIsRelicReleased);
 		ApplyRelicState();
+		if (bShouldSimulatePhysics)
+		{
+			SpawnedRelic->ReleaseWithVelocityImpulse(FVector::ZeroVector);
+		}
 	}
 
 	Owner->MarkPackageDirty();

@@ -13,6 +13,8 @@
 #include "NPMapEventSpawnVolume.h"
 #include "TimerManager.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogNPMapEventManager, Log, All);
+
 UNPMapEventManagerComponent::UNPMapEventManagerComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
@@ -149,10 +151,19 @@ bool UNPMapEventManagerComponent::TriggerRandomEvent(const ENPMapEventType Event
 		Selection -= Candidate->GetSelectionWeight();
 		if (Selection <= 0.0f)
 		{
+			UE_LOG(LogNPMapEventManager, Display,
+				TEXT("[MapEventTrace] 랜덤 이벤트 선택: Type=%d Event=%s Class=%s EventId=%s Weight=%.2f"),
+				static_cast<int32>(EventType), *GetNameSafe(Candidate),
+				*GetNameSafe(Candidate->GetClass()), *Candidate->GetEventId().ToString(),
+				Candidate->GetSelectionWeight());
 			return RequestEventStart(Candidate);
 		}
 	}
 
+	UE_LOG(LogNPMapEventManager, Display,
+		TEXT("[MapEventTrace] 랜덤 이벤트 최종 후보 선택: Type=%d Event=%s Class=%s EventId=%s"),
+		static_cast<int32>(EventType), *GetNameSafe(Candidates.Last()),
+		*GetNameSafe(Candidates.Last()->GetClass()), *Candidates.Last()->GetEventId().ToString());
 	return RequestEventStart(Candidates.Last());
 }
 
@@ -426,6 +437,11 @@ void UNPMapEventManagerComponent::CreateEventInstances()
 			EventInstance->InitializeEvent(Definition, Entry.SelectionWeight);
 			RegisterManagedEvent(EventInstance);
 			EventInstance->FinishSpawning(SpawnTransform);
+			UE_LOG(LogNPMapEventManager, Display,
+				TEXT("[MapEventTrace] 카탈로그 이벤트 인스턴스 생성: Definition=%s EventId=%s Actor=%s Class=%s Weight=%.2f (아직 시작되지 않음)"),
+				*GetNameSafe(Definition), *EventInstance->GetEventId().ToString(),
+				*GetNameSafe(EventInstance), *GetNameSafe(EventInstance->GetClass()),
+				Entry.SelectionWeight);
 			if (!Entry.LocationLevelInstance.IsNull())
 			{
 				EventLocationLevels.Add(EventInstance, Entry.LocationLevelInstance);
@@ -542,6 +558,12 @@ void UNPMapEventManagerComponent::NotifyActiveEventPresentationsChanged()
 
 bool UNPMapEventManagerComponent::RequestEventStart(ANPMapEvent* EventInstance)
 {
+	UE_LOG(LogNPMapEventManager, Display,
+		TEXT("[MapEventTrace] 이벤트 시작 요청: Event=%s Class=%s EventId=%s Authority=%d Transition=%d ActiveLocation=%s"),
+		*GetNameSafe(EventInstance), *GetNameSafe(EventInstance ? EventInstance->GetClass() : nullptr),
+		EventInstance ? *EventInstance->GetEventId().ToString() : TEXT("None"),
+		HasServerAuthority() ? 1 : 0, bLocationLevelTransitionInProgress ? 1 : 0,
+		*GetNameSafe(ActiveLocationLevel));
 	if (!HasServerAuthority()
 		|| !IsValid(EventInstance)
 		|| bLocationLevelTransitionInProgress
@@ -554,7 +576,12 @@ bool UNPMapEventManagerComponent::RequestEventStart(ANPMapEvent* EventInstance)
 	if (!LocationLevelInstance || LocationLevelInstance->IsNull())
 	{
 		CollectExistingLocationCollectors(EventInstance->GetLocationSource());
-		return EventInstance->StartEvent();
+		const bool bStarted = EventInstance->StartEvent();
+		UE_LOG(LogNPMapEventManager, Display,
+			TEXT("[MapEventTrace] 위치 레벨 없이 StartEvent 완료: Event=%s Class=%s Result=%d Active=%d"),
+			*GetNameSafe(EventInstance), *GetNameSafe(EventInstance->GetClass()),
+			bStarted ? 1 : 0, EventInstance->IsEventActive() ? 1 : 0);
+		return bStarted;
 	}
 
 	const FTransform* LocationLevelTransform = EventLocationLevelTransforms.Find(EventInstance);
@@ -635,7 +662,16 @@ void UNPMapEventManagerComponent::HandleLocationLevelShown()
 	EventToStart->OnEventFinished.AddUniqueDynamic(
 		this,
 		&ThisClass::HandleEventWithLocationLevelFinished);
-	if (!EventToStart->StartEvent())
+	UE_LOG(LogNPMapEventManager, Display,
+		TEXT("[MapEventTrace] 위치 레벨 표시 후 StartEvent 호출: Event=%s Class=%s EventId=%s Source=%d"),
+		*GetNameSafe(EventToStart), *GetNameSafe(EventToStart->GetClass()),
+		*EventToStart->GetEventId().ToString(), static_cast<int32>(EventToStart->GetLocationSource()));
+	const bool bStarted = EventToStart->StartEvent();
+	UE_LOG(LogNPMapEventManager, Display,
+		TEXT("[MapEventTrace] 위치 레벨 StartEvent 완료: Event=%s Class=%s Result=%d Active=%d"),
+		*GetNameSafe(EventToStart), *GetNameSafe(EventToStart->GetClass()),
+		bStarted ? 1 : 0, EventToStart->IsEventActive() ? 1 : 0);
+	if (!bStarted)
 	{
 		EventToStart->OnEventFinished.RemoveDynamic(
 			this,
