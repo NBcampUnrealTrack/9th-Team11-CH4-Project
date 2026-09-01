@@ -13,7 +13,6 @@
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
-#include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogNPRelicBonus, Log, All);
 
@@ -34,12 +33,9 @@ ANPRelicBonusMapEvent::ANPRelicBonusMapEvent()
 	RopeClass = ANPRopeSegmentActor::StaticClass();
 	RopeTipClass = ANPRopeAnchorActor::StaticClass();
 
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> GroundWindAsset(
-		TEXT("/Game/NoPhotos/Blueprints/MapEvent/NS_RelicBonus_GroundWind.NS_RelicBonus_GroundWind"));
-	if (GroundWindAsset.Succeeded())
-	{
-		GroundWindSystem = GroundWindAsset.Object;
-	}
+	// Do not load Niagara's WindForce/ChaosNiagara dependencies during native CDO construction.
+	GroundWindSystem = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(
+		TEXT("/Game/NoPhotos/Blueprints/MapEvent/NS_RelicBonus_GroundWind.NS_RelicBonus_GroundWind")));
 }
 
 void ANPRelicBonusMapEvent::Tick(const float DeltaSeconds)
@@ -588,14 +584,20 @@ void ANPRelicBonusMapEvent::BeginDeparture()
 void ANPRelicBonusMapEvent::MulticastSpawnGroundWind_Implementation(
 	const FVector GroundLocation)
 {
-	if (!GroundWindSystem)
+	if (GetNetMode() == NM_DedicatedServer || GroundWindSystem.IsNull())
 	{
+		return;
+	}
+	UNiagaraSystem* System = GroundWindSystem.LoadSynchronous();
+	if (!System)
+	{
+		UE_LOG(LogNPRelicBonus, Warning, TEXT("GroundWind Niagara 로드 실패: %s"), *GroundWindSystem.ToString());
 		return;
 	}
 
 	if (UNiagaraComponent* GroundWind = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 		this,
-		GroundWindSystem,
+		System,
 		GroundLocation + FVector::UpVector * GroundWindHeightOffset,
 		FRotator::ZeroRotator,
 		FVector::OneVector,

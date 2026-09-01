@@ -43,6 +43,9 @@ public:
 		FVector RequiredHalfExtent,
 		FTransform& OutTransform) const;
 
+	/** 마지막 탐색 실패 단계. 반복 호출마다 로그를 쏟지 않고 호출자가 실패 시 출력합니다. */
+	const FString& GetLastSpawnFailureReason() const { return LastSpawnFailureReason; }
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UBoxComponent> SpawnBounds;
@@ -87,6 +90,7 @@ protected:
 	bool bRandomizeYaw = false;
 
 private:
+	mutable FString LastSpawnFailureReason;
 	bool TraceGround(const FVector& TestLocation, FHitResult& OutHit) const;
 	bool TryResolveGroundLocation(
 		const FVector& NavigationLocation,

@@ -143,6 +143,13 @@ void ANPGoblinAIController::EvaluateMovement()
 	{
 		return;
 	}
+	if (Goblin->RequiresPatrolRoute() && !GetUsablePatrolRoute())
+	{
+		// A streamed-out event route must not turn this goblin into an unrelated random roamer.
+		// Its event will choose a fresh route only after this instance has finished exiting.
+		Goblin->BeginDespawnPresentation();
+		return;
+	}
 
 	TArray<FVector> PlayerLocations;
 	float NearestDistanceSquared = TNumericLimits<float>::Max();

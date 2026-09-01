@@ -6,6 +6,7 @@
 #include "NPSantaMapEvent.generated.h"
 
 class ANPSantaFlightActor;
+class ANPSantaFlightRoute;
 class ANPSantaGiftActor;
 class ANPBaseRelic;
 class UNPSantaEventDefinition;
@@ -19,7 +20,7 @@ class NOPHOTOS_API ANPSantaMapEvent : public ANPMapEvent
 public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	/** 초기 복제 중 또는 이벤트가 종료된 경우 null일 수 있습니다. */
+	/** 비행 사이 대기 중, 초기 복제 중 또는 이벤트 종료 후에는 null일 수 있습니다. */
 	UFUNCTION(BlueprintPure, Category="Santa Event")
 	ANPSantaFlightActor* GetSanta() const { return SpawnedSanta; }
 
@@ -29,10 +30,14 @@ protected:
 
 private:
 	bool StartSantaFlight();
+	void FinishSantaFlight();
+	void ScheduleNextFlight();
+	void StartNextFlight();
 	void StartGiftDrops(const UNPSantaEventDefinition* Definition);
 	void ScheduleNextGiftDrop();
 	void DropGift();
 	void CleanupFlight();
+	void CleanupEvent();
 	void ScheduleFailedFinish();
 	void FinishFailedStart();
 
@@ -42,6 +47,9 @@ private:
 	UPROPERTY(Replicated, Transient)
 	TObjectPtr<ANPSantaFlightActor> SpawnedSanta;
 
+	TWeakObjectPtr<ANPSantaFlightRoute> LastFlightRoute;
+	FTimerHandle FlightEndTimer;
+	FTimerHandle RespawnTimer;
 	FTimerHandle FailedStartTimer;
 	FTimerHandle GiftDropTimer;
 	FNPSantaGiftDropSchedule ActiveGiftDrops;

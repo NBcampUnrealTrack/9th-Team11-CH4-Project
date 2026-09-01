@@ -6,6 +6,7 @@
 #include "Engine/World.h"
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/ProjectileMovementComponent.h"
+#include "Gameplay/Interaction/Components/GrabbableComponent.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
@@ -31,6 +32,8 @@ ANPSantaGiftActor::ANPSantaGiftActor()
 	CollisionBox->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
 	CollisionBox->SetGenerateOverlapEvents(false);
 	CollisionBox->SetCanEverAffectNavigation(false);
+	GrabbableComponent = CreateDefaultSubobject<UGrabbableComponent>(TEXT("GrabbableComponent"));
+	GrabbableComponent->SetGrabEnabled(false);
 	VisualRoot = CreateDefaultSubobject<USceneComponent>(TEXT("VisualRoot"));
 	VisualRoot->SetupAttachment(CollisionBox);
 	ClosedBoxMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ClosedBoxMesh"));
@@ -83,6 +86,7 @@ void ANPSantaGiftActor::BeginPlay()
 	OpeningDuration = FMath::IsFinite(OpeningDuration) ? FMath::Clamp(OpeningDuration, 0.1f, 10.0f) : 1.0f;
 	ClosedBoxInitialTransform = ClosedBoxMesh->GetRelativeTransform();
 	LidInitialTransform = LidPivot->GetRelativeTransform();
+	GrabbableComponent->OnGrabStarted.AddUObject(this, &ThisClass::HandleGrabStarted);
 	if (HasAuthority())
 	{
 		if (!bInitialized)
@@ -143,6 +147,36 @@ void ANPSantaGiftActor::HandleFallStopped(const FHitResult& Hit)
 	LandingState.Rotation = GetActorRotation();
 	ApplyLandingState();
 	ForceNetUpdate();
+	// 착지는 개봉 조건이 아닙니다. 첫 잡기까지 닫힌 상자로 남습니다.
+}
+
+void ANPSantaGiftActor::HandleGrabStarted(UPrimitiveComponent* GrabbedComponent)
+{
+	if (!HasAuthority() || !LandingState.bLanded || LandingState.bOpening ||
+		bOpeningRequested || IsActorBeingDestroyed() || GrabbedComponent != CollisionBox.Get())
+	{
+		return;
+	}
+	bOpeningRequested = true;
+	// 잡기 등록 콜백이 끝난 다음 틱에 제약/잡기를 해제하고 개봉합니다.
+	StartOpeningTimer = GetWorldTimerManager().SetTimerForNextTick(this, &ThisClass::BeginOpening);
+}
+
+void ANPSantaGiftActor::BeginOpening()
+{
+	if (!HasAuthority() || !LandingState.bLanded || LandingState.bOpening || IsActorBeingDestroyed())
+	{
+		return;
+	}
+	FlushNetDormancy();
+	LandingState.bOpening = true;
+	LandingState.OpeningServerTime = GetServerTime();
+	ApplyLandingState();
+	if (IsActorBeingDestroyed())
+	{
+		return;
+	}
+	ForceNetUpdate();
 	GetWorldTimerManager().SetTimer(OpeningTimer, this, &ThisClass::SpawnRelic, OpeningDuration, false);
 	const float RemainsLife = FMath::IsFinite(OpenedLifeSpan) ? FMath::Max(0.5f, OpenedLifeSpan) : 3.0f;
 	SetLifeSpan(OpeningDuration + RemainsLife);
@@ -158,11 +192,16 @@ void ANPSantaGiftActor::OnRep_LandingState()
 
 void ANPSantaGiftActor::ApplyLandingState()
 {
+	GrabbableComponent->SetGrabEnabled(LandingState.bLanded && !LandingState.bOpening);
 	if (LandingState.bLanded)
 	{
 		FallingMovement->Deactivate();
 		FallingMovement->SetComponentTickEnabled(false);
-		CollisionBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		// 기존 잡기 시스템은 PhysicsBody 검색 및 물리 제약을 사용합니다.
+		// 상자는 시뮬레이션 없이 착지 위치에 고정하고, 개봉 시 잡기/충돌을 해제합니다.
+		CollisionBox->SetSimulatePhysics(false);
+		CollisionBox->SetCollisionEnabled(LandingState.bOpening
+			? ECollisionEnabled::NoCollision : ECollisionEnabled::QueryAndPhysics);
 		SetActorLocationAndRotation(LandingState.Location, LandingState.Rotation);
 	}
 	UpdateOpeningVisuals();
@@ -177,11 +216,11 @@ float ANPSantaGiftActor::GetServerTime() const
 
 float ANPSantaGiftActor::GetOpeningProgress() const
 {
-	if (!LandingState.bLanded || (!HasAuthority() && (!GetWorld() || !GetWorld()->GetGameState())))
+	if (!LandingState.bOpening || (!HasAuthority() && (!GetWorld() || !GetWorld()->GetGameState())))
 	{
 		return 0.0f;
 	}
-	return FMath::Clamp((GetServerTime() - LandingState.ServerTime) / FMath::Max(0.1f, OpeningDuration), 0.0f, 1.0f);
+	return FMath::Clamp((GetServerTime() - LandingState.OpeningServerTime) / FMath::Max(0.1f, OpeningDuration), 0.0f, 1.0f);
 }
 
 void ANPSantaGiftActor::Tick(float DeltaSeconds)
@@ -202,7 +241,7 @@ void ANPSantaGiftActor::UpdateOpeningVisuals()
 	const bool bSeparateLid = OpenBoxMesh->GetStaticMesh() && LidMesh->GetStaticMesh();
 	const float Progress = GetOpeningProgress();
 	// 닫힌 일체형 메시를 사용하지 않는 경우 본체+뚜껑만으로 낙하 외형도 구성합니다.
-	const bool bUseParts = bSeparateLid && (LandingState.bLanded || !ClosedBoxMesh->GetStaticMesh());
+	const bool bUseParts = bSeparateLid && (LandingState.bOpening || !ClosedBoxMesh->GetStaticMesh());
 	ClosedBoxMesh->SetVisibility(!bUseParts && Progress < 1.0f);
 	OpenBoxMesh->SetVisibility(bUseParts);
 	LidMesh->SetVisibility(bUseParts);
@@ -214,6 +253,10 @@ void ANPSantaGiftActor::UpdateOpeningVisuals()
 	{
 		bLandedPresentationStarted = true;
 		OnGiftLanded();
+	}
+	if (!LandingState.bOpening)
+	{
+		return;
 	}
 	const float Ease = Progress * Progress * (3.0f - 2.0f * Progress);
 	if (bSeparateLid)
@@ -238,7 +281,7 @@ void ANPSantaGiftActor::UpdateOpeningVisuals()
 
 void ANPSantaGiftActor::SpawnRelic()
 {
-	if (!HasAuthority() || !LandingState.bLanded || bRelicSpawnAttempted || RelicClasses.IsEmpty())
+	if (!HasAuthority() || !LandingState.bOpening || bRelicSpawnAttempted || RelicClasses.IsEmpty())
 	{
 		return;
 	}
@@ -249,8 +292,20 @@ void ANPSantaGiftActor::SpawnRelic()
 	Params.OverrideLevel = GetWorld()->PersistentLevel;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding;
 	const float SpawnHeight = FMath::IsFinite(RelicSpawnHeight) ? FMath::Max(0.0f, RelicSpawnHeight) : 100.0f;
-	const FVector SpawnLocation = LandingState.Location + FVector::UpVector * SpawnHeight;
-	ANPBaseRelic* Relic = GetWorld()->SpawnActor<ANPBaseRelic>(RelicClass, SpawnLocation, LandingState.Rotation, Params);
+	FVector SpawnLocation = LandingState.Location + FVector::UpVector * SpawnHeight;
+	ANPBaseRelic* Relic = nullptr;
+	// Retry the SAME reward at higher positions if the player or floor blocks the opening.
+	// Keep collision rejection enabled: AlwaysSpawn could trap physics relics inside the level.
+	const ANPBaseRelic* Defaults = RelicClass.GetDefaultObject();
+	for (int32 Attempt = 0; Attempt < 6 && !IsValid(Relic); ++Attempt)
+	{
+		SpawnLocation = LandingState.Location + FVector::UpVector * (SpawnHeight + Attempt * 50.0f);
+		if (Defaults && GetWorld()->EncroachingBlockingGeometry(Defaults, SpawnLocation, LandingState.Rotation))
+		{
+			continue;
+		}
+		Relic = GetWorld()->SpawnActor<ANPBaseRelic>(RelicClass, SpawnLocation, LandingState.Rotation, Params);
+	}
 	if (!IsValid(Relic))
 	{
 		UE_LOG(LogNPSantaGift, Warning, TEXT("선물 유물 생성 실패: Gift=%s Class=%s Location=%s. 유물 크기/충돌과 RelicSpawnHeight를 확인하세요."),
@@ -277,6 +332,9 @@ void ANPSantaGiftActor::HandleFallTimeout()
 void ANPSantaGiftActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	GetWorldTimerManager().ClearTimer(OpeningTimer);
+	GetWorldTimerManager().ClearTimer(StartOpeningTimer);
 	GetWorldTimerManager().ClearTimer(FallTimeoutTimer);
+	GrabbableComponent->OnGrabStarted.RemoveAll(this);
+	GrabbableComponent->SetGrabEnabled(false);
 	Super::EndPlay(EndPlayReason);
 }

@@ -2,6 +2,7 @@
 
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "GameFramework/GameStateBase.h"
 #include "Gameplay/MapEvents/Santa/NPSantaEventDefinition.h"
 #include "Gameplay/MapEvents/Santa/NPSantaFlightActor.h"
 #include "Gameplay/MapEvents/Santa/NPSantaFlightRoute.h"
@@ -26,7 +27,7 @@ void ANPSantaMapEvent::ApplyEventState_Implementation(bool bNewActive)
 	{
 		return;
 	}
-	CleanupFlight();
+	CleanupEvent();
 	if (bNewActive && !StartSantaFlight())
 	{
 		ScheduleFailedFinish();
@@ -36,6 +37,11 @@ void ANPSantaMapEvent::ApplyEventState_Implementation(bool bNewActive)
 bool ANPSantaMapEvent::StartSantaFlight()
 {
 	UWorld* World = GetWorld();
+	if (!HasAuthority() || !IsEventActive() || IsActorBeingDestroyed() || IsValid(SpawnedSanta)
+		|| GetRemainingEventTime() <= 0.0f)
+	{
+		return false;
+	}
 	const UNPSantaEventDefinition* Definition = Cast<UNPSantaEventDefinition>(GetEventDefinition());
 	if (!World || !Definition)
 	{
@@ -43,12 +49,14 @@ bool ANPSantaMapEvent::StartSantaFlight()
 		return false;
 	}
 	const TSubclassOf<ANPSantaFlightActor> SantaClass = Definition->GetSantaClass();
-	const float FlightDuration = GetEventDuration();
+	const FNPSantaFlightSchedule& Schedule = Definition->GetFlightSchedule();
+	const float FlightDuration = Schedule.FlightDuration;
 	const FGameplayTag RouteGroup = Definition->GetRouteGroup();
 	if (!SantaClass || SantaClass->HasAnyClassFlags(CLASS_Abstract)
-		|| !FMath::IsFinite(FlightDuration) || FlightDuration < 0.01f || !RouteGroup.IsValid())
+		|| !Schedule.IsValid() || !FMath::IsFinite(GetEventDuration()) || GetEventDuration() < 0.01f
+		|| !RouteGroup.IsValid())
 	{
-		UE_LOG(LogNPSantaEvent, Warning, TEXT("산타 이벤트 설정 오류: Event=%s Class=%s Duration=%f Group=%s. 산타 클래스, 0.01초 이상의 Duration, 경로 그룹을 확인하세요."),
+		UE_LOG(LogNPSantaEvent, Warning, TEXT("산타 이벤트 설정 오류: Event=%s Class=%s FlightDuration=%f Group=%s. 클래스/그룹, Duration/FlightDuration >= 0.01, 0 <= RespawnDelayMin <= RespawnDelayMax를 확인하세요."),
 			*GetName(), *GetNameSafe(SantaClass.Get()), FlightDuration, *RouteGroup.ToString());
 		return false;
 	}
@@ -61,7 +69,6 @@ bool ANPSantaMapEvent::StartSantaFlight()
 		double Weight;
 	};
 	TArray<FRouteCandidate> Candidates;
-	double TotalWeight = 0.0;
 	// 위치 레벨은 서버에만 로드될 수 있습니다. 클라이언트에는 결과 좌표만 전달합니다.
 	for (TActorIterator<ANPSantaFlightRoute> It(World); It; ++It)
 	{
@@ -77,7 +84,6 @@ bool ANPSantaMapEvent::StartSantaFlight()
 			continue;
 		}
 		Candidates.Add({Route, Start, End, Weight});
-		TotalWeight += Weight;
 	}
 	if (Candidates.IsEmpty())
 	{
@@ -86,6 +92,16 @@ bool ANPSantaMapEvent::StartSantaFlight()
 		return false;
 	}
 
+	// 두 개 이상이면 직전 경로를 제외합니다. 한 개만 남으면 같은 경로도 재사용합니다.
+	if (Candidates.Num() > 1)
+	{
+		Candidates.RemoveAll([this](const FRouteCandidate& Candidate) { return Candidate.Route == LastFlightRoute.Get(); });
+	}
+	double TotalWeight = 0.0;
+	for (const FRouteCandidate& Candidate : Candidates)
+	{
+		TotalWeight += Candidate.Weight;
+	}
 	double RemainingWeight = FMath::FRand() * TotalWeight;
 	const FRouteCandidate* Selected = &Candidates.Last();
 	for (const FRouteCandidate& Candidate : Candidates)
@@ -98,10 +114,11 @@ bool ANPSantaMapEvent::StartSantaFlight()
 		}
 	}
 	FNPSantaFlightPlan Plan;
-	Plan.StartLocation = Selected->Start;
-	Plan.EndLocation = Selected->End;
+	const bool bReverse = FMath::RandBool();
+	Plan.SetRouteEndpoints(Selected->Start, Selected->End, bReverse);
 	Plan.Duration = FlightDuration;
-	Plan.StartServerTime = GetEventEndServerWorldTime() - FlightDuration;
+	const AGameStateBase* GameState = World->GetGameState();
+	Plan.StartServerTime = GameState ? GameState->GetServerWorldTimeSeconds() : World->GetTimeSeconds();
 	if (!Plan.IsValid())
 	{
 		UE_LOG(LogNPSantaEvent, Warning, TEXT("산타 비행 계획 오류: Event=%s Route=%s"), *GetName(), *GetNameSafe(Selected->Route));
@@ -130,14 +147,83 @@ bool ANPSantaMapEvent::StartSantaFlight()
 		UE_LOG(LogNPSantaEvent, Warning, TEXT("산타가 생성 직후 제거됨: Event=%s. 산타 BP의 Construction/BeginPlay를 확인하세요."), *GetName());
 		return false;
 	}
+	// 산타 BP의 BeginPlay에서 이벤트가 종료/제거되는 경우 뒤늦게 비행을 등록하지 않습니다.
+	if (!IsEventActive() || IsActorBeingDestroyed() || GetRemainingEventTime() <= 0.0f)
+	{
+		Santa->Destroy();
+		return false;
+	}
 	SpawnedSanta = Santa;
+	LastFlightRoute = Selected->Route;
 	Santa->OnDestroyed.AddDynamic(this, &ThisClass::OnSantaDestroyed);
 	ForceNetUpdate();
-	UE_LOG(LogNPSantaEvent, Log, TEXT("산타 비행 시작: Event=%s Route=%s Start=%s End=%s Duration=%.2fs Speed=%.2fcm/s"),
-		*GetName(), *GetNameSafe(Selected->Route), *Plan.StartLocation.ToString(), *Plan.EndLocation.ToString(),
+	UE_LOG(LogNPSantaEvent, Log, TEXT("산타 비행 시작: Event=%s Route=%s Reverse=%d Start=%s End=%s Duration=%.2fs Speed=%.2fcm/s"),
+		*GetName(), *GetNameSafe(Selected->Route), bReverse, *Plan.StartLocation.ToString(), *Plan.EndLocation.ToString(),
 		Plan.Duration, FVector::Dist(Plan.StartLocation, Plan.EndLocation) / Plan.Duration);
+	GetWorldTimerManager().SetTimer(FlightEndTimer, this, &ThisClass::FinishSantaFlight,
+		FMath::Min(FlightDuration, GetRemainingEventTime()), false);
 	StartGiftDrops(Definition);
 	return true;
+}
+
+void ANPSantaMapEvent::FinishSantaFlight()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	CleanupFlight();
+	ScheduleNextFlight();
+}
+
+void ANPSantaMapEvent::ScheduleNextFlight()
+{
+	UWorld* World = GetWorld();
+	if (!HasAuthority() || !World || !IsEventActive() || IsActorBeingDestroyed())
+	{
+		return;
+	}
+	World->GetTimerManager().ClearTimer(RespawnTimer);
+	const float RemainingTime = GetRemainingEventTime();
+	if (RemainingTime <= 0.0f)
+	{
+		return;
+	}
+	const UNPSantaEventDefinition* Definition = Cast<UNPSantaEventDefinition>(GetEventDefinition());
+	if (!Definition || !Definition->GetFlightSchedule().IsValid())
+	{
+		ScheduleFailedFinish();
+		return;
+	}
+	const float Delay = Definition->GetFlightSchedule().GetRespawnDelay(FMath::FRand());
+	// 이벤트 종료 시점/이후에는 재등장시키지 않습니다. 마지막 비행의 속도는 유지합니다.
+	if (Delay >= RemainingTime)
+	{
+		return;
+	}
+	UE_LOG(LogNPSantaEvent, Log, TEXT("산타 재등장 예약: Event=%s Delay=%.2fs Remaining=%.2fs"),
+		*GetName(), Delay, RemainingTime);
+	if (Delay <= 0.0f)
+	{
+		RespawnTimer = World->GetTimerManager().SetTimerForNextTick(this, &ThisClass::StartNextFlight);
+	}
+	else
+	{
+		World->GetTimerManager().SetTimer(RespawnTimer, this, &ThisClass::StartNextFlight, Delay, false);
+	}
+}
+
+void ANPSantaMapEvent::StartNextFlight()
+{
+	if (!HasAuthority() || !IsEventActive() || IsActorBeingDestroyed() || GetRemainingEventTime() <= 0.0f)
+	{
+		return;
+	}
+	if (!StartSantaFlight())
+	{
+		// 비행 사이 경로 레벨이 언로드되거나 생성이 실패해도 이벤트 수명은 유지하고 재시도합니다.
+		ScheduleNextFlight();
+	}
 }
 
 void ANPSantaMapEvent::StartGiftDrops(const UNPSantaEventDefinition* Definition)
@@ -179,6 +265,7 @@ void ANPSantaMapEvent::ScheduleNextGiftDrop()
 {
 	float TargetProgress = 0.0f;
 	if (!HasAuthority() || !IsEventActive() || !IsValid(SpawnedSanta)
+		|| GetRemainingEventTime() <= 0.0f
 		|| !ActiveGiftDrops.GetDropProgress(NextGiftIndex, TargetProgress))
 	{
 		return;
@@ -194,7 +281,8 @@ void ANPSantaMapEvent::ScheduleNextGiftDrop()
 
 void ANPSantaMapEvent::DropGift()
 {
-	if (!HasAuthority() || !IsEventActive() || !IsValid(SpawnedSanta) || !ActiveGiftClass)
+	if (!HasAuthority() || !IsEventActive() || !IsValid(SpawnedSanta) || !ActiveGiftClass
+		|| GetRemainingEventTime() <= 0.0f)
 	{
 		return;
 	}
@@ -245,7 +333,7 @@ void ANPSantaMapEvent::CleanupFlight()
 {
 	if (UWorld* World = GetWorld())
 	{
-		World->GetTimerManager().ClearTimer(FailedStartTimer);
+		World->GetTimerManager().ClearTimer(FlightEndTimer);
 		World->GetTimerManager().ClearTimer(GiftDropTimer);
 	}
 	ActiveGiftClass = nullptr;
@@ -257,6 +345,18 @@ void ANPSantaMapEvent::CleanupFlight()
 		SpawnedSanta->Destroy();
 	}
 	SpawnedSanta = nullptr;
+	ForceNetUpdate();
+}
+
+void ANPSantaMapEvent::CleanupEvent()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(FailedStartTimer);
+		World->GetTimerManager().ClearTimer(RespawnTimer);
+	}
+	CleanupFlight();
+	LastFlightRoute.Reset();
 }
 
 void ANPSantaMapEvent::ScheduleFailedFinish()
@@ -282,14 +382,9 @@ void ANPSantaMapEvent::OnSantaDestroyed(AActor* DestroyedActor)
 {
 	if (HasAuthority() && DestroyedActor == SpawnedSanta)
 	{
-		GetWorldTimerManager().ClearTimer(GiftDropTimer);
 		SpawnedSanta = nullptr;
-		ForceNetUpdate();
-		if (IsEventActive())
-		{
-			UE_LOG(LogNPSantaEvent, Warning, TEXT("산타가 비행 중 제거되어 이벤트를 종료합니다: Event=%s"), *GetName());
-			ScheduleFailedFinish();
-		}
+		CleanupFlight();
+		ScheduleNextFlight();
 	}
 }
 
@@ -297,7 +392,7 @@ void ANPSantaMapEvent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (HasAuthority())
 	{
-		CleanupFlight();
+		CleanupEvent();
 	}
 	Super::EndPlay(EndPlayReason);
 }

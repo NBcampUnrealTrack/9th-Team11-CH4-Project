@@ -7,11 +7,13 @@
 
 class ANPBaseRelic;
 class UBoxComponent;
+class UGrabbableComponent;
+class UPrimitiveComponent;
 class UProjectileMovementComponent;
 class USceneComponent;
 class UStaticMeshComponent;
 
-/** 서버 낙하/착지/유물 생성 + 각 화면의 개봉 연출. 산타 이벤트와 별도로 수명을 가집니다. */
+/** 착지 후 첫 잡기에서 개봉하고 서버가 유물을 생성합니다. 산타 이벤트와 별도로 수명을 가집니다. */
 UCLASS(Blueprintable)
 class NOPHOTOS_API ANPSantaGiftActor : public AActor
 {
@@ -47,6 +49,8 @@ protected:
 	TObjectPtr<UBoxComponent> CollisionBox;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Santa Gift")
 	TObjectPtr<UProjectileMovementComponent> FallingMovement;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Santa Gift")
+	TObjectPtr<UGrabbableComponent> GrabbableComponent;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Santa Gift|Visual")
 	TObjectPtr<USceneComponent> VisualRoot;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Santa Gift|Visual")
@@ -85,6 +89,8 @@ private:
 	UFUNCTION()
 	void OnRep_LandingState();
 	void ApplyLandingState();
+	void HandleGrabStarted(UPrimitiveComponent* GrabbedComponent);
+	void BeginOpening();
 	void UpdateOpeningVisuals();
 	void SpawnRelic();
 	void HandleFallTimeout();
@@ -98,7 +104,9 @@ private:
 	FTransform ClosedBoxInitialTransform;
 	FTransform LidInitialTransform;
 	FTimerHandle OpeningTimer;
+	FTimerHandle StartOpeningTimer;
 	FTimerHandle FallTimeoutTimer;
+	bool bOpeningRequested = false;
 	bool bInitialized = false;
 	bool bRelicSpawnAttempted = false;
 	bool bLandedPresentationStarted = false;

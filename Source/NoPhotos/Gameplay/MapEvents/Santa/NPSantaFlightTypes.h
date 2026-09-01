@@ -23,6 +23,36 @@ namespace NPSantaFlight
 	}
 }
 
+/** 전체 이벤트 시간과 별개인 1회 비행 시간 및 비행 종료 후 재등장 대기 범위입니다. */
+USTRUCT(BlueprintType)
+struct NOPHOTOS_API FNPSantaFlightSchedule
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Santa Flight", meta=(ClampMin="0.01", Units="s"))
+	float FlightDuration = 8.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Santa Flight", meta=(ClampMin="0.0", Units="s"))
+	float RespawnDelayMin = 3.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Santa Flight", meta=(ClampMin="0.0", Units="s"))
+	float RespawnDelayMax = 7.0f;
+
+	bool IsValid() const
+	{
+		return FMath::IsFinite(FlightDuration) && FlightDuration >= 0.01f
+			&& FMath::IsFinite(RespawnDelayMin) && RespawnDelayMin >= 0.0f
+			&& FMath::IsFinite(RespawnDelayMax) && RespawnDelayMax >= RespawnDelayMin;
+	}
+
+	/** 서버가 매번 새로 추첨한 0~1 값을 사용합니다. 0초 대기는 다음 틱에 처리합니다. */
+	float GetRespawnDelay(float RandomFraction) const
+	{
+		return IsValid() && FMath::IsFinite(RandomFraction)
+			? FMath::Lerp(RespawnDelayMin, RespawnDelayMax, FMath::Clamp(RandomFraction, 0.0f, 1.0f)) : 0.0f;
+	}
+};
+
 /** 시작 시 한 번 확정해 복제합니다. 클라이언트는 경로 액터/위치 레벨을 참조하지 않습니다. */
 USTRUCT(BlueprintType)
 struct NOPHOTOS_API FNPSantaFlightPlan
@@ -40,6 +70,12 @@ struct NOPHOTOS_API FNPSantaFlightPlan
 
 	UPROPERTY(BlueprintReadOnly, Category="Santa Flight")
 	float Duration = 0.0f;
+
+	void SetRouteEndpoints(const FVector& RouteStart, const FVector& RouteEnd, bool bReverse)
+	{
+		StartLocation = bReverse ? RouteEnd : RouteStart;
+		EndLocation = bReverse ? RouteStart : RouteEnd;
+	}
 
 	bool IsValid() const
 	{

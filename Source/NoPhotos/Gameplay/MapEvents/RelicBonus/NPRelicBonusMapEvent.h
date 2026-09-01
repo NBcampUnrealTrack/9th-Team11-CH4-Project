@@ -123,7 +123,7 @@ protected:
 
 	/** 운반체가 도착했을 때 지면에 생성할 지속형 바람 Niagara System입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Ground Wind")
-	TObjectPtr<UNiagaraSystem> GroundWindSystem;
+	TSoftObjectPtr<UNiagaraSystem> GroundWindSystem;
 
 	/** 지면 끼임을 막기 위해 Niagara를 지면에서 띄울 높이입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Ground Wind", meta = (Units = "cm"))

@@ -2,10 +2,13 @@
 
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Components/CapsuleComponent.h"
 #include "Gameplay/Goblin/NPGoblinCharacter.h"
 #include "Gameplay/Goblin/NPGoblinPatrolRoute.h"
 #include "Kismet/GameplayStatics.h"
 #include "Gameplay/MapEvents/NPMapEventManager.h"
+#include "Gameplay/MapEvents/NPMapEventSpawnVolume.h"
+#include "TimerManager.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogNPGoblinMapEvent, Log, All);
 
@@ -29,15 +32,20 @@ void ANPGoblinMapEvent::ApplyEventState_Implementation(const bool bNewActive)
 
 	if (bNewActive)
 	{
-		SpawnGoblins();
+		bAllowRespawning = true;
+		TrySpawnGoblin();
 		return;
 	}
 
+	bAllowRespawning = false;
+	GetWorldTimerManager().ClearTimer(SpawnTimer);
 	BeginDespawnSpawnedGoblins();
 }
 
 void ANPGoblinMapEvent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	bAllowRespawning = false;
+	GetWorldTimerManager().ClearTimer(SpawnTimer);
 	if (HasAuthority())
 	{
 		DestroySpawnedGoblinsImmediately();
@@ -46,9 +54,45 @@ void ANPGoblinMapEvent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
-void ANPGoblinMapEvent::SpawnGoblins()
+bool ANPGoblinMapEvent::CanSpawnGoblin() const
 {
-	DestroySpawnedGoblinsImmediately();
+	return HasAuthority() && bAllowRespawning && IsEventActive()
+		&& !IsActorBeingDestroyed()
+		&& (GetEventDuration() <= 0.0f || GetRemainingEventTime() > 0.0f);
+}
+
+void ANPGoblinMapEvent::ScheduleSpawn(const float Delay)
+{
+	if (CanSpawnGoblin() && SpawnedGoblins.IsEmpty())
+	{
+		GetWorldTimerManager().SetTimer(SpawnTimer, this, &ThisClass::TrySpawnGoblin,
+			FMath::IsFinite(Delay) ? FMath::Max(0.1f, Delay) : 2.0f, false);
+	}
+}
+
+void ANPGoblinMapEvent::HandleGoblinDestroyed(AActor* DestroyedActor)
+{
+	const int32 Removed = SpawnedGoblins.RemoveAll(
+		[DestroyedActor](const TObjectPtr<ANPGoblinCharacter>& Goblin)
+		{
+			return Goblin.Get() == DestroyedActor;
+		});
+	if (Removed > 0)
+	{
+		// HP 0 starts the existing door exit. Only destruction after that exit frees the slot.
+		UE_LOG(LogNPGoblinMapEvent, Log, TEXT("고블린 퇴장 완료: Actor=%s Remaining=%.2fs"),
+			*GetNameSafe(DestroyedActor), GetRemainingEventTime());
+		ScheduleSpawn(RespawnDelay);
+	}
+}
+
+void ANPGoblinMapEvent::TrySpawnGoblin()
+{
+	GetWorldTimerManager().ClearTimer(SpawnTimer);
+	if (!CanSpawnGoblin() || !SpawnedGoblins.IsEmpty())
+	{
+		return;
+	}
 
 	UNPMapEventManagerComponent* EventManager = GetOwner()
 		? GetOwner()->FindComponentByClass<UNPMapEventManagerComponent>()
@@ -65,69 +109,68 @@ void ANPGoblinMapEvent::SpawnGoblins()
 		return;
 	}
 
-	const int32 TargetCount = FMath::Max(1, GoblinCount);
 	const int32 AttemptsPerGoblin = FMath::Max(1, MaximumSpawnAttemptsPerGoblin);
-	const FVector RequiredHalfExtent(
+	FVector RequiredHalfExtent(
 		FMath::Max(1.0f, GoblinRequiredHalfExtent.X),
 		FMath::Max(1.0f, GoblinRequiredHalfExtent.Y),
 		FMath::Max(1.0f, GoblinRequiredHalfExtent.Z));
+	const ANPGoblinCharacter* Defaults = GoblinClass.GetDefaultObject();
+	if (const UCapsuleComponent* Capsule = Defaults ? Defaults->GetCapsuleComponent() : nullptr)
+	{
+		RequiredHalfExtent.X = FMath::Max(RequiredHalfExtent.X, Capsule->GetScaledCapsuleRadius());
+		RequiredHalfExtent.Y = FMath::Max(RequiredHalfExtent.Y, Capsule->GetScaledCapsuleRadius());
+		RequiredHalfExtent.Z = FMath::Max(RequiredHalfExtent.Z, Capsule->GetScaledCapsuleHalfHeight());
+	}
 	ANPGoblinPatrolRoute* PatrolRoute = FindPatrolRoute();
 	if (!PatrolRoute)
 	{
 		UE_LOG(
 			LogNPGoblinMapEvent,
 			Warning,
-			TEXT("사용 가능한 고블린 순찰 경로가 없어 랜덤 배회로 대체합니다. SpawnGroup=%s"),
+			TEXT("고블린 생성 대기: 유효한 폐곡선 루트가 없습니다. SpawnGroup=%s (로드된 레벨 인스턴스의 RouteGroup/ClosedLoop 확인)"),
 			*GoblinSpawnGroup.ToString());
+		ScheduleSpawn(SpawnRetryInterval);
+		return;
 	}
 
-	for (int32 GoblinIndex = 0; GoblinIndex < TargetCount; ++GoblinIndex)
+	for (int32 Attempt = 0; Attempt < AttemptsPerGoblin; ++Attempt)
 	{
-		bool bSpawned = false;
-		for (int32 Attempt = 0; Attempt < AttemptsPerGoblin; ++Attempt)
+		FTransform GroundTransform;
+		// Existing weighted volume selection is repeated for every new goblin; routes never supply spawns.
+		if (!EventManager->FindRandomSpawnTransformBySource(
+			GoblinSpawnGroup, RequiredHalfExtent, ENPMapEventLocationSource::Volume, GroundTransform))
 		{
-			FTransform GroundTransform;
-			if (!EventManager->FindRandomSpawnTransformBySource(
-					GoblinSpawnGroup,
-					RequiredHalfExtent,
-					GetLocationSource(),
-					GroundTransform))
-			{
-				continue;
-			}
-
-			if (ANPGoblinCharacter* Goblin = SpawnGoblinAt(GroundTransform, PatrolRoute))
-			{
-				SpawnedGoblins.Add(Goblin);
-				bSpawned = true;
-				UE_LOG(
-					LogNPGoblinMapEvent,
-					Display,
-					TEXT("고블린 생성 성공: Index=%d, Actor=%s, Location=%s"),
-					GoblinIndex,
-					*GetNameSafe(Goblin),
-					*Goblin->GetActorLocation().ToCompactString());
-				break;
-			}
+			continue;
 		}
 
-		if (!bSpawned)
+		if (ANPGoblinCharacter* Goblin = SpawnGoblinAt(GroundTransform, PatrolRoute))
 		{
-			UE_LOG(
-				LogNPGoblinMapEvent,
-				Warning,
-				TEXT("고블린 생성 실패: Index=%d, Attempts=%d"),
-				GoblinIndex,
-				AttemptsPerGoblin);
+			UE_LOG(LogNPGoblinMapEvent, Display,
+				TEXT("고블린 생성 성공: Actor=%s Route=%s Location=%s Remaining=%.2fs (동시 1마리)"),
+				*GetNameSafe(Goblin), *GetNameSafe(PatrolRoute),
+				*Goblin->GetActorLocation().ToCompactString(), GetRemainingEventTime());
+			return;
+		}
+		if (!CanSpawnGoblin())
+		{
+			return;
 		}
 	}
 
-	UE_LOG(
-		LogNPGoblinMapEvent,
-		Display,
-		TEXT("고블린 이벤트 생성 완료: Requested=%d, Spawned=%d"),
-		TargetCount,
-		SpawnedGoblins.Num());
+	TArray<ANPMapEventSpawnVolume*> Volumes;
+	EventManager->GetSpawnVolumesForGroup(GoblinSpawnGroup, Volumes);
+	UE_LOG(LogNPGoblinMapEvent, Warning,
+		TEXT("고블린 생성 실패, 재시도 예정: Attempts=%d Volumes=%d Group=%s"),
+		AttemptsPerGoblin, Volumes.Num(), *GoblinSpawnGroup.ToString());
+	for (const ANPMapEventSpawnVolume* Volume : Volumes)
+	{
+		if (IsValid(Volume))
+		{
+			UE_LOG(LogNPGoblinMapEvent, Warning, TEXT("  Volume=%s Weight=%.2f Failure=%s"),
+				*GetNameSafe(Volume), Volume->GetSelectionWeight(), *Volume->GetLastSpawnFailureReason());
+		}
+	}
+	ScheduleSpawn(SpawnRetryInterval);
 }
 
 ANPGoblinPatrolRoute* ANPGoblinMapEvent::FindPatrolRoute() const
@@ -166,8 +209,11 @@ ANPGoblinCharacter* ANPGoblinMapEvent::SpawnGoblinAt(
 	}
 
 	FTransform SpawnTransform = GroundTransform;
+	const ANPGoblinCharacter* Defaults = GoblinClass.GetDefaultObject();
+	const UCapsuleComponent* Capsule = Defaults ? Defaults->GetCapsuleComponent() : nullptr;
+	const float MinimumHeight = Capsule ? Capsule->GetScaledCapsuleHalfHeight() + 2.0f : 2.0f;
 	SpawnTransform.AddToTranslation(
-		FVector::UpVector * FMath::Max(0.0f, GoblinSpawnHeightOffset));
+		FVector::UpVector * FMath::Max(MinimumHeight, GoblinSpawnHeightOffset));
 
 	ANPGoblinCharacter* Goblin = World->SpawnActorDeferred<ANPGoblinCharacter>(
 		GoblinClass,
@@ -184,21 +230,24 @@ ANPGoblinCharacter* ANPGoblinMapEvent::SpawnGoblinAt(
 	Goblin->SetReplicateMovement(true);
 	Goblin->SetPatrolRoute(PatrolRoute);
 	Goblin->PrepareForSpawnPresentation();
+	// Register before BeginPlay: a BP can finish the event or destroy itself during initialization.
+	SpawnedGoblins.Add(Goblin);
+	Goblin->OnDestroyed.AddDynamic(this, &ThisClass::HandleGoblinDestroyed);
 	UGameplayStatics::FinishSpawningActor(Goblin, SpawnTransform);
-	return Goblin;
+	return IsValid(Goblin) && !Goblin->IsActorBeingDestroyed() ? Goblin : nullptr;
 }
 
 void ANPGoblinMapEvent::BeginDespawnSpawnedGoblins()
 {
-	for (ANPGoblinCharacter* Goblin : SpawnedGoblins)
+	// BeginDespawnPresentation can destroy immediately if there is no room for the door.
+	const TArray<TObjectPtr<ANPGoblinCharacter>> GoblinsToDespawn = SpawnedGoblins;
+	for (ANPGoblinCharacter* Goblin : GoblinsToDespawn)
 	{
 		if (IsValid(Goblin))
 		{
 			Goblin->BeginDespawnPresentation();
 		}
 	}
-
-	SpawnedGoblins.Reset();
 }
 
 void ANPGoblinMapEvent::DestroySpawnedGoblinsImmediately()
@@ -207,6 +256,7 @@ void ANPGoblinMapEvent::DestroySpawnedGoblinsImmediately()
 	{
 		if (IsValid(Goblin))
 		{
+			Goblin->OnDestroyed.RemoveDynamic(this, &ThisClass::HandleGoblinDestroyed);
 			Goblin->Destroy();
 		}
 	}

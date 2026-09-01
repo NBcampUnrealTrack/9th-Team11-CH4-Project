@@ -10,7 +10,7 @@ class ANPGoblinPatrolRoute;
 
 /**
  * 이벤트 위치 레벨의 Goblin SpawnVolume에서 위치를 찾아 고블린 BP를 생성합니다.
- * 고블린의 AI와 사진 반응은 생성되는 BP가 담당합니다.
+ * 한 번에 한 마리만 유지하며 퇴장 완료 후 남은 이벤트 시간 동안 다시 생성합니다.
  */
 UCLASS(Blueprintable)
 class NOPHOTOS_API ANPGoblinMapEvent : public ANPMapEvent
@@ -35,8 +35,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin Event|Spawn")
 	FGameplayTag GoblinSpawnGroup;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin Event|Spawn", meta = (ClampMin = "1", UIMin = "1"))
+	/** 기존 BP 저장값 호환용입니다. 실제 동시 소환 수는 항상 1입니다. */
+	UPROPERTY()
 	int32 GoblinCount = 1;
+
+	/** 퇴장 완료 후 재소환까지의 시간입니다. 이벤트 종료 시 취소됩니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin Event|Spawn", meta = (ClampMin = "0.1", Units = "s"))
+	float RespawnDelay = 1.0f;
+
+	/** 루트/스폰 볼륨/NavMesh가 준비되지 않았을 때 다시 시도할 간격입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin Event|Spawn", meta = (ClampMin = "0.5", Units = "s"))
+	float SpawnRetryInterval = 2.0f;
 
 	/** SpawnVolume이 고블린을 위해 확보해야 하는 공간의 반지름입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin Event|Spawn", meta = (ClampMin = "1.0", Units = "cm"))
@@ -51,7 +60,13 @@ protected:
 	int32 MaximumSpawnAttemptsPerGoblin = 10;
 
 private:
-	void SpawnGoblins();
+	friend class FNPGoblinEventLifecycleTest;
+	void TrySpawnGoblin();
+	bool CanSpawnGoblin() const;
+	void ScheduleSpawn(float Delay);
+
+	UFUNCTION()
+	void HandleGoblinDestroyed(AActor* DestroyedActor);
 	ANPGoblinPatrolRoute* FindPatrolRoute() const;
 	ANPGoblinCharacter* SpawnGoblinAt(
 		const FTransform& GroundTransform,
@@ -61,4 +76,7 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<ANPGoblinCharacter>> SpawnedGoblins;
+
+	FTimerHandle SpawnTimer;
+	bool bAllowRespawning = false;
 };

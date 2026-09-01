@@ -51,6 +51,10 @@ void ANPRelicCase::CreateConfiguredRelics()
 void ANPRelicCase::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
+	if (HasAuthority())
+	{
+		bIsUnlockedByGimmick = bIsUnlocked;
+	}
 
 	CollectCaseGeometryCollections();
 	CollectRelicSlots();
@@ -76,6 +80,7 @@ void ANPRelicCase::BeginPlay()
 		&ANPRelicCase::HandleDurabilityDepleted);
 
 	InitializeGeometryCollections();
+	bCaseInitialized = true;
 	ApplyCaseState();
 
 	if (HasAuthority())
@@ -96,29 +101,64 @@ void ANPRelicCase::GetLifetimeReplicatedProps(
 
 bool ANPRelicCase::UnlockCase()
 {
-	if (!HasAuthority() || bIsUnlocked || bIsBroken)
+	if (!HasAuthority() || bIsUnlockedByGimmick || bIsBroken)
 	{
 		return false;
 	}
 
-	bIsUnlocked = true;
-	ApplyCaseState();
-	ReleaseContainedRelics();
-	ForceNetUpdate();
+	bIsUnlockedByGimmick = true;
+	UpdateUnlockState();
 	return true;
 }
 
 bool ANPRelicCase::LockCase()
 {
-	if (!HasAuthority() || !bIsUnlocked || bIsBroken)
+	if (!HasAuthority() || !bIsUnlockedByGimmick || bIsBroken)
 	{
 		return false;
 	}
 
-	bIsUnlocked = false;
-	ApplyCaseState();
-	ForceNetUpdate();
+	bIsUnlockedByGimmick = false;
+	UpdateUnlockState();
 	return true;
+}
+
+void ANPRelicCase::SetTemporaryUnlock(AActor* Source, const bool bEnabled)
+{
+	if (!HasAuthority() || !Source)
+	{
+		return;
+	}
+
+	const TWeakObjectPtr<AActor> SourceKey(Source);
+	if (bEnabled)
+	{
+		if (!IsValid(Source) || Source->IsActorBeingDestroyed() ||
+			Source->GetWorld() != GetWorld() || bIsBroken || TemporaryUnlockSources.Contains(SourceKey))
+		{
+			return;
+		}
+		TemporaryUnlockSources.Add(SourceKey);
+	}
+	else if (TemporaryUnlockSources.Remove(SourceKey) == 0)
+	{
+		return;
+	}
+
+	UpdateUnlockState();
+}
+
+void ANPRelicCase::UpdateUnlockState()
+{
+	const bool bNewUnlocked = bIsUnlockedByGimmick || !TemporaryUnlockSources.IsEmpty();
+	if (bIsUnlocked == bNewUnlocked)
+	{
+		return;
+	}
+	FlushNetDormancy();
+	bIsUnlocked = bNewUnlocked;
+	ForceNetUpdate();
+	ApplyCaseState();
 }
 
 bool ANPRelicCase::TrySetLocked_Implementation(const bool bLocked)
@@ -257,12 +297,28 @@ void ANPRelicCase::BreakCase(const FVector& ImpactLocation)
 	BreakLocation = ImpactLocation;
 	bIsBroken = true;
 	MulticastBreakCase(BreakLocation);
-	ReleaseContainedRelics();
 	ForceNetUpdate();
 }
 
 void ANPRelicCase::ApplyCaseState()
 {
+	// 초기 복제가 BeginPlay보다 먼저 도착해도 초기화 후 한 번 적용합니다.
+	if (!bCaseInitialized)
+	{
+		return;
+	}
+	UpdateContainedRelics();
+	if (!bIsBroken)
+	{
+		for (UGeometryCollectionComponent* GeometryCollection : CaseGeometryCollections)
+		{
+			if (IsValid(GeometryCollection))
+			{
+				GeometryCollection->SetCollisionEnabled(bIsUnlocked
+					? ECollisionEnabled::NoCollision : ECollisionEnabled::QueryAndPhysics);
+			}
+		}
+	}
 	if (bIsBroken)
 	{
 		ApplyBrokenState();
@@ -347,7 +403,7 @@ void ANPRelicCase::SpawnContainedRelics()
 	}
 }
 
-void ANPRelicCase::ReleaseContainedRelics()
+void ANPRelicCase::UpdateContainedRelics()
 {
 	if (!HasAuthority())
 	{
@@ -358,7 +414,7 @@ void ANPRelicCase::ReleaseContainedRelics()
 	{
 		if (IsValid(RelicSlot))
 		{
-			RelicSlot->ReleaseRelic();
+			RelicSlot->SetCaseAccessible(IsAccessible());
 		}
 	}
 }

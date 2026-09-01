@@ -45,6 +45,9 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Relic Case")
 	bool LockCase();
 
+	/** 서버에서 이벤트별 임시 해제를 추가/제거합니다. 일반 기믹의 잠금 상태는 보존합니다. */
+	void SetTemporaryUnlock(AActor* Source, bool bEnabled);
+
 	virtual bool TrySetLocked_Implementation(bool bLocked) override;
 	virtual bool IsLocked_Implementation() const override;
 
@@ -98,6 +101,7 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_IsBroken, VisibleInstanceOnly, BlueprintReadOnly, Category = "Relic Case|State")
 	bool bIsBroken = false;
 
+	/** 일반 기믹과 임시 해제를 합산한 최종 해제 상태입니다. */
 	UPROPERTY(ReplicatedUsing = OnRep_IsUnlocked, VisibleInstanceOnly, BlueprintReadOnly, Category = "Relic Case|State")
 	bool bIsUnlocked = false;
 
@@ -117,7 +121,13 @@ private:
 	void ApplyCaseState();
 	void ApplyBrokenState();
 	void SpawnContainedRelics();
-	void ReleaseContainedRelics();
+	void UpdateContainedRelics();
+	void UpdateUnlockState();
+
+	// 서버에서만 관리하며 클라이언트에는 최종 bIsUnlocked만 복제합니다.
+	TSet<TWeakObjectPtr<AActor>> TemporaryUnlockSources;
+	bool bIsUnlockedByGimmick = false;
+	bool bCaseInitialized = false;
 
 	bool bBrokenStateApplied = false;
 	bool bBrokenEventDispatched = false;

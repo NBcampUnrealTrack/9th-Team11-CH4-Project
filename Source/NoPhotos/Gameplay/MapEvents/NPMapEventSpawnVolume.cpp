@@ -30,12 +30,19 @@ bool ANPMapEventSpawnVolume::FindRandomGroundTransform(
 	FTransform& OutTransform) const
 {
 	OutTransform = FTransform::Identity;
+	LastSpawnFailureReason.Reset();
 	UWorld* World = GetWorld();
 	UNavigationSystemV1* NavigationSystem = World
 		? UNavigationSystemV1::GetCurrent(World)
 		: nullptr;
 	if (!HasAuthority() || !World || !NavigationSystem || !SpawnBounds)
 	{
+		LastSpawnFailureReason = TEXT("Server/World/NavigationSystem/SpawnBounds unavailable");
+		return false;
+	}
+	if (!NavigationSystem->GetDefaultNavDataInstance(FNavigationSystem::DontCreate))
+	{
+		LastSpawnFailureReason = TEXT("No NavData: persistent level NavMesh and runtime generation must be configured");
 		return false;
 	}
 
@@ -45,6 +52,15 @@ bool ANPMapEventSpawnVolume::FindRandomGroundTransform(
 
 	const FVector LocalExtent = SpawnBounds->GetUnscaledBoxExtent();
 	const FTransform BoundsTransform = SpawnBounds->GetComponentTransform();
+	// A tall streamed volume can sample thousands of cm above its floor. Search its full height,
+	// rather than rejecting a valid floor merely because the default Z projection is only 300 cm.
+	FVector ProjectionExtent = NavigationProjectionExtent.GetAbs();
+	ProjectionExtent.Z = FMath::Max(ProjectionExtent.Z, SpawnBounds->Bounds.BoxExtent.Z * 2.0);
+	int32 ProjectionFailures = 0;
+	int32 BoundsFailures = 0;
+	int32 GroundFailures = 0;
+	int32 ClearanceFailures = 0;
+	int32 ReachabilityFailures = 0;
 	const int32 Attempts = FMath::Max(1, MaximumSamplingAttempts);
 	for (int32 Attempt = 0; Attempt < Attempts; ++Attempt)
 	{
@@ -58,9 +74,14 @@ bool ANPMapEventSpawnVolume::FindRandomGroundTransform(
 		if (!NavigationSystem->ProjectPointToNavigation(
 				WorldSample,
 				NavigationLocation,
-				NavigationProjectionExtent)
-			|| !IsInsideSpawnBounds(NavigationLocation.Location))
+				ProjectionExtent))
 		{
+			++ProjectionFailures;
+			continue;
+		}
+		if (!IsInsideSpawnBounds(NavigationLocation.Location))
+		{
+			++BoundsFailures;
 			continue;
 		}
 
@@ -73,10 +94,19 @@ bool ANPMapEventSpawnVolume::FindRandomGroundTransform(
 				NavigationLocation.Location,
 				RequiredHalfExtent,
 				SpawnRotation,
-				GroundLocation)
-			|| !HasRequiredClearance(GroundLocation, RequiredHalfExtent, SpawnRotation)
-			|| !IsReachableFromAnyPlayer(GroundLocation))
+				GroundLocation))
 		{
+			++GroundFailures;
+			continue;
+		}
+		if (!HasRequiredClearance(GroundLocation, RequiredHalfExtent, SpawnRotation))
+		{
+			++ClearanceFailures;
+			continue;
+		}
+		if (!IsReachableFromAnyPlayer(GroundLocation))
+		{
+			++ReachabilityFailures;
 			continue;
 		}
 
@@ -84,6 +114,9 @@ bool ANPMapEventSpawnVolume::FindRandomGroundTransform(
 		return true;
 	}
 
+	LastSpawnFailureReason = FString::Printf(
+		TEXT("Samples=%d NavProjection=%d OutsideBounds=%d Ground=%d Clearance=%d PlayerPath=%d"),
+		Attempts, ProjectionFailures, BoundsFailures, GroundFailures, ClearanceFailures, ReachabilityFailures);
 	return false;
 }
 
