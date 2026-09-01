@@ -1,6 +1,7 @@
 #include "Gameplay/Relic/Components/NPRelicSlotComponent.h"
 
 #include "Components/PrimitiveComponent.h"
+#include "Data/Structs/NPRelicData.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
@@ -46,24 +47,7 @@ ANPBaseRelic* UNPRelicSlotComponent::SpawnRelic(
 	bIsRelicReleased = bInitiallyReleased;
 	if (!IsValid(SpawnedRelic))
 	{
-		if (!RelicClass)
-		{
-			return nullptr;
-		}
-
-		FActorSpawnParameters SpawnParameters;
-		SpawnParameters.OverrideLevel = Owner->GetLevel();
-		SpawnParameters.SpawnCollisionHandlingOverride =
-			ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-		const FTransform SpawnTransform(
-			GetComponentQuat(),
-			GetComponentLocation(),
-			FVector::OneVector);
-		SpawnedRelic = World->SpawnActor<ANPBaseRelic>(
-			RelicClass,
-			SpawnTransform,
-			SpawnParameters);
+		SpawnedRelic = CreateConfiguredRelic(RF_NoFlags);
 	}
 
 	if (!IsValid(SpawnedRelic))
@@ -99,33 +83,62 @@ ANPBaseRelic* UNPRelicSlotComponent::RecreateRelicInEditor()
 	}
 
 	bIsRelicReleased = false;
-	if (RelicClass)
+	SpawnedRelic = CreateConfiguredRelic(RF_Transactional);
+	if (IsValid(SpawnedRelic))
 	{
-		FActorSpawnParameters SpawnParameters;
-		SpawnParameters.OverrideLevel = Owner->GetLevel();
-		SpawnParameters.ObjectFlags |= RF_Transactional;
-		SpawnParameters.SpawnCollisionHandlingOverride =
-			ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-		const FTransform SpawnTransform(
-			GetComponentQuat(),
-			GetComponentLocation(),
-			FVector::OneVector);
-		SpawnedRelic = World->SpawnActor<ANPBaseRelic>(
-			RelicClass,
-			SpawnTransform,
-			SpawnParameters);
-		if (IsValid(SpawnedRelic))
-		{
-			SpawnedRelic->SetUnlocked(false);
-			ApplyRelicState();
-		}
+		SpawnedRelic->SetUnlocked(false);
+		ApplyRelicState();
 	}
 
 	Owner->MarkPackageDirty();
 	return SpawnedRelic;
 }
 #endif
+
+ANPBaseRelic* UNPRelicSlotComponent::CreateConfiguredRelic(
+	const EObjectFlags InObjectFlags)
+{
+	AActor* Owner = GetOwner();
+	UWorld* World = GetWorld();
+	if (!Owner || !World || !RelicData.DataTable || RelicData.RowName.IsNone())
+	{
+		return nullptr;
+	}
+
+	const FNPRelicTableRow* TableRow =
+		RelicData.GetRow<FNPRelicTableRow>(TEXT("CreateConfiguredRelic"));
+	UClass* RelicClass = TableRow
+		? TableRow->RelicClass.LoadSynchronous()
+		: nullptr;
+	if (!RelicClass || RelicClass->HasAnyClassFlags(CLASS_Abstract))
+	{
+		return nullptr;
+	}
+
+	FActorSpawnParameters SpawnParameters;
+	SpawnParameters.OverrideLevel = Owner->GetLevel();
+	SpawnParameters.ObjectFlags |= InObjectFlags;
+	SpawnParameters.SpawnCollisionHandlingOverride =
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	SpawnParameters.bDeferConstruction = true;
+
+	const FTransform SpawnTransform(
+		GetComponentQuat(),
+		GetComponentLocation(),
+		FVector::OneVector);
+	ANPBaseRelic* Relic = World->SpawnActor<ANPBaseRelic>(
+		RelicClass,
+		SpawnTransform,
+		SpawnParameters);
+	if (!IsValid(Relic))
+	{
+		return nullptr;
+	}
+
+	Relic->SetRelicTableData(RelicData);
+	Relic->FinishSpawning(SpawnTransform);
+	return Relic;
+}
 
 void UNPRelicSlotComponent::ReleaseRelic()
 {

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/SceneComponent.h"
+#include "Engine/DataTable.h"
 #include "NPRelicSlotComponent.generated.h"
 
 class ANPBaseRelic;
@@ -43,8 +44,8 @@ protected:
 	UFUNCTION()
 	void OnRep_IsRelicReleased();
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Relic Slot")
-	TSubclassOf<ANPBaseRelic> RelicClass;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Relic Slot", meta = (RowType = "/Script/NoPhotos.NPRelicTableRow"))
+	FDataTableRowHandle RelicData;
 
 	UPROPERTY(ReplicatedUsing = OnRep_SpawnedRelic, VisibleInstanceOnly, BlueprintReadOnly, Category = "Relic Slot")
 	TObjectPtr<ANPBaseRelic> SpawnedRelic;
@@ -53,5 +54,6 @@ protected:
 	bool bIsRelicReleased = false;
 
 private:
+	ANPBaseRelic* CreateConfiguredRelic(EObjectFlags InObjectFlags);
 	void ApplyRelicState();
 };
