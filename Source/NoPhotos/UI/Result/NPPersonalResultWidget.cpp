@@ -1,27 +1,19 @@
 #include "UI/Result/NPPersonalResultWidget.h"
 
-#include "Components/Button.h"
+#include "Components/HorizontalBox.h"
 #include "Components/TextBlock.h"
+#include "Core/Main/NPMainGameState.h"
+#include "Core/Main/NPMainPlayerController.h"
+#include "Engine/World.h"
 #include "GameFramework/PlayerState.h"
-#include "UI/Result/Pictures/NPResultPicturePopup.h"
-
-void UNPPersonalResultWidget::NativeConstruct()
-{
-	Super::NativeConstruct();
-
-	if (IsValid(ShowPictureButton))
-	{
-		ShowPictureButton->OnClicked.AddUniqueDynamic(
-			this,
-			&ThisClass::HandleShowPictureButtonClicked);
-	}
-}
+#include "Gameplay/Photo/NPPhotoTransferComponent.h"
+#include "UI/Result/Result/NPResultPictureButton.h"
 
 void UNPPersonalResultWidget::NativeDestruct()
 {
-	if (IsValid(ShowPictureButton))
+	if (IsValid(TransferComponent))
 	{
-		ShowPictureButton->OnClicked.RemoveAll(this);
+		TransferComponent->OnPhotoTextureReceived.RemoveDynamic(this, &ThisClass::HandlePhotoTextureReceived);
 	}
 
 	Super::NativeDestruct();
@@ -46,32 +38,122 @@ void UNPPersonalResultWidget::SetupResult(const int32 InRank, const FString& InP
 		ScoreText->SetText(FText::AsNumber(InScore));
 	}
 
-	if (IsValid(ShowPictureButton))
+	CreatePictureButtons();
+}
+
+void UNPPersonalResultWidget::CreatePictureButtons()
+{
+	if (!IsValid(PictureList))
 	{
-		ShowPictureButton->SetIsEnabled(IsValid(ResultPlayerState));
+		return;
+	}
+
+	PictureList->ClearChildren();
+	if (IsValid(TransferComponent))
+	{
+		TransferComponent->OnPhotoTextureReceived.RemoveDynamic(this, &ThisClass::HandlePhotoTextureReceived);
+	}
+
+	PictureButtonsById.Empty();
+	PendingPhotoIds.Empty();
+	DownloadingPhotoId.Invalidate();
+	if (!IsValid(ResultPlayerState) || !IsValid(PictureButtonWidgetClass))
+	{
+		return;
+	}
+
+	ANPMainGameState* GameState = GetWorld() ? GetWorld()->GetGameState<ANPMainGameState>() : nullptr;
+	if (!IsValid(GameState))
+	{
+		return;
+	}
+
+	PendingPhotoIds = GameState->GetSelectedPhotoIds(ResultPlayerState);
+	for (const FGuid& PhotoId : PendingPhotoIds)
+	{
+		if (!PhotoId.IsValid())
+		{
+			continue;
+		}
+
+		UNPResultPictureButton* PictureButton =
+			CreateWidget<UNPResultPictureButton>(GetOwningPlayer(), PictureButtonWidgetClass);
+		if (!IsValid(PictureButton))
+		{
+			continue;
+		}
+
+		PictureList->AddChild(PictureButton);
+		PictureButtonsById.Add(PhotoId, PictureButton);
+	}
+
+	ANPMainPlayerController* PlayerController = Cast<ANPMainPlayerController>(GetOwningPlayer());
+	TransferComponent = IsValid(PlayerController) ? PlayerController->GetPhotoTransferComponent() : nullptr;
+	if (!IsValid(TransferComponent))
+	{
+		return;
+	}
+
+	TransferComponent->OnPhotoTextureReceived.AddUniqueDynamic(this, &ThisClass::HandlePhotoTextureReceived);
+	RequestNextPhoto();
+}
+
+void UNPPersonalResultWidget::RequestNextPhoto()
+{
+	if (!IsValid(TransferComponent) || DownloadingPhotoId.IsValid())
+	{
+		return;
+	}
+
+	while (!PendingPhotoIds.IsEmpty())
+	{
+		const FGuid NextPhotoId = PendingPhotoIds[0];
+		PendingPhotoIds.RemoveAt(0);
+		if (!NextPhotoId.IsValid() || !PictureButtonsById.Contains(NextPhotoId))
+		{
+			continue;
+		}
+
+		DownloadingPhotoId = NextPhotoId;
+		if (UTexture2D* CachedTexture = TransferComponent->FindReceivedPhoto(NextPhotoId))
+		{
+			HandlePhotoTextureReceived(NextPhotoId, CachedTexture);
+			return;
+		}
+
+		TransferComponent->RequestPhoto(NextPhotoId);
+		return;
 	}
 }
 
-void UNPPersonalResultWidget::HandleShowPictureButtonClicked()
+void UNPPersonalResultWidget::HandlePhotoTextureReceived(const FGuid PhotoId, UTexture2D* Texture)
 {
-	if (!IsValid(ResultPlayerState))
+	if (PhotoId != DownloadingPhotoId || !IsValid(Texture))
 	{
 		return;
 	}
 
-	if (!IsValid(PicturePopupWidgetClass))
+	DownloadingPhotoId.Invalidate();
+	if (TObjectPtr<UNPResultPictureButton>* PictureButton = PictureButtonsById.Find(PhotoId))
 	{
-		return;
+		if (IsValid(*PictureButton))
+		{
+			FString CapturedPlayerName;
+			if (ANPMainGameState* GameState = GetWorld() ? GetWorld()->GetGameState<ANPMainGameState>() : nullptr)
+			{
+				for (const FNPReplicatedPhotoEvidence& Evidence : GameState->GetPhotoEvidence())
+				{
+					if (Evidence.PhotoId == PhotoId && IsValid(Evidence.Thief))
+					{
+						CapturedPlayerName = Evidence.Thief->GetPlayerName();
+						break;
+					}
+				}
+			}
+
+			(*PictureButton)->SetPictureTexture(Texture, CapturedPlayerName);
+		}
 	}
 
-	UNPResultPicturePopup* Popup = CreateWidget<UNPResultPicturePopup>(
-		GetOwningPlayer(),
-		PicturePopupWidgetClass);
-	if (!IsValid(Popup))
-	{
-		return;
-	}
-
-	Popup->AddToViewport(100);
-	Popup->OpenForPlayer(ResultPlayerState);
+	RequestNextPhoto();
 }

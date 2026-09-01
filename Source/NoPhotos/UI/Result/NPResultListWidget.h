@@ -1,6 +1,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/Main/NPMainGameState.h"
+#include "TimerManager.h"
 #include "UI/NPUserWidget.h"
 #include "NPResultListWidget.generated.h"
 
@@ -14,8 +16,10 @@ class NOPHOTOS_API UNPResultListWidget : public UNPUserWidget
 
 protected:
 	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
 
 	void RefreshResultList();
+	void AddNextResultEntry();
 
 private:
 	UPROPERTY(meta = (BindWidget))
@@ -23,4 +27,9 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UNPPersonalResultWidget> PersonalResultWidgetClass;
+
+	TArray<FNPPlayerRanking> PendingPlayerRankings;
+	TArray<TObjectPtr<UNPPersonalResultWidget>> ResultEntryWidgets;
+	int32 NextRankingIndex = INDEX_NONE;
+	FTimerHandle ResultEntryTimer;
 };
