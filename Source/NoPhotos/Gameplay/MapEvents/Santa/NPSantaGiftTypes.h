@@ -39,7 +39,7 @@ struct NOPHOTOS_API FNPSantaGiftDropSchedule
 	}
 };
 
-/** 착지 상태와 시각/위치를 묶어서 복제해 중도 접속에도 개봉 진행률을 복원합니다. */
+/** 착지와 잡기에 의한 개봉 시작을 함께 복제해 중도 접속에도 대기/개봉 상태를 복원합니다. */
 USTRUCT()
 struct FNPSantaGiftLandingState
 {
@@ -47,6 +47,10 @@ struct FNPSantaGiftLandingState
 
 	UPROPERTY()
 	bool bLanded = false;
+	UPROPERTY()
+	bool bOpening = false;
+	UPROPERTY()
+	float OpeningServerTime = 0.0f;
 	UPROPERTY()
 	float ServerTime = 0.0f;
 	UPROPERTY()

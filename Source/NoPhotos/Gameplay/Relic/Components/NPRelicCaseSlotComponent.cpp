@@ -122,16 +122,26 @@ ANPBaseRelic* UNPRelicCaseSlotComponent::RecreateRelicInEditor()
 
 void UNPRelicCaseSlotComponent::ReleaseRelic()
 {
+	SetCaseAccessible(true);
+}
+
+void UNPRelicCaseSlotComponent::SetCaseAccessible(const bool bAccessible)
+{
 	AActor* Owner = GetOwner();
-	if (!Owner || !Owner->HasAuthority() || bIsRelicReleased)
+	if (!Owner || !Owner->HasAuthority() || bIsRelicReleased == bAccessible)
+	{
+		return;
+	}
+	if (IsValid(SpawnedRelic) && (!SpawnedRelic->IsDisplayed() || SpawnedRelic->IsReturned()))
 	{
 		return;
 	}
 
-	bIsRelicReleased = true;
+	Owner->FlushNetDormancy();
+	bIsRelicReleased = bAccessible;
 	if (IsValid(SpawnedRelic))
 	{
-		SpawnedRelic->SetUnlocked(true);
+		SpawnedRelic->SetUnlocked(bAccessible);
 	}
 	ApplyRelicState();
 	Owner->ForceNetUpdate();

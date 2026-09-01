@@ -6,10 +6,11 @@
 #include "NPPossessionMapEvent.generated.h"
 
 class ANPGhostFollowerActor;
+class ANPRelicCase;
 class ANPStablePhysicsPawn;
 class UAbilitySystemComponent;
 
-/** 플레이어 등 뒤 유령 표시와 서버 GAS 효과를 통한 전후/좌우 이동 반전을 관리합니다. */
+/** 등 뒤 유령, 서버 GAS 이동 반전, 이벤트 동안의 진열장 임시 해제를 관리합니다. */
 UCLASS(Blueprintable)
 class NOPHOTOS_API ANPPossessionMapEvent : public ANPMapEvent
 {
@@ -42,6 +43,8 @@ private:
 	void ClearLocalGhosts(bool bImmediately = false);
 	void RefreshAppliedEffects();
 	void RemoveAppliedEffects();
+	void RefreshRelicCases();
+	void RemoveTemporaryCaseUnlocks();
 
 	UFUNCTION()
 	void OnRep_AffectedPlayers();
@@ -52,6 +55,7 @@ private:
 
 	TMap<TWeakObjectPtr<ANPStablePhysicsPawn>, TWeakObjectPtr<ANPGhostFollowerActor>> LocalGhosts;
 	TMap<TWeakObjectPtr<UAbilitySystemComponent>, FActiveGameplayEffectHandle> AppliedEffects;
+	TSet<TWeakObjectPtr<ANPRelicCase>> TemporarilyUnlockedCases;
 	FTimerHandle PlayerRefreshTimer;
 	bool bWarnedMissingGhostClass = false;
 	bool bWarnedSpawnFailure = false;

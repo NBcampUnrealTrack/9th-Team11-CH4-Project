@@ -64,8 +64,13 @@ public:
 	bool IsGameplayActive() const { return LifecycleState == ENPGoblinLifecycleState::Active; }
 
 	/** 이벤트가 생성 직전에 주입하는 서버 전용 순찰 경로입니다. */
-	void SetPatrolRoute(ANPGoblinPatrolRoute* InPatrolRoute) { PatrolRoute = InPatrolRoute; }
+	void SetPatrolRoute(ANPGoblinPatrolRoute* InPatrolRoute)
+	{
+		PatrolRoute = InPatrolRoute;
+		bRequiresPatrolRoute = InPatrolRoute != nullptr;
+	}
 	ANPGoblinPatrolRoute* GetPatrolRoute() const { return PatrolRoute; }
+	bool RequiresPatrolRoute() const { return bRequiresPatrolRoute; }
 
 	float GetAIDecisionInterval() const { return FMath::Max(0.05f, AIDecisionInterval); }
 	float GetPatrolAcceptanceRadius() const { return FMath::Max(1.0f, PatrolAcceptanceRadius); }
@@ -317,6 +322,7 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<ANPGoblinPatrolRoute> PatrolRoute;
+	bool bRequiresPatrolRoute = false;
 
 	/** 가장 최근 촬영에서 생성된 유물입니다. */
 	UPROPERTY(Transient)

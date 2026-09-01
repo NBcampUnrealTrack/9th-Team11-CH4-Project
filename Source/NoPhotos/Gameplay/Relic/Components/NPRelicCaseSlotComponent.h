@@ -27,6 +27,9 @@ public:
 	/** 생성된 유물을 케이스 잠금에서 해제합니다. */
 	void ReleaseRelic();
 
+	/** 전시 중인 유물만 케이스 접근 상태에 맞춥니다. 이미 꺼낸 유물은 유지합니다. */
+	void SetCaseAccessible(bool bAccessible);
+
 #if WITH_EDITOR
 	/** 기존 유물을 제거하고 슬롯에 지정된 유물을 에디터 레벨에 생성합니다. */
 	ANPBaseRelic* RecreateRelicInEditor();

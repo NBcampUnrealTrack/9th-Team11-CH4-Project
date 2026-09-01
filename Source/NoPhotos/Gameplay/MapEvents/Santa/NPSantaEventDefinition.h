@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
 #include "Gameplay/MapEvents/NPMapEventDefinition.h"
+#include "NPSantaFlightTypes.h"
 #include "NPSantaGiftTypes.h"
 #include "NPSantaEventDefinition.generated.h"
 
@@ -10,7 +11,7 @@ class ANPSantaFlightActor;
 class ANPSantaGiftActor;
 class ANPBaseRelic;
 
-/** 공통 메타데이터/비행 시간, 선물 투하 설정과 랜덤 유물 후보를 관리합니다. */
+/** 전체 이벤트 시간, 반복 비행/재등장 간격, 매 비행의 선물 투하와 랜덤 유물 후보를 관리합니다. */
 UCLASS(BlueprintType)
 class NOPHOTOS_API UNPSantaEventDefinition : public UNPMapEventDefinition
 {
@@ -20,6 +21,7 @@ public:
 	UNPSantaEventDefinition();
 	TSubclassOf<ANPSantaFlightActor> GetSantaClass() const { return SantaClass; }
 	FGameplayTag GetRouteGroup() const { return RouteGroup; }
+	const FNPSantaFlightSchedule& GetFlightSchedule() const { return FlightSchedule; }
 	TSubclassOf<ANPSantaGiftActor> GetGiftClass() const { return GiftClass; }
 	const FNPSantaGiftDropSchedule& GetGiftDrops() const { return GiftDrops; }
 	const TArray<TSubclassOf<ANPBaseRelic>>& GetRelicClasses() const { return RelicClasses; }
@@ -33,10 +35,15 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Santa Event", meta=(AllowPrivateAccess="true"))
 	FGameplayTag RouteGroup;
 
+	/** Duration은 전체 이벤트 수명입니다. 이 설정은 개별 비행과 비행 사이 대기 시간에만 사용합니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Santa Event|Flight", meta=(AllowPrivateAccess="true"))
+	FNPSantaFlightSchedule FlightSchedule;
+
 	/** 사용자가 선물상자 외형을 설정한 NPSantaGiftActor 자식 BP입니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Santa Event|Gifts", meta=(AllowPrivateAccess="true"))
 	TSubclassOf<ANPSantaGiftActor> GiftClass;
 
+	/** 매 비행마다 수량과 진행 구간을 처음부터 적용합니다. 마지막 비행은 이벤트 종료로 잘릴 수 있습니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Santa Event|Gifts", meta=(AllowPrivateAccess="true"))
 	FNPSantaGiftDropSchedule GiftDrops;
 

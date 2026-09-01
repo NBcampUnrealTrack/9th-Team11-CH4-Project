@@ -2,10 +2,12 @@
 
 #include "AbilitySystemComponent.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "Gameplay/Character/NPStablePhysicsPawn.h"
 #include "Gameplay/Character/Component/NPControlReversalComponent.h"
 #include "Gameplay/AbilitySystem/Effects/NPPossessionGameplayEffect.h"
+#include "Gameplay/Relic/Case/NPRelicCase.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "NPGhostFollowerActor.h"
@@ -40,6 +42,7 @@ void ANPPossessionMapEvent::UpdateTrackingState()
 	GetWorldTimerManager().ClearTimer(PlayerRefreshTimer);
 	if (!IsEventActive())
 	{
+		RemoveTemporaryCaseUnlocks();
 		RemoveAppliedEffects();
 		ClearLocalGhosts();
 		if (HasAuthority() && !AffectedPlayers.IsEmpty())
@@ -76,6 +79,11 @@ void ANPPossessionMapEvent::RefreshPlayersAndGhosts()
 	}
 	if (HasAuthority())
 	{
+		RefreshRelicCases();
+		if (!IsEventActive() || IsActorBeingDestroyed())
+		{
+			return;
+		}
 		TArray<TObjectPtr<ANPStablePhysicsPawn>> CurrentPlayers;
 		for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
 		{
@@ -94,6 +102,59 @@ void ANPPossessionMapEvent::RefreshPlayersAndGhosts()
 		RefreshAppliedEffects();
 	}
 	RefreshLocalGhosts();
+}
+
+void ANPPossessionMapEvent::RefreshRelicCases()
+{
+	UWorld* World = GetWorld();
+	if (!HasAuthority() || !World || !IsEventActive() || IsActorBeingDestroyed())
+	{
+		return;
+	}
+
+	for (auto It = TemporarilyUnlockedCases.CreateIterator(); It; ++It)
+	{
+		if (!It->IsValid())
+		{
+			It.RemoveCurrent();
+		}
+	}
+	// 기존 갱신 타이머를 재사용하여 진행 중 생성/스트리밍된 케이스도 포함합니다.
+	for (TActorIterator<ANPRelicCase> It(World); It; ++It)
+	{
+		ANPRelicCase* RelicCase = *It;
+		if (!IsValid(RelicCase) || RelicCase->IsActorBeingDestroyed() ||
+			!RelicCase->HasActorBegunPlay() || RelicCase->IsBroken())
+		{
+			continue;
+		}
+		const TWeakObjectPtr<ANPRelicCase> CaseKey(RelicCase);
+		if (TemporarilyUnlockedCases.Contains(CaseKey))
+		{
+			continue;
+		}
+		// OnCaseUnlocked BP에서 이벤트를 종료해도 방금 추가한 해제를 회수할 수 있습니다.
+		TemporarilyUnlockedCases.Add(CaseKey);
+		RelicCase->SetTemporaryUnlock(this, true);
+		if (!IsEventActive() || IsActorBeingDestroyed())
+		{
+			return;
+		}
+	}
+}
+
+void ANPPossessionMapEvent::RemoveTemporaryCaseUnlocks()
+{
+	const auto CasesToRestore = MoveTemp(TemporarilyUnlockedCases);
+	TemporarilyUnlockedCases.Reset();
+	for (const TWeakObjectPtr<ANPRelicCase>& CaseKey : CasesToRestore)
+	{
+		if (ANPRelicCase* RelicCase = CaseKey.Get();
+			IsValid(RelicCase) && !RelicCase->IsActorBeingDestroyed())
+		{
+			RelicCase->SetTemporaryUnlock(this, false);
+		}
+	}
 }
 
 void ANPPossessionMapEvent::RefreshAppliedEffects()
@@ -306,6 +367,7 @@ void ANPPossessionMapEvent::ClearLocalGhosts(bool bImmediately)
 void ANPPossessionMapEvent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	GetWorldTimerManager().ClearTimer(PlayerRefreshTimer);
+	RemoveTemporaryCaseUnlocks();
 	RemoveAppliedEffects();
 	// 게임 중 이벤트 액터 파괴는 페이드, 레벨/PIE 종료는 지연 없이 정리합니다.
 	ClearLocalGhosts(EndPlayReason != EEndPlayReason::Destroyed);
