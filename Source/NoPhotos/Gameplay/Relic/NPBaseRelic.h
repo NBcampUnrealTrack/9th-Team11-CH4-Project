@@ -73,7 +73,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<UNPRelicOwnershipComponent> OwnershipComponent;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Relic", meta=(RowType="/Script/NoPhotos.NPRelicTableRow"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Relic", meta=(RowType="/Script/NoPhotos.NPRelicTableRow"))
 	FDataTableRowHandle RelicTableData;
 
 	UPROPERTY(ReplicatedUsing=OnRep_IsDisplayed, VisibleInstanceOnly, BlueprintReadOnly, Category="Relic")
