@@ -6,16 +6,16 @@
 
 class UButton;
 class UImage;
+class UTextBlock;
 class UTexture2D;
 
-/** WBP_ResultPicturePreviewPopup의 부모 클래스입니다. */
 UCLASS()
 class NOPHOTOS_API UNPResultPicturePreviewPopup : public UNPUserWidget
 {
 	GENERATED_BODY()
 
 public:
-	void OpenWithTexture(UTexture2D* InTexture);
+	void OpenWithTexture(UTexture2D* InTexture, const FString& InCapturedPlayerName = FString());
 
 protected:
 	virtual void NativeConstruct() override;
@@ -29,4 +29,7 @@ private:
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> CloseButton;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> CapturedPlayerText;
 };

@@ -5,11 +5,11 @@
 #include "NPPersonalResultWidget.generated.h"
 
 class APlayerState;
-class UButton;
 class UHorizontalBox;
 class UTextBlock;
-class UUserWidget;
-class UNPResultPicturePopup;
+class UTexture2D;
+class UNPPhotoTransferComponent;
+class UNPResultPictureButton;
 
 UCLASS()
 class NOPHOTOS_API UNPPersonalResultWidget : public UNPUserWidget
@@ -20,28 +20,33 @@ public:
 	void SetupResult(int32 InRank, const FString& InPlayerName,	int32 InScore,	APlayerState* InPlayerState);
 
 protected:
-	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
 private:
+	void CreatePictureButtons();
+	void RequestNextPhoto();
+
 	UFUNCTION()
-	void HandleShowPictureButtonClicked();
+	void HandlePhotoTextureReceived(FGuid PhotoId, UTexture2D* Texture);
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> RankText;
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> PlayerNameText;
 	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UHorizontalBox> RelicList;
+	TObjectPtr<UHorizontalBox> PictureList;
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> ScoreText;
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> ShowPictureButton;
-
-	// UNPResultPicturePopup을 부모로 한 WBP_ResultPicturePopup을 여기에서 지정합니다.
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
-	TSubclassOf<UNPResultPicturePopup> PicturePopupWidgetClass;
+	TSubclassOf<UNPResultPictureButton> PictureButtonWidgetClass;
 
 	UPROPERTY(Transient)
 	TObjectPtr<APlayerState> ResultPlayerState;
+	UPROPERTY(Transient)
+	TObjectPtr<UNPPhotoTransferComponent> TransferComponent;
+	UPROPERTY(Transient)
+	TMap<FGuid, TObjectPtr<UNPResultPictureButton>> PictureButtonsById;
+
+	TArray<FGuid> PendingPhotoIds;
+	FGuid DownloadingPhotoId;
 };
