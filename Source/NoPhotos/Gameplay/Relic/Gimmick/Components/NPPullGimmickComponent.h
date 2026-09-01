@@ -21,26 +21,34 @@ class NOPHOTOS_API UNPPullGimmickComponent : public UNPRelicGimmickComponent
 
 public:
 	UNPPullGimmickComponent();
+	virtual void GetLifetimeReplicatedProps(
+		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	UFUNCTION(
 		BlueprintCallable,
 		Category="Pull Gimmick",
-		meta=(ToolTip="Pull 연출이 끝났을 때 반드시 호출합니다."))
+		meta=(ToolTip="로컬 Pull 연출이 끝났을 때 호출합니다. 서버의 기믹 완료 판정에는 영향을 주지 않습니다."))
 	void NotifyPullFinished();
 
 	UFUNCTION(BlueprintPure, Category="Pull Gimmick")
 	bool IsPullPresentationPlaying() const { return bIsPullPresentationPlaying; }
 
+	UFUNCTION(BlueprintPure, Category="Pull Gimmick")
+	int32 GetCurrentPullCount() const { return CurrentPullCount; }
+
 	UPROPERTY(
 		BlueprintAssignable,
 		Category="Pull Gimmick",
-		meta=(ToolTip="Pull 성공 시 발생합니다. 연출 종료 후 NotifyPullFinished를 호출해야 합니다."))
+		meta=(ToolTip="서버가 Pull 성공을 확정하고 CurrentPullCount가 갱신될 때 서버와 각 클라이언트에서 발생합니다."))
 	FOnPullSucceeded OnPullSucceeded;
 
 protected:
 	virtual void BeginPlay() override;
 
 private:
+	UFUNCTION()
+	void OnRep_CurrentPullCount();
+
 	void HandleGrabStarted(UPrimitiveComponent* GrabbedComponent);
 	void HandleGrabForceUpdated(
 		const FVector& LinearForce,
@@ -67,7 +75,12 @@ private:
 	UPROPERTY(EditAnywhere, Category="Pull Gimmick", meta=(ClampMin="1"))
 	int32 RequiredPullCount = 3;
 
-	UPROPERTY(VisibleInstanceOnly, Category="Pull Gimmick")
+	UPROPERTY(
+		ReplicatedUsing=OnRep_CurrentPullCount,
+		VisibleInstanceOnly,
+		BlueprintReadOnly,
+		Category="Pull Gimmick",
+		meta=(AllowPrivateAccess="true"))
 	int32 CurrentPullCount = 0;
 
 	UPROPERTY(VisibleInstanceOnly, Category="Pull Gimmick|Debug")

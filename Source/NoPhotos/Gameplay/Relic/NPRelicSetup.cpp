@@ -2,6 +2,7 @@
 
 #include "Gameplay/Relic/Gimmick/Components/NPRelicGimmickComponent.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
+#include "Net/UnrealNetwork.h"
 #include "NoPhotos.h"
 
 ANPRelicSetup::ANPRelicSetup()
@@ -10,11 +11,23 @@ ANPRelicSetup::ANPRelicSetup()
 	bReplicates = true;
 }
 
+void ANPRelicSetup::GetLifetimeReplicatedProps(
+	TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(ANPRelicSetup, Relic);
+}
+
 void ANPRelicSetup::BeginPlay()
 {
 	Super::BeginPlay();
 
 	if (!HasAuthority())
+	{
+		return;
+	}
+	if (!PrepareRelicSetup())
 	{
 		return;
 	}
@@ -37,6 +50,11 @@ void ANPRelicSetup::BeginPlay()
 		Gimmicks.Num(),
 		*GetNameSafe(Relic));
 	RefreshRelicLock();
+}
+
+bool ANPRelicSetup::PrepareRelicSetup()
+{
+	return true;
 }
 
 void ANPRelicSetup::CollectGimmicks()
@@ -84,15 +102,7 @@ void ANPRelicSetup::HandleGimmickCompleted()
 
 void ANPRelicSetup::RefreshRelicLock()
 {
-	bool bAllGimmicksCompleted = true;
-	for (const UNPRelicGimmickComponent* Gimmick : Gimmicks)
-	{
-		if (!Gimmick || !Gimmick->IsCompleted())
-		{
-			bAllGimmicksCompleted = false;
-			break;
-		}
-	}
+	const bool bAllGimmicksCompleted = AreAllGimmicksCompleted();
 
 	Relic->SetUnlocked(bAllGimmicksCompleted);
 	UE_LOG(
@@ -103,4 +113,17 @@ void ANPRelicSetup::RefreshRelicLock()
 		*GetNameSafe(Relic),
 		bAllGimmicksCompleted ? TEXT("true") : TEXT("false"),
 		Gimmicks.Num());
+}
+
+bool ANPRelicSetup::AreAllGimmicksCompleted() const
+{
+	for (const UNPRelicGimmickComponent* Gimmick : Gimmicks)
+	{
+		if (!Gimmick || !Gimmick->IsCompleted())
+		{
+			return false;
+		}
+	}
+
+	return true;
 }
