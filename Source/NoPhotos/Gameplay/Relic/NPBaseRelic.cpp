@@ -33,7 +33,14 @@ void ANPBaseRelic::BeginPlay()
 {
 	Super::BeginPlay();
 
-	OnRep_IsDisplayed();
+	if (HasAuthority() && bStartWithPhysicsEnabled)
+	{
+		ReleaseFromDisplay();
+	}
+	else
+	{
+		OnRep_IsDisplayed();
+	}
 	OnRep_IsReturned();
 	GrabbableComponent->OnGrabStarted.AddUObject(
 		this,
