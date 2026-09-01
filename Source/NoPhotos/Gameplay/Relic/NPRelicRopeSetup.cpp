@@ -48,35 +48,31 @@ void ANPRelicRopeSetup::GetLifetimeReplicatedProps(
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ANPRelicRopeSetup, RemainingRopeCount);
+	DOREPLIFETIME(ANPRelicRopeSetup, RopeBindings);
 }
 
-void ANPRelicRopeSetup::BeginPlay()
+bool ANPRelicRopeSetup::IsRopeAssemblyReady() const
 {
-	Super::BeginPlay();
-
-	if (!HasAuthority())
+	if (!IsValid(Relic) || RopeBindings.IsEmpty())
 	{
-		return;
+		return false;
 	}
 
-	if (bSpawnAssemblyOnBeginPlay && !SpawnAssemblyFromMarkers())
+	for (const FNPRelicRopeBinding& Binding : RopeBindings)
 	{
-		return;
+		if (!IsValid(Binding.PinActor)
+			|| !IsValid(Binding.RopeSegment))
+		{
+			return false;
+		}
 	}
 
-	if (!Relic)
-	{
-		UE_LOG(
-			LogNoPhotos,
-			Warning,
-			TEXT("[%s] RelicRopeSetup has no Relic assigned."),
-			*GetNameSafe(this));
-		return;
-	}
+	return true;
+}
 
-	CollectGimmicks();
-	RefreshRopeBindings();
-	RefreshRelicLock();
+bool ANPRelicRopeSetup::PrepareRelicSetup()
+{
+	return !bSpawnAssemblyOnBeginPlay || SpawnAssemblyFromMarkers();
 }
 
 bool ANPRelicRopeSetup::SpawnAssemblyFromMarkers()
@@ -248,6 +244,11 @@ bool ANPRelicRopeSetup::SpawnAssemblyFromMarkers()
 			continue;
 		}
 
+		// PinClass Blueprint의 설정 누락과 관계없이 서버가 생성한 Pin과
+		// 그 이동을 모든 클라이언트에 전달합니다.
+		Pin->SetReplicates(true);
+		Pin->SetReplicateMovement(true);
+
 		Anchor->AttachToActor(
 			SpawnedRopeReleaseRoot,
 			FAttachmentTransformRules::KeepWorldTransform);
@@ -281,7 +282,14 @@ bool ANPRelicRopeSetup::SpawnAssemblyFromMarkers()
 		*GetNameSafe(this),
 		*GetNameSafe(Relic),
 		RopeBindings.Num());
-	return !RopeBindings.IsEmpty();
+	if (RopeBindings.IsEmpty())
+	{
+		return false;
+	}
+
+	OnRep_RopeAssembly();
+	ForceNetUpdate();
+	return true;
 }
 
 USceneComponent* ANPRelicRopeSetup::FindMarker(const FName& MarkerName) const
@@ -329,44 +337,12 @@ void ANPRelicRopeSetup::CollectIndexedMarkers(
 
 void ANPRelicRopeSetup::CollectGimmicks()
 {
-	CollectGimmicksFromActor(Relic);
-
-	for (AActor* GimmickActor : GimmickActors)
-	{
-		CollectGimmicksFromActor(GimmickActor);
-	}
+	Super::CollectGimmicks();
 
 	for (const FNPRelicRopeBinding& Binding : RopeBindings)
 	{
 		CollectGimmicksFromActor(Binding.PinActor);
 	}
-}
-
-void ANPRelicRopeSetup::CollectGimmicksFromActor(AActor* GimmickActor)
-{
-	if (!GimmickActor)
-	{
-		return;
-	}
-
-	TArray<UNPRelicGimmickComponent*> ActorGimmicks;
-	GimmickActor->GetComponents<UNPRelicGimmickComponent>(ActorGimmicks);
-	for (UNPRelicGimmickComponent* Gimmick : ActorGimmicks)
-	{
-		if (Gimmick && !Gimmicks.Contains(Gimmick))
-		{
-			Gimmicks.Add(Gimmick);
-			Gimmick->OnCompleted.AddUObject(
-				this,
-				&ANPRelicRopeSetup::HandleGimmickCompleted);
-		}
-	}
-}
-
-void ANPRelicRopeSetup::HandleGimmickCompleted()
-{
-	RefreshRopeBindings();
-	RefreshRelicLock();
 }
 
 void ANPRelicRopeSetup::RefreshRopeBindings()
@@ -400,15 +376,9 @@ void ANPRelicRopeSetup::RefreshRopeBindings()
 
 void ANPRelicRopeSetup::RefreshRelicLock()
 {
-	bool bAllGimmicksCompleted = RemainingRopeCount == 0;
-	for (const UNPRelicGimmickComponent* Gimmick : Gimmicks)
-	{
-		if (!Gimmick || !Gimmick->IsCompleted())
-		{
-			bAllGimmicksCompleted = false;
-			break;
-		}
-	}
+	RefreshRopeBindings();
+	const bool bAllGimmicksCompleted =
+		RemainingRopeCount == 0 && AreAllGimmicksCompleted();
 
 	if (bAllGimmicksCompleted)
 	{
@@ -681,4 +651,55 @@ bool ANPRelicRopeSetup::IsRopeBindingCompleted(
 void ANPRelicRopeSetup::OnRep_RemainingRopeCount()
 {
 	OnRemainingRopeCountChanged.Broadcast(RemainingRopeCount);
+}
+
+void ANPRelicRopeSetup::OnRep_RopeAssembly()
+{
+	if (!IsRopeAssemblyReady())
+	{
+		UE_LOG(
+			LogNoPhotos,
+			Warning,
+			TEXT("[%s] Rope assembly replication received before all references were ready. Role=%s Relic=%s Bindings=%d"),
+			*GetNameSafe(this),
+			HasAuthority() ? TEXT("Authority") : TEXT("Client"),
+			*GetNameSafe(Relic),
+			RopeBindings.Num());
+		return;
+	}
+
+	if (bHasBroadcastRopeAssemblyReady
+		|| bRopeAssemblyReadyNotificationPending
+		|| !GetWorld())
+	{
+		return;
+	}
+
+	// 초기 복제의 RepNotify는 Blueprint BeginPlay보다 먼저 실행될 수
+	// 있으므로 다음 Tick에 알림을 보내 Blueprint가 바인딩할 시간을 줍니다.
+	bRopeAssemblyReadyNotificationPending = true;
+	GetWorldTimerManager().SetTimerForNextTick(
+		FTimerDelegate::CreateUObject(
+			this,
+			&ANPRelicRopeSetup::BroadcastRopeAssemblyReady));
+}
+
+void ANPRelicRopeSetup::BroadcastRopeAssemblyReady()
+{
+	bRopeAssemblyReadyNotificationPending = false;
+	if (bHasBroadcastRopeAssemblyReady || !IsRopeAssemblyReady())
+	{
+		return;
+	}
+
+	bHasBroadcastRopeAssemblyReady = true;
+	UE_LOG(
+		LogNoPhotos,
+		Log,
+		TEXT("[%s] Rope assembly ready. Role=%s Relic=%s Bindings=%d"),
+		*GetNameSafe(this),
+		HasAuthority() ? TEXT("Authority") : TEXT("Client"),
+		*GetNameSafe(Relic),
+		RopeBindings.Num());
+	OnRopeAssemblyReady.Broadcast();
 }
