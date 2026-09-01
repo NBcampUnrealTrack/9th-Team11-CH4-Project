@@ -2,6 +2,7 @@
 
 #include "GameFramework/Actor.h"
 #include "Gameplay/Interaction/Components/GrabbableComponent.h"
+#include "Net/UnrealNetwork.h"
 #include "NoPhotos.h"
 
 UNPPullGimmickComponent::UNPPullGimmickComponent()
@@ -9,11 +10,17 @@ UNPPullGimmickComponent::UNPPullGimmickComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
+void UNPPullGimmickComponent::GetLifetimeReplicatedProps(
+	TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(UNPPullGimmickComponent, CurrentPullCount);
+}
+
 void UNPPullGimmickComponent::NotifyPullFinished()
 {
-	if (!GetOwner()
-		|| !GetOwner()->HasAuthority()
-		|| !bIsPullPresentationPlaying)
+	if (!GetOwner() || !bIsPullPresentationPlaying)
 	{
 		return;
 	}
@@ -26,10 +33,27 @@ void UNPPullGimmickComponent::NotifyPullFinished()
 		*GetNameSafe(GetOwner()),
 		CurrentPullCount,
 		RequiredPullCount);
-	if (CurrentPullCount >= RequiredPullCount)
+}
+
+void UNPPullGimmickComponent::OnRep_CurrentPullCount()
+{
+	if (CurrentPullCount <= 0)
 	{
-		CompleteGimmick();
+		return;
 	}
+
+	bIsPullPresentationPlaying = true;
+	UE_LOG(
+		LogNoPhotos,
+		Log,
+		TEXT("[%s] Pull state received. Role=%s Count=%d/%d"),
+		*GetNameSafe(GetOwner()),
+		GetOwner() && GetOwner()->HasAuthority()
+			? TEXT("Authority")
+			: TEXT("Client"),
+		CurrentPullCount,
+		RequiredPullCount);
+	OnPullSucceeded.Broadcast(CurrentPullCount, RequiredPullCount);
 }
 
 void UNPPullGimmickComponent::BeginPlay()
@@ -102,12 +126,9 @@ void UNPPullGimmickComponent::HandleGrabForceUpdated(
 		PullForce >= PullForceThreshold
 		&& IntentForceAlignment >= MinimumIntentAlignment;
 
-	if (bExceedsThreshold
-		&& !bPullForceExceeded
-		&& !bIsPullPresentationPlaying)
+	if (bExceedsThreshold && !bPullForceExceeded)
 	{
 		++CurrentPullCount;
-		bIsPullPresentationPlaying = true;
 		UE_LOG(
 			LogNoPhotos,
 			Log,
@@ -117,15 +138,15 @@ void UNPPullGimmickComponent::HandleGrabForceUpdated(
 			PullForce,
 			CurrentPullCount,
 			RequiredPullCount);
-		if (OnPullSucceeded.IsBound())
+
+		// RepNotify는 서버에서 자동 호출되지 않으므로 서버 연출도 같은
+		// 경로를 사용하도록 직접 호출합니다. 기믹 완료 판정은 연출
+		// callback과 분리하여 서버가 즉시 확정합니다.
+		OnRep_CurrentPullCount();
+		GetOwner()->ForceNetUpdate();
+		if (CurrentPullCount >= RequiredPullCount)
 		{
-			OnPullSucceeded.Broadcast(
-				CurrentPullCount,
-				RequiredPullCount);
-		}
-		else
-		{
-			NotifyPullFinished();
+			CompleteGimmick();
 		}
 	}
 

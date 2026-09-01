@@ -1,20 +1,21 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Actor.h"
+#include "Gameplay/Relic/NPRelicSetup.h"
 #include "NPRelicRopeSetup.generated.h"
 
 class ANPBaseRelic;
 class ANPRopeAnchorActor;
 class ANPRopeSegmentActor;
 class FLifetimeProperty;
-class UNPRelicGimmickComponent;
 class USceneComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FOnNPRemainingRopeCountChanged,
 	int32,
 	RemainingRopeCount);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnNPRopeAssemblyReady);
 
 /** 핀 액터의 모든 RelicGimmick이 완료되면 연결된 Rope의 끝을 해제합니다. */
 USTRUCT(BlueprintType)
@@ -34,7 +35,7 @@ struct NOPHOTOS_API FNPRelicRopeBinding
  * 핀 기믹 완료, Rope 해제, 남은 Rope 수, 유물 잠금을 함께 조정합니다.
  */
 UCLASS(Blueprintable)
-class NOPHOTOS_API ANPRelicRopeSetup : public AActor
+class NOPHOTOS_API ANPRelicRopeSetup : public ANPRelicSetup
 {
 	GENERATED_BODY()
 
@@ -47,11 +48,20 @@ public:
 	UFUNCTION(BlueprintPure, Category="Relic Rope Setup")
 	int32 GetRemainingRopeCount() const { return RemainingRopeCount; }
 
+	UFUNCTION(BlueprintPure, Category="Relic Rope Setup")
+	bool IsRopeAssemblyReady() const;
+
 	UPROPERTY(BlueprintAssignable, Category="Relic Rope Setup")
 	FOnNPRemainingRopeCountChanged OnRemainingRopeCountChanged;
 
+	/** 서버의 자동 생성 결과가 클라이언트에 준비되었을 때 발생합니다. */
+	UPROPERTY(BlueprintAssignable, Category="Relic Rope Setup")
+	FOnNPRopeAssemblyReady OnRopeAssemblyReady;
+
 protected:
-	virtual void BeginPlay() override;
+	virtual bool PrepareRelicSetup() override;
+	virtual void CollectGimmicks() override;
+	virtual void RefreshRelicLock() override;
 
 	/** true이면 Blueprint의 SpawnPoint 컴포넌트를 읽어 유물 세트를 자동 생성합니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic Rope Setup|Spawn")
@@ -117,15 +127,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic Rope Setup|Release")
 	float RopeReleaseGroundClearance = 5.0f;
 
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Relic Rope Setup")
-	TObjectPtr<ANPBaseRelic> Relic;
-
-	/** RopeBinding 외에 추가로 잠금 해제 조건에 포함할 기믹 액터입니다. */
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Relic Rope Setup")
-	TArray<TObjectPtr<AActor>> GimmickActors;
-
 	/** 배열 크기가 연결된 전체 Rope 수이며 PinActor는 기믹 목록에 자동 포함됩니다. */
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Relic Rope Setup")
+	UPROPERTY(
+		EditInstanceOnly,
+		ReplicatedUsing=OnRep_RopeAssembly,
+		BlueprintReadOnly,
+		Category="Relic Rope Setup")
 	TArray<FNPRelicRopeBinding> RopeBindings;
 
 private:
@@ -134,11 +141,7 @@ private:
 	void CollectIndexedMarkers(
 		const FString& Prefix,
 		TMap<FString, USceneComponent*>& OutMarkers) const;
-	void CollectGimmicks();
-	void CollectGimmicksFromActor(AActor* GimmickActor);
-	void HandleGimmickCompleted();
 	void RefreshRopeBindings();
-	void RefreshRelicLock();
 	void ScheduleRopeRelease();
 	void StartRopeRelease();
 	void ReleaseRelicThroughGrabContract();
@@ -149,8 +152,9 @@ private:
 	UFUNCTION()
 	void OnRep_RemainingRopeCount();
 
-	UPROPERTY(Transient, VisibleInstanceOnly, Category="Relic Rope Setup|Debug")
-	TArray<TObjectPtr<UNPRelicGimmickComponent>> Gimmicks;
+	UFUNCTION()
+	void OnRep_RopeAssembly();
+	void BroadcastRopeAssemblyReady();
 
 	UPROPERTY(Transient, VisibleInstanceOnly, Category="Relic Rope Setup|Debug")
 	TArray<TObjectPtr<AActor>> SpawnedPins;
@@ -174,6 +178,8 @@ private:
 	FTimerHandle RopeReleaseDelayTimer;
 	bool bRopeReleaseScheduled = false;
 	bool bRopeReleaseStarted = false;
+	bool bRopeAssemblyReadyNotificationPending = false;
+	bool bHasBroadcastRopeAssemblyReady = false;
 
 	UPROPERTY(
 		ReplicatedUsing=OnRep_RemainingRopeCount,

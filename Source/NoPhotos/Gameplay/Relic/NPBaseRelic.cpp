@@ -61,6 +61,12 @@ const FNPRelicTableRow* ANPBaseRelic::GetRelicTableData() const
 	return RelicTableData.GetRow<FNPRelicTableRow>(TEXT("GetRelicTableData"));
 }
 
+void ANPBaseRelic::SetRelicTableData(
+	const FDataTableRowHandle& InRelicTableData)
+{
+	RelicTableData = InRelicTableData;
+}
+
 void ANPBaseRelic::SetUnlocked(bool bUnlocked)
 {
 	if (!HasAuthority() || bIsUnlocked == bUnlocked)
