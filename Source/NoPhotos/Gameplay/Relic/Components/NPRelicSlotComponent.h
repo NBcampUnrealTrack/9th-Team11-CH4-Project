@@ -67,4 +67,6 @@ protected:
 private:
 	ANPBaseRelic* CreateConfiguredRelic(EObjectFlags InObjectFlags);
 	void ApplyRelicState();
+
+	bool bCaseAccessible = false;
 };

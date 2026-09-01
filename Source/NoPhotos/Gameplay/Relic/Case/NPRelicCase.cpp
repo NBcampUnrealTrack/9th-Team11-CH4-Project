@@ -405,11 +405,6 @@ void ANPRelicCase::SpawnContainedRelics()
 
 void ANPRelicCase::UpdateContainedRelics()
 {
-	if (!HasAuthority())
-	{
-		return;
-	}
-
 	for (UNPRelicSlotComponent* RelicSlot : RelicSlots)
 	{
 		if (IsValid(RelicSlot))
