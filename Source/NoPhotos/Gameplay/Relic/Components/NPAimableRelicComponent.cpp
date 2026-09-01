@@ -13,9 +13,11 @@
 #include "Gameplay/Relic/Abilities/NPRelicFireAbility.h"
 #include "GameplayEffect.h"
 #include "GameFramework/Actor.h"
+#include "Kismet/GameplayStatics.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "NoPhotos.h"
+#include "Sound/SoundBase.h"
 
 UNPAimableRelicComponent::UNPAimableRelicComponent()
 {
@@ -47,13 +49,10 @@ bool UNPAimableRelicComponent::TryFire(
 		return false;
 	}
 
-	const double CurrentTime = World->GetTimeSeconds();
-	if (CurrentTime - LastServerFireTime
-		< FMath::Max(AimSettings.FireInterval, 0.0f))
+	if (!TryConsumeFireCooldown())
 	{
 		return false;
 	}
-	LastServerFireTime = CurrentTime;
 
 	const FVector TraceStart = CameraLocation;
 	const FVector AimDirection = CameraForward.GetSafeNormal();
@@ -225,6 +224,36 @@ bool UNPAimableRelicComponent::TryFire(
 	return true;
 }
 
+bool UNPAimableRelicComponent::TryConsumeFireCooldown()
+{
+	const UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return false;
+	}
+
+	const double CurrentTime = World->GetTimeSeconds();
+	if (CurrentTime - LastServerFireTime
+		< FMath::Max(AimSettings.FireInterval, 0.0f))
+	{
+		return false;
+	}
+
+	LastServerFireTime = CurrentTime;
+	return true;
+}
+
+FTransform UNPAimableRelicComponent::GetMuzzleTransform() const
+{
+	const AActor* Relic = GetOwner();
+	const USceneComponent* RelicMesh = Relic
+		? Cast<USceneComponent>(Relic->GetRootComponent())
+		: nullptr;
+	return IsValid(RelicMesh)
+		? RelicMesh->GetSocketTransform(MuzzleSocketName)
+		: FTransform::Identity;
+}
+
 bool UNPAimableRelicComponent::TryFindAssistedPlayer(
 	UWorld* World,
 	const FVector& TraceStart,
@@ -365,17 +394,28 @@ void UNPAimableRelicComponent::MulticastPlayMuzzleEffect_Implementation()
 	USceneComponent* RelicMesh = Relic
 		? Cast<USceneComponent>(Relic->GetRootComponent())
 		: nullptr;
-	if (!IsValid(MuzzleEffect) || !IsValid(RelicMesh))
+	if (!IsValid(RelicMesh))
 	{
 		return;
 	}
 
-	UNiagaraFunctionLibrary::SpawnSystemAttached(
-		MuzzleEffect,
-		RelicMesh,
-		MuzzleSocketName,
-		FVector::ZeroVector,
-		FRotator::ZeroRotator,
-		EAttachLocation::SnapToTarget,
-		true);
+	if (IsValid(MuzzleEffect))
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAttached(
+			MuzzleEffect,
+			RelicMesh,
+			MuzzleSocketName,
+			FVector::ZeroVector,
+			FRotator::ZeroRotator,
+			EAttachLocation::SnapToTarget,
+			true);
+	}
+
+	if (IsValid(MuzzleSound))
+	{
+		UGameplayStatics::PlaySoundAtLocation(
+			this,
+			MuzzleSound,
+			GetMuzzleTransform().GetLocation());
+	}
 }

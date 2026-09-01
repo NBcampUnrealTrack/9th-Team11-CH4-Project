@@ -13,6 +13,7 @@
 #include "PhysicsEngine/PhysicalAnimationComponent.h"
 #include "PhysicsEngine/PhysicsAsset.h"
 #include "PhysicsControlComponent.h"
+#include "TimerManager.h"
 #include "Gameplay/Character/Component/NPStablePhysicsDebugComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsMovementComponent.h"
@@ -125,12 +126,20 @@ void ANPStablePhysicsPawn::StopMovementInput()
 
 void ANPStablePhysicsPawn::AddExternalVelocityChange(const FVector& VelocityChange)
 {
-	if (!HasAuthority())
+	if (!HasAuthority() || VelocityChange.IsNearlyZero())
 	{
 		return;
 	}
 
 	ApplyExternalVelocityChangeLocal(VelocityChange);
+}
+
+void ANPStablePhysicsPawn::StartTemporaryRagdoll()
+{
+	if (HasAuthority())
+	{
+		BeginTemporaryRagdoll();
+	}
 }
 
 void ANPStablePhysicsPawn::ApplyExternalVelocityChangeLocal(
@@ -148,6 +157,171 @@ void ANPStablePhysicsPawn::ApplyExternalVelocityChangeLocal(
 		FullBodyRootName,
 		true,
 		true);
+	if (bTemporaryRagdollRecoveryActive)
+	{
+		BeginTemporaryRagdoll();
+	}
+}
+
+void ANPStablePhysicsPawn::BeginTemporaryRagdoll()
+{
+	if (!PhysicsMesh || !PhysicalAnimation || !PhysicsMovement)
+	{
+		return;
+	}
+
+	bTemporaryRagdollActive = true;
+	bTemporaryRagdollRecoveryActive = false;
+	TemporaryRagdollSettleStartTime = -1.0;
+	TemporaryRagdollAlignmentStartTime = -1.0;
+	StopMovementInput();
+	PhysicsMovement->SetTemporaryRagdollRecoveryActive(false);
+	PhysicsMovement->SetTemporaryRagdollActive(true);
+
+	FPhysicalAnimationData RagdollData;
+	RagdollData.bIsLocalSimulation = true;
+	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(
+		FullBodyRootName,
+		RagdollData,
+		true);
+	if (FBodyInstance* PelvisBody =
+		PhysicsMesh->GetBodyInstance(FullBodyRootName))
+	{
+		PelvisBody->bLockXRotation = false;
+		PelvisBody->bLockYRotation = false;
+		PelvisBody->bLockZRotation = false;
+		PelvisBody->SetDOFLock(EDOFMode::SixDOF);
+	}
+
+	GetWorldTimerManager().ClearTimer(TemporaryRagdollTimer);
+	GetWorldTimerManager().ClearTimer(TemporaryRagdollRecoveryTimer);
+	GetWorldTimerManager().ClearTimer(TemporaryRagdollInputDelayTimer);
+	GetWorldTimerManager().SetTimer(
+		TemporaryRagdollTimer,
+		this,
+		&ANPStablePhysicsPawn::WaitForTemporaryRagdollSettle,
+		FMath::Max(TemporaryRagdollMinimumDuration, 0.01f),
+		false);
+}
+
+void ANPStablePhysicsPawn::WaitForTemporaryRagdollSettle()
+{
+	if (!bTemporaryRagdollActive || !PhysicsMesh || !GetWorld())
+	{
+		return;
+	}
+
+	const float PelvisSpeed = PhysicsMesh->GetPhysicsLinearVelocity(
+		FullBodyRootName).Size();
+	const double CurrentTime = GetWorld()->GetTimeSeconds();
+	if (PelvisSpeed > TemporaryRagdollMaximumPelvisSpeed)
+	{
+		TemporaryRagdollSettleStartTime = -1.0;
+	}
+	else if (TemporaryRagdollSettleStartTime < 0.0)
+	{
+		TemporaryRagdollSettleStartTime = CurrentTime;
+	}
+
+	if (TemporaryRagdollSettleStartTime >= 0.0
+		&& CurrentTime - TemporaryRagdollSettleStartTime
+			>= TemporaryRagdollRequiredSettleDuration)
+	{
+		EndTemporaryRagdoll();
+		return;
+	}
+
+	GetWorldTimerManager().SetTimer(
+		TemporaryRagdollTimer,
+		this,
+		&ANPStablePhysicsPawn::WaitForTemporaryRagdollSettle,
+		0.05f,
+		false);
+}
+
+void ANPStablePhysicsPawn::EndTemporaryRagdoll()
+{
+	if (!bTemporaryRagdollActive)
+	{
+		return;
+	}
+
+	bTemporaryRagdollActive = false;
+	bTemporaryRagdollRecoveryActive = true;
+	TemporaryRagdollAlignmentStartTime = -1.0;
+	ApplyPhysicalAnimationGroups();
+	PhysicsMovement->SetTemporaryRagdollActive(false);
+	PhysicsMovement->SetTemporaryRagdollRecoveryActive(true);
+	FinishTemporaryRagdollRecovery();
+}
+
+void ANPStablePhysicsPawn::FinishTemporaryRagdollRecovery()
+{
+	if (bTemporaryRagdollActive || !PhysicsMesh || !GetWorld())
+	{
+		return;
+	}
+
+	const float UprightDot = PhysicsMovement->GetPelvisUprightDot();
+	const double CurrentTime = GetWorld()->GetTimeSeconds();
+	if (UprightDot < FMath::Cos(FMath::DegreesToRadians(
+		FMath::Clamp(
+			TemporaryRagdollUprightAngleTolerance,
+			0.0f,
+			90.0f))))
+	{
+		TemporaryRagdollAlignmentStartTime = -1.0;
+	}
+	else if (TemporaryRagdollAlignmentStartTime < 0.0)
+	{
+		TemporaryRagdollAlignmentStartTime = CurrentTime;
+	}
+
+	if (TemporaryRagdollAlignmentStartTime < 0.0
+		|| CurrentTime - TemporaryRagdollAlignmentStartTime
+			< TemporaryRagdollRequiredAlignmentDuration)
+	{
+		GetWorldTimerManager().SetTimer(
+			TemporaryRagdollRecoveryTimer,
+			this,
+			&ANPStablePhysicsPawn::FinishTemporaryRagdollRecovery,
+			0.05f,
+			false);
+		return;
+	}
+
+	CompleteTemporaryRagdollRecovery();
+}
+
+void ANPStablePhysicsPawn::CompleteTemporaryRagdollRecovery()
+{
+	GetWorldTimerManager().ClearTimer(TemporaryRagdollTimer);
+	GetWorldTimerManager().ClearTimer(TemporaryRagdollRecoveryTimer);
+	ConfigurePelvisStability();
+	const float InputDelay = FMath::Max(
+		TemporaryRagdollInputDelay,
+		0.0f);
+	if (InputDelay <= UE_SMALL_NUMBER)
+	{
+		FinishTemporaryRagdollInputDelay();
+		return;
+	}
+
+	GetWorldTimerManager().SetTimer(
+		TemporaryRagdollInputDelayTimer,
+		this,
+		&ANPStablePhysicsPawn::FinishTemporaryRagdollInputDelay,
+		InputDelay,
+		false);
+}
+
+void ANPStablePhysicsPawn::FinishTemporaryRagdollInputDelay()
+{
+	if (!bTemporaryRagdollActive && PhysicsMovement)
+	{
+		bTemporaryRagdollRecoveryActive = false;
+		PhysicsMovement->SetTemporaryRagdollRecoveryActive(false);
+	}
 }
 
 bool ANPStablePhysicsPawn::BeginRelicSwing(

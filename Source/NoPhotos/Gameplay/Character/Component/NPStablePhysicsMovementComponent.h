@@ -49,6 +49,8 @@ public:
 	void SetFacingDirection(const FVector& InFacingDirection);
 	void InitializeFacingControl(UPhysicsControlComponent* InPhysicsControl);
 	void SetFacingControlEnabled(bool bEnabled);
+	void SetTemporaryRagdollActive(bool bActive);
+	void SetTemporaryRagdollRecoveryActive(bool bActive);
 	void BeginRelicSwingRotation(
 		float Torque,
 		float MaxAngularSpeedDegrees);
@@ -67,6 +69,7 @@ public:
 
 	bool HasFacingDirection() const { return PendingInput.bHasFacingDirection; }
 	FVector GetFacingDirection() const { return PendingInput.FacingDirection; }
+	float GetPelvisUprightDot() const;
 
 	/** 수평면을 기준으로 메시가 실제 바라보는 정면 방향을 반환합니다. */
 	FVector GetCurrentFacingDirection() const;
@@ -186,6 +189,9 @@ private:
 
 	FNPStablePhysicsLocomotionInput PendingInput;
 	FQuat FacingTargetOrientation = FQuat::Identity;
+	FQuat PelvisRotationFromVisualYaw = FQuat::Identity;
+	FVector PelvisUprightLocalDirection = FVector::UpVector;
+	FVector PelvisVisualForwardLocalDirection = FVector::ForwardVector;
 	FName FacingControlName = TEXT("PelvisFacing");
 	float FacingTargetVisualYaw = 0.0f;
 	float RelicSwingTorque = 0.0f;
@@ -197,6 +203,9 @@ private:
 	bool bFacingControlCreated = false;
 	bool bFacingControlEnabled = false;
 	bool bFacingControlSuppressed = false;
+	bool bHasPelvisUprightReference = false;
+	bool bTemporaryRagdollActive = false;
+	bool bTemporaryRagdollRecoveryActive = false;
 	bool bRelicSwingRotationActive = false;
 	bool bGrounded = false;
 	bool bIsFalling = true;

@@ -36,6 +36,8 @@ public:
 	void StopMovementInput();
 	/** 점프대처럼 외부 게임 규칙이 물리 캐릭터 전체에 즉시 속도 변화를 적용할 때 사용합니다. */
 	virtual void AddExternalVelocityChange(const FVector& VelocityChange);
+	/** 캐릭터 설정에 따라 일시적인 래그돌과 골반 직립 복구를 시작합니다. */
+	virtual void StartTemporaryRagdoll();
 	bool BeginRelicSwing(const FNPRelicSwingSettings& Settings);
 	void EndRelicSwing();
 
@@ -99,6 +101,10 @@ public:
 	FRotator GetVisualFacingRotation() const;
 
 protected:
+	void BeginTemporaryRagdoll();
+	void EndTemporaryRagdoll();
+	virtual void CompleteTemporaryRagdollRecovery();
+
 	/** 현재 실행 환경의 캐릭터 물리에 속도 변화를 직접 적용합니다. */
 	void ApplyExternalVelocityChangeLocal(const FVector& VelocityChange);
 
@@ -242,6 +248,10 @@ protected:
 	FName RightHandBoneName = TEXT("hand_r");
 
 private:
+	void WaitForTemporaryRagdollSettle();
+	void FinishTemporaryRagdollRecovery();
+	void FinishTemporaryRagdollInputDelay();
+
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayPhotoShutterSound(FVector_NetQuantize10 SoundLocation);
 
@@ -265,7 +275,33 @@ private:
 	void StopRightHand();
 
 	bool bRightHandActive = false;
+	bool bTemporaryRagdollActive = false;
+	bool bTemporaryRagdollRecoveryActive = false;
 	bool bRelicSwingActive = false;
+	FTimerHandle TemporaryRagdollTimer;
+	FTimerHandle TemporaryRagdollRecoveryTimer;
+	FTimerHandle TemporaryRagdollInputDelayTimer;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Temporary Ragdoll", meta=(AllowPrivateAccess="true", ClampMin="0.01", Units="s"))
+	float TemporaryRagdollMinimumDuration = 0.5f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Temporary Ragdoll", meta=(AllowPrivateAccess="true", ClampMin="0.0", Units="cm/s"))
+	float TemporaryRagdollMaximumPelvisSpeed = 50.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Temporary Ragdoll", meta=(AllowPrivateAccess="true", ClampMin="0.0", Units="s"))
+	float TemporaryRagdollRequiredSettleDuration = 0.25f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Temporary Ragdoll", meta=(AllowPrivateAccess="true", ClampMin="0.0", Units="s"))
+	float TemporaryRagdollRequiredAlignmentDuration = 0.5f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Temporary Ragdoll", meta=(AllowPrivateAccess="true", ClampMin="0.0", ClampMax="90.0", Units="deg"))
+	float TemporaryRagdollUprightAngleTolerance = 10.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Temporary Ragdoll", meta=(AllowPrivateAccess="true", ClampMin="0.0", Units="s"))
+	float TemporaryRagdollInputDelay = 0.1f;
+
+	double TemporaryRagdollSettleStartTime = -1.0;
+	double TemporaryRagdollAlignmentStartTime = -1.0;
 	bool bHasRightHandIKWorldTarget = false;
 	FVector RightHandIKWorldTarget = FVector::ZeroVector;
 	float RightHandReachDistance = 120.0f;

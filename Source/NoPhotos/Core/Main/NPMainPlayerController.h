@@ -70,7 +70,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Aim and Fire")
 	TObjectPtr<UInputAction> AimAction;
 
-	/** 사진 촬영과 조준 유물 발사가 함께 사용하는 실행 입력입니다. */
+	/** 사진 촬영에 사용하는 실행 입력입니다. 유물 발사는 RelicUseAction(F)에서 처리합니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Aim and Fire")
 	TObjectPtr<UInputAction> FireAction;
 

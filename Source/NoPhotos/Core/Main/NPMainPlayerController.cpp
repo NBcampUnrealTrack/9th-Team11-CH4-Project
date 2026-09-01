@@ -6,7 +6,6 @@
 #include "Core/Room/NPRoomSubsystem.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/PrimitiveComponent.h"
-#include "Core/GameplayTag/NPGameplayTags.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/GameInstance.h"
@@ -266,16 +265,6 @@ void ANPMainPlayerController::HandleFireStarted()
 	if (!PhotoCaptureComponent)
 	{
 		UE_LOG(LogNPPhoto, Error, TEXT("[Input] PhotoCaptureComponent is null."));
-		return;
-	}
-
-	if (UNPAbilitySystemComponent* AbilitySystem =
-		ResolveRelicAbilitySystem();
-		AbilitySystem
-		&& AbilitySystem->HasMatchingGameplayTag(
-			NPGameplayTags::State_Relic_Aiming))
-	{
-		AbilitySystem->ActivateRelicFireAbility();
 		return;
 	}
 

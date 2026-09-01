@@ -58,6 +58,7 @@ public:
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 	virtual void AddExternalVelocityChange(
 		const FVector& VelocityChange) override;
+	virtual void StartTemporaryRagdoll() override;
 
 	UFUNCTION(BlueprintPure, Category="Network|Grab")
 	bool IsReplicatedRightHandActive() const { return bReplicatedRightHandActive; }
@@ -86,6 +87,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void CompleteTemporaryRagdollRecovery() override;
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void OnRep_Controller() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -110,6 +112,14 @@ private:
 	UFUNCTION(Client, Reliable)
 	void ClientApplyExternalVelocityChange(
 		FVector_NetQuantize10 VelocityChange);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastStartTemporaryRagdoll();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastCompleteTemporaryRagdollRecovery(
+		FVector_NetQuantize100 PelvisLocation,
+		FRotator PelvisRotation);
 
 	UFUNCTION()
 	void OnRep_RightHandActive();

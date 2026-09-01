@@ -21,10 +21,9 @@ public:
 		UInputAction* RelicUseAction);
 	void SetHeldRelic(AActor* Relic);
 
-	/** PlayerController의 문맥 입력 라우터가 호출합니다. */
+	/** 조준 입력 라우터가 호출합니다. */
 	void ActivateRelicAimAbility();
 	void CancelRelicAimAbility();
-	void ActivateRelicFireAbility();
 
 private:
 	void ActivateRelicUseAbility();
