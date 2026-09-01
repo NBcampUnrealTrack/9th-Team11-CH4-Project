@@ -2,11 +2,16 @@
 
 #include "Components/SceneComponent.h"
 #include "Components/MeshComponent.h"
+#include "Components/SphereComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/World.h"
 #include "Gameplay/Character/NPStablePhysicsPawn.h"
+#include "Gameplay/MapEvents/Possession/NPPossessionMapEvent.h"
+#include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialParameters.h"
+#include "Net/UnrealNetwork.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogNPGhostFollower, Log, All);
 
@@ -14,8 +19,12 @@ ANPGhostFollowerActor::ANPGhostFollowerActor()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickGroup = TG_PostPhysics;
-	bReplicates = false;
-	SetReplicateMovement(false);
+	// Roaming 유령이 SpawnActorDeferred 이전부터 네트워크 액터로 등록되도록 기본 복제를 켭니다.
+	// 화면별 등 뒤 고스트는 InitializeFollower에서 생성 완료 전에 다시 복제를 끕니다.
+	bReplicates = true;
+	bAlwaysRelevant = true;
+	SetReplicateMovement(true);
+	NetUpdateFrequency = 30.0f;
 	SetActorEnableCollision(false);
 
 	FollowRoot = CreateDefaultSubobject<USceneComponent>(TEXT("FollowRoot"));
@@ -32,6 +41,22 @@ ANPGhostFollowerActor::ANPGhostFollowerActor()
 	AnimatedGhostMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	AnimatedGhostMesh->SetGenerateOverlapEvents(false);
 	AnimatedGhostMesh->SetCanEverAffectNavigation(false);
+	RoamingContactSphere = CreateDefaultSubobject<USphereComponent>(TEXT("RoamingContactSphere"));
+	RoamingContactSphere->SetupAttachment(FollowRoot);
+	RoamingContactSphere->InitSphereRadius(RoamingContactRadius);
+	RoamingContactSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	RoamingContactSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
+	RoamingContactSphere->SetGenerateOverlapEvents(false);
+	RoamingContactSphere->SetCanEverAffectNavigation(false);
+	RoamingContactSphere->OnComponentBeginOverlap.AddDynamic(
+		this, &ThisClass::HandleRoamingContactBeginOverlap);
+}
+
+void ANPGhostFollowerActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ANPGhostFollowerActor, bRoamingGhost);
+	DOREPLIFETIME(ANPGhostFollowerActor, bRoamingGhostConsumed);
 }
 
 bool ANPGhostFollowerActor::InitializeFollower(ANPStablePhysicsPawn* InTarget)
@@ -42,28 +67,157 @@ bool ANPGhostFollowerActor::InitializeFollower(ANPStablePhysicsPawn* InTarget)
 		return false;
 	}
 	FollowTarget = InTarget;
-	SetReplicates(false);
+	// Deferred spawn 중 SetReplicates 호출은 pre-init 경고를 발생시키므로 직접 설정합니다.
+	bReplicates = false;
 	SetReplicateMovement(false);
 	AddTickPrerequisiteActor(InTarget);
 	UpdateFollow(0.0f, true);
 	return true;
 }
 
+bool ANPGhostFollowerActor::InitializeRoamingGhost()
+{
+	if (HasActorBegunPlay() || FollowTarget.IsValid())
+	{
+		UE_LOG(LogNPGhostFollower, Warning,
+			TEXT("[GhostTrace] Roaming 초기화 거부: Actor=%s BegunPlay=%d FollowTarget=%s"),
+			*GetNameSafe(this), HasActorBegunPlay() ? 1 : 0, *GetNameSafe(FollowTarget.Get()));
+		return false;
+	}
+	bRoamingInitializationRequested = true;
+	bRoamingGhost = true;
+	// SpawnActorDeferred 상태에서는 SetReplicates가 초기화 전 Actor 경고를 발생시킵니다.
+	// PostInitProperties가 이 값을 읽어 RemoteRole을 구성하므로 직접 설정하는 것이 올바른 경로입니다.
+	bReplicates = true;
+	SetReplicatingMovement(true);
+	UE_LOG(LogNPGhostFollower, Display,
+		TEXT("[GhostTrace] Roaming 초기화 완료: Actor=%s Requested=%d Roaming=%d Replicates=%d"),
+		*GetNameSafe(this), bRoamingInitializationRequested ? 1 : 0,
+		bRoamingGhost ? 1 : 0, GetIsReplicated() ? 1 : 0);
+	return true;
+}
+
+bool ANPGhostFollowerActor::SetRoamingChaseTarget(ANPStablePhysicsPawn* InTarget)
+{
+	if (!HasAuthority() || !bRoamingGhost || !IsValid(InTarget)
+		|| InTarget->IsActorBeingDestroyed() || !InTarget->IsPlayerControlled()
+		|| InTarget->GetWorld() != GetWorld())
+	{
+		return false;
+	}
+
+	RoamingChaseTarget = InTarget;
+	SetActorTickEnabled(true);
+	UE_LOG(LogNPGhostFollower, Display,
+		TEXT("[GhostTrace] Roaming 추격 대상 지정: Ghost=%s Target=%s Speed=%.1f"),
+		*GetNameSafe(this), *GetNameSafe(InTarget), RoamingChaseSpeed);
+	return true;
+}
+
+void ANPGhostFollowerActor::SetRoamingContactDelay(const float DelaySeconds)
+{
+	UWorld* World = GetWorld();
+	if (!HasAuthority() || !World)
+	{
+		return;
+	}
+
+	const float SafeDelay = FMath::IsFinite(DelaySeconds) ? FMath::Max(0.0f, DelaySeconds) : 0.0f;
+	RoamingContactEnableWorldTime = World->GetTimeSeconds() + SafeDelay;
+	if (SafeDelay > 0.0f)
+	{
+		UE_LOG(LogNPGhostFollower, Display,
+			TEXT("[GhostTrace] Roaming 접촉 유예 시작: Ghost=%s Delay=%.2fs EnableTime=%.2f"),
+			*GetNameSafe(this), SafeDelay, RoamingContactEnableWorldTime);
+	}
+}
+
+void ANPGhostFollowerActor::ConsumeRoamingGhost(const float DestroyDelay)
+{
+	if (!HasAuthority() || bRoamingGhostConsumed)
+	{
+		return;
+	}
+
+	bRoamingGhostConsumed = true;
+	bRoamingGhost = false;
+	RoamingChaseTarget.Reset();
+	MulticastConsumeRoamingGhost();
+	ForceNetUpdate();
+
+	const float SafeDestroyDelay = FMath::IsFinite(DestroyDelay)
+		? FMath::Max(0.1f, DestroyDelay) : 0.25f;
+	SetLifeSpan(SafeDestroyDelay);
+	UE_LOG(LogNPGhostFollower, Display,
+		TEXT("[GhostTrace] Roaming 유령 소비 상태 복제: Ghost=%s DestroyDelay=%.2fs"),
+		*GetNameSafe(this), SafeDestroyDelay);
+}
+
+void ANPGhostFollowerActor::OnRep_RoamingGhostConsumed()
+{
+	if (bRoamingGhostConsumed)
+	{
+		ApplyRoamingGhostConsumedState();
+	}
+}
+
+void ANPGhostFollowerActor::MulticastConsumeRoamingGhost_Implementation()
+{
+	ApplyRoamingGhostConsumedState();
+}
+
+void ANPGhostFollowerActor::ApplyRoamingGhostConsumedState()
+{
+	SetActorEnableCollision(false);
+	SetActorHiddenInGame(true);
+	SetActorTickEnabled(false);
+	RoamingContactSphere->SetGenerateOverlapEvents(false);
+	RoamingContactSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+}
+
 void ANPGhostFollowerActor::BeginPlay()
 {
 	Super::BeginPlay();
+	// 같은 BP를 Roaming(복제)과 화면별 Follower(비복제)에 함께 사용합니다.
+	// Deferred FinishSpawning의 Blueprint Construction이 bReplicates를 CDO 값으로 되돌릴 수 있으므로
+	// FollowTarget이 있는 로컬 Follower는 초기화 완료 시점에 다시 확실히 복제를 끕니다.
+	if (FollowTarget.IsValid())
+	{
+		SetReplicates(false);
+		SetReplicateMovement(false);
+	}
+	UE_LOG(LogNPGhostFollower, Display,
+		TEXT("[GhostTrace] BeginPlay 진입: Actor=%s Requested=%d Roaming=%d FollowTarget=%s Authority=%d"),
+		*GetNameSafe(this), bRoamingInitializationRequested ? 1 : 0,
+		bRoamingGhost ? 1 : 0, *GetNameSafe(FollowTarget.Get()), HasAuthority() ? 1 : 0);
+	if (bRoamingInitializationRequested)
+	{
+		// Blueprint Construction이 복제 UPROPERTY를 CDO 값으로 되돌린 경우를 복원합니다.
+		bRoamingGhost = true;
+		bRoamingInitializationRequested = false;
+	}
 	if (IsActorBeingDestroyed())
 	{
 		return;
 	}
-	if (!FollowTarget.IsValid() || GetNetMode() == NM_DedicatedServer)
+	if ((!FollowTarget.IsValid() && !bRoamingGhost)
+		|| (GetNetMode() == NM_DedicatedServer && !bRoamingGhost))
 	{
 		Destroy();
 		return;
 	}
-	// BP에서 추가한 외형도 캐릭터나 트레이스의 장애물이 되지 않게 합니다.
+	// Roaming 유령도 물리 충돌은 전혀 사용하지 않습니다. 접촉은 서버 거리 검사로만 판정합니다.
+	// Actor collision을 켜면 BP에서 추가된 메시/콜라이더까지 활성화되어 플레이어와 서로 밀게 됩니다.
 	SetActorEnableCollision(false);
-	UpdateFollow(0.0f, true);
+	RoamingContactSphere->SetSphereRadius(FMath::Max(1.0f, RoamingContactRadius));
+	RoamingContactSphere->SetGenerateOverlapEvents(false);
+	RoamingContactSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	// Point에 대기 중인 Roaming 유령은 아직 추적 대상이 없습니다.
+	// 대상 없는 상태에서 UpdateFollow를 호출하면 RequestFadeOut을 거쳐 즉시 파괴됩니다.
+	if (FollowTarget.IsValid())
+	{
+		UpdateFollow(0.0f, true);
+	}
 	if (IsActorBeingDestroyed())
 	{
 		return;
@@ -74,6 +228,69 @@ void ANPGhostFollowerActor::BeginPlay()
 	bGhostFadeRunning = true;
 	ApplyGhostOpacity(0.0f);
 	UpdateFade(0.0f);
+}
+
+void ANPGhostFollowerActor::HandleRoamingContactBeginOverlap(
+	UPrimitiveComponent* OverlappedComponent,
+	AActor* OtherActor,
+	UPrimitiveComponent* OtherComponent,
+	int32 OtherBodyIndex,
+	bool bFromSweep,
+	const FHitResult& SweepResult)
+{
+	TryHandleRoamingPlayerContact(Cast<ANPStablePhysicsPawn>(OtherActor));
+}
+
+void ANPGhostFollowerActor::CheckRoamingPlayerContacts()
+{
+	UWorld* World = GetWorld();
+	if (!HasAuthority() || !World || !bRoamingGhost || bRoamingGhostConsumed
+		|| IsActorBeingDestroyed())
+	{
+		return;
+	}
+	if (World->GetTimeSeconds() < RoamingContactEnableWorldTime)
+	{
+		return;
+	}
+
+	const float ContactRadius = FMath::IsFinite(RoamingContactRadius)
+		? FMath::Max(1.0f, RoamingContactRadius) : 100.0f;
+	const FVector GhostLocation = GetActorLocation();
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		const APlayerController* PC = It->Get();
+		ANPStablePhysicsPawn* PlayerPawn = IsValid(PC)
+			? Cast<ANPStablePhysicsPawn>(PC->GetPawn()) : nullptr;
+		if (IsValid(PlayerPawn) && !PlayerPawn->IsActorBeingDestroyed()
+			&& FVector::DistSquared(GhostLocation, PlayerPawn->GetActorLocation())
+				<= FMath::Square(ContactRadius))
+		{
+			TryHandleRoamingPlayerContact(PlayerPawn);
+			return;
+		}
+	}
+}
+
+void ANPGhostFollowerActor::TryHandleRoamingPlayerContact(ANPStablePhysicsPawn* PlayerPawn)
+{
+	if (!HasAuthority() || !bRoamingGhost || bRoamingGhostConsumed || IsActorBeingDestroyed()
+		|| !IsValid(PlayerPawn) || PlayerPawn->IsActorBeingDestroyed()
+		|| !PlayerPawn->IsPlayerControlled())
+	{
+		return;
+	}
+
+	ANPPossessionMapEvent* PossessionEvent = Cast<ANPPossessionMapEvent>(GetOwner());
+	if (!IsValid(PossessionEvent))
+	{
+		return;
+	}
+
+	UE_LOG(LogNPGhostFollower, Display,
+		TEXT("[GhostTrace] Roaming 유령 플레이어 접촉: Ghost=%s Player=%s Radius=%.1f"),
+		*GetNameSafe(this), *GetNameSafe(PlayerPawn), RoamingContactRadius);
+	PossessionEvent->HandleRoamingGhostContact(this, PlayerPawn);
 }
 
 void ANPGhostFollowerActor::InitializeFadeMaterials()
@@ -198,11 +415,49 @@ FTransform ANPGhostFollowerActor::CalculateFollowTransform(const FVector& Target
 void ANPGhostFollowerActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	if (!bGhostFadingOut && !IsActorBeingDestroyed())
+	if (!bGhostFadingOut && !IsActorBeingDestroyed() && bRoamingGhost && HasAuthority())
+	{
+		UpdateRoamingChase(DeltaSeconds);
+		CheckRoamingPlayerContacts();
+	}
+	else if (!bGhostFadingOut && !IsActorBeingDestroyed() && FollowTarget.IsValid())
 	{
 		UpdateFollow(DeltaSeconds, false);
 	}
 	UpdateFade(DeltaSeconds);
+}
+
+void ANPGhostFollowerActor::UpdateRoamingChase(const float DeltaSeconds)
+{
+	ANPStablePhysicsPawn* Target = RoamingChaseTarget.Get();
+	if (!IsValid(Target) || Target->IsActorBeingDestroyed() || !Target->IsPlayerControlled())
+	{
+		RoamingChaseTarget.Reset();
+		return;
+	}
+
+	const FVector CurrentLocation = GetActorLocation();
+	const FVector TargetLocation = Target->GetActorLocation();
+	if (CurrentLocation.ContainsNaN() || TargetLocation.ContainsNaN())
+	{
+		return;
+	}
+
+	const float SafeDeltaSeconds = FMath::IsFinite(DeltaSeconds) ? FMath::Max(0.0f, DeltaSeconds) : 0.0f;
+	const float SafeSpeed = FMath::IsFinite(RoamingChaseSpeed) ? FMath::Max(0.0f, RoamingChaseSpeed) : 350.0f;
+	const FVector NewLocation = FMath::VInterpConstantTo(
+		CurrentLocation, TargetLocation, SafeDeltaSeconds, SafeSpeed);
+	SetActorLocation(NewLocation, true);
+
+	FVector Direction = TargetLocation - CurrentLocation;
+	Direction.Z = 0.0f;
+	if (!Direction.ContainsNaN() && Direction.Normalize())
+	{
+		const float RotationSpeed = FMath::IsFinite(RoamingRotationInterpSpeed)
+			? FMath::Max(0.0f, RoamingRotationInterpSpeed) : 8.0f;
+		SetActorRotation(FMath::RInterpTo(
+			GetActorRotation(), Direction.Rotation(), SafeDeltaSeconds, RotationSpeed));
+	}
 }
 
 void ANPGhostFollowerActor::UpdateFollow(float DeltaSeconds, bool bSnap)
@@ -248,7 +503,12 @@ void ANPGhostFollowerActor::StopFollowing()
 
 void ANPGhostFollowerActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	UE_LOG(LogNPGhostFollower, Display,
+		TEXT("[GhostTrace] EndPlay: Actor=%s Reason=%d Roaming=%d FollowTarget=%s"),
+		*GetNameSafe(this), static_cast<int32>(EndPlayReason), bRoamingGhost ? 1 : 0,
+		*GetNameSafe(FollowTarget.Get()));
 	StopFollowing();
+	RoamingChaseTarget.Reset();
 	bGhostFadeRunning = false;
 	FadeMaterials.Reset();
 	Super::EndPlay(EndPlayReason);
