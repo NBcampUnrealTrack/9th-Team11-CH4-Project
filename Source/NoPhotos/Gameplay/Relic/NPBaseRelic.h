@@ -80,7 +80,7 @@ protected:
 	FDataTableRowHandle RelicTableData;
 
 	/** 유물 Blueprint가 시작부터 전시 상태를 해제하고 물리를 적용할지 설정합니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic|Physics")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Relic|Physics")
 	bool bStartWithPhysicsEnabled = false;
 
 	UPROPERTY(ReplicatedUsing=OnRep_IsDisplayed, VisibleInstanceOnly, BlueprintReadOnly, Category="Relic")
