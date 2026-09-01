@@ -157,6 +157,10 @@ void UNPRelicSlotComponent::ReleaseRelic()
 	Owner->ForceNetUpdate();
 }
 
+void UNPRelicSlotComponent::SetCaseAccessible(bool bAccessible)
+{
+}
+
 void UNPRelicSlotComponent::OnRep_SpawnedRelic()
 {
 	ApplyRelicState();
