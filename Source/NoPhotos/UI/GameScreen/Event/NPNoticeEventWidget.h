@@ -4,7 +4,8 @@
 #include "UI/NPUserWidget.h"
 #include "NPNoticeEventWidget.generated.h"
 
-class UTextBlock;
+class UImage;
+class UDataTable;
 class UWidgetAnimation;
 class UNPMapEventManagerComponent;
 
@@ -19,11 +20,14 @@ protected:
 	virtual void OnAnimationFinished_Implementation(const UWidgetAnimation* Animation) override;
 
 private:
-	void ShowEventNotice(const FText& EventTitle);
+	void ShowEventNotice(FName EventId);
 	void HideEventNotice();
 
 	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UTextBlock> EventNameText;
+	TObjectPtr<UImage> EventLogoImage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Event UI", meta = (AllowPrivateAccess = "true"))
+	TSoftObjectPtr<UDataTable> EventUIDataTable;
 
 	UPROPERTY(Transient, meta = (BindWidgetAnim))
 	TObjectPtr<UWidgetAnimation> NoticeAnimation;
