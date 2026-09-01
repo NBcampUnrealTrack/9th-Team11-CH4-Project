@@ -105,13 +105,6 @@ void UNPAbilitySystemComponent::CancelRelicAimAbility()
 	CancelAbilities(&AbilityTags);
 }
 
-void UNPAbilitySystemComponent::ActivateRelicFireAbility()
-{
-	FGameplayTagContainer AbilityTags;
-	AbilityTags.AddTag(NPGameplayTags::Input_Relic_Fire);
-	TryActivateAbilitiesByTag(AbilityTags);
-}
-
 void UNPAbilitySystemComponent::ClearHeldRelicAbilities()
 {
 	for (const FGameplayAbilitySpecHandle& AbilityHandle : HeldRelicAbilityHandles)
@@ -174,6 +167,7 @@ void UNPAbilitySystemComponent::HandleKnockbackEffect(
 	if (ANPStablePhysicsPawn* TargetPawn =
 		Cast<ANPStablePhysicsPawn>(GetAvatarActor()))
 	{
+		TargetPawn->StartTemporaryRagdoll();
 		TargetPawn->AddExternalVelocityChange(
 			KnockbackDirection * KnockbackMagnitude);
 	}

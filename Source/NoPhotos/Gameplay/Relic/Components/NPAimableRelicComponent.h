@@ -7,6 +7,7 @@ class ANPReplicatedStablePhysicsPawn;
 class UAbilitySystemComponent;
 class UGameplayEffect;
 class UNiagaraSystem;
+class USoundBase;
 class UWorld;
 
 USTRUCT(BlueprintType)
@@ -60,13 +61,16 @@ public:
 	const FNPRelicAimSettings& GetAimSettings() const { return AimSettings; }
 
 	/** 서버에서 발사 간격을 검증하고 Line Trace 및 넉백 Effect를 적용합니다. */
-	bool TryFire(
+	virtual bool TryFire(
 		ANPReplicatedStablePhysicsPawn* ShooterPawn,
 		UAbilitySystemComponent* SourceAbilitySystem,
 		const FVector& CameraLocation,
 		const FVector& CameraForward);
 
 protected:
+	bool TryConsumeFireCooldown();
+	FTransform GetMuzzleTransform() const;
+
 	/** 서버가 승인한 발사를 모든 클라이언트의 총구에서 재생합니다. */
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayMuzzleEffect();
@@ -86,6 +90,10 @@ private:
 	/** BP 조준 유물에서 할당할 단발성 총구 Niagara System입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Aimable Relic|Effects", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UNiagaraSystem> MuzzleEffect;
+
+	/** BP 조준 유물에서 할당할 단발성 발사 Sound입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Aimable Relic|Effects", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<USoundBase> MuzzleSound;
 
 	/** RelicMesh에 생성한 총구 Socket 이름입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Aimable Relic|Effects", meta=(AllowPrivateAccess="true"))

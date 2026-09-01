@@ -13,7 +13,7 @@ UNPRelicFireAbility::UNPRelicFireAbility()
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 
 	FGameplayTagContainer Tags;
-	Tags.AddTag(NPGameplayTags::Input_Relic_Fire);
+	Tags.AddTag(NPGameplayTags::Input_Relic_Use);
 	Tags.AddTag(NPGameplayTags::Ability_Relic);
 	Tags.AddTag(NPGameplayTags::Ability_Relic_Fire);
 	SetAssetTags(Tags);
@@ -28,8 +28,6 @@ bool UNPRelicFireAbility::CanActivateAbility(
 {
 	if (!ActorInfo
 		|| !ActorInfo->AbilitySystemComponent.IsValid()
-		|| !ActorInfo->AbilitySystemComponent->HasMatchingGameplayTag(
-			NPGameplayTags::State_Relic_Aiming)
 		|| !Super::CanActivateAbility(
 			Handle,
 			ActorInfo,

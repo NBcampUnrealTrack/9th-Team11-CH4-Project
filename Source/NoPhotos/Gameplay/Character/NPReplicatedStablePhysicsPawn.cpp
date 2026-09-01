@@ -6,7 +6,6 @@
 #include "Net/UnrealNetwork.h"
 #include "PhysicsEngine/BodyInstance.h"
 #include "Gameplay/AbilitySystem/NPAbilitySystemComponent.h"
-#include "Core/GameplayTag/NPGameplayTags.h"
 #include "Gameplay/Character/Component/NPInvisibilityComponent.h"
 #include "Gameplay/Character/Component/NPControlReversalComponent.h"
 #include "Gameplay/Character/Component/NPVisionRestrictionComponent.h"
@@ -178,6 +177,50 @@ void ANPReplicatedStablePhysicsPawn::ClientApplyExternalVelocityChange_Implement
 	FVector_NetQuantize10 VelocityChange)
 {
 	ApplyExternalVelocityChangeLocal(FVector(VelocityChange));
+}
+
+void ANPReplicatedStablePhysicsPawn::StartTemporaryRagdoll()
+{
+	if (HasAuthority())
+	{
+		MulticastStartTemporaryRagdoll();
+	}
+}
+
+void ANPReplicatedStablePhysicsPawn::MulticastStartTemporaryRagdoll_Implementation()
+{
+	BeginTemporaryRagdoll();
+}
+
+void ANPReplicatedStablePhysicsPawn::CompleteTemporaryRagdollRecovery()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	const FBodyInstance* PelvisBody =
+		PhysicsMesh->GetBodyInstance(FullBodyRootName);
+	const FTransform PelvisTransform = PelvisBody
+		? PelvisBody->GetUnrealWorldTransform()
+		: PhysicsMesh->GetComponentTransform();
+	MulticastCompleteTemporaryRagdollRecovery(
+		PelvisTransform.GetLocation(),
+		PelvisTransform.Rotator());
+}
+
+void ANPReplicatedStablePhysicsPawn::MulticastCompleteTemporaryRagdollRecovery_Implementation(
+	const FVector_NetQuantize100 PelvisLocation,
+	const FRotator PelvisRotation)
+{
+	EndTemporaryRagdoll();
+	PhysicsMesh->SetAllPhysicsRotation(PelvisRotation);
+	PhysicsMesh->SetAllPhysicsPosition(FVector(PelvisLocation));
+	PhysicsMesh->SetAllPhysicsLinearVelocity(FVector::ZeroVector, false);
+	PhysicsMesh->SetAllPhysicsAngularVelocityInRadians(
+		FVector::ZeroVector,
+		false);
+	Super::CompleteTemporaryRagdollRecovery();
 }
 
 void ANPReplicatedStablePhysicsPawn::SetupPlayerInputComponent(
@@ -416,22 +459,15 @@ void ANPReplicatedStablePhysicsPawn::ServerRequestAimableRelicFire_Implementatio
 		|| !IsValid(AimableRelic)
 		|| !IsValid(Grabbable)
 		|| Grabbable->GetActiveGrabCount() != 1
-		|| !IsValid(AbilitySystem)
-		|| !AbilitySystem->HasMatchingGameplayTag(
-			NPGameplayTags::State_Relic_Aiming))
+		|| !IsValid(AbilitySystem))
 	{
 		UE_LOG(
 			LogNoPhotos,
 			Warning,
-			TEXT("[AimableRelic] Server request rejected: invalid held relic, grab count, ASC, or aiming state. Pawn=%s Relic=%s GrabCount=%d Aiming=%s"),
+			TEXT("[AimableRelic] Server request rejected: invalid held relic, grab count, or ASC. Pawn=%s Relic=%s GrabCount=%d"),
 			*GetNameSafe(this),
 			*GetNameSafe(HeldRelic),
-			Grabbable ? Grabbable->GetActiveGrabCount() : 0,
-			AbilitySystem
-				&& AbilitySystem->HasMatchingGameplayTag(
-					NPGameplayTags::State_Relic_Aiming)
-				? TEXT("true")
-				: TEXT("false"));
+			Grabbable ? Grabbable->GetActiveGrabCount() : 0);
 		return;
 	}
 

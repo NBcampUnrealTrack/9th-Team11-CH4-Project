@@ -98,6 +98,7 @@ void UNPStablePhysicsMovementComponent::InitializeFacingControl(
 	PhysicsControl = InPhysicsControl;
 	bFacingControlCreated = false;
 	bFacingControlEnabled = false;
+	bHasPelvisUprightReference = false;
 	if (!PhysicsControl || !PhysicsMesh)
 	{
 		return;
@@ -108,6 +109,23 @@ void UNPStablePhysicsMovementComponent::InitializeFacingControl(
 	{
 		return;
 	}
+
+	const FQuat PelvisWorldRotation =
+		PelvisBody->GetUnrealWorldTransform().GetRotation();
+	const FVector VisualForward = GetCurrentFacingDirection();
+	FacingTargetVisualYaw = VisualForward.Rotation().Yaw;
+	const FQuat VisualYawRotation(
+		FVector::UpVector,
+		FMath::DegreesToRadians(FacingTargetVisualYaw));
+	PelvisRotationFromVisualYaw =
+		VisualYawRotation.Inverse() * PelvisWorldRotation;
+	PelvisUprightLocalDirection = PelvisWorldRotation
+		.UnrotateVector(FVector::UpVector)
+		.GetSafeNormal();
+	PelvisVisualForwardLocalDirection = PelvisWorldRotation
+		.UnrotateVector(VisualForward)
+		.GetSafeNormal();
+	bHasPelvisUprightReference = true;
 
 	FPhysicsControlData ControlData;
 	ControlData.bEnabled = false;
@@ -141,6 +159,7 @@ void UNPStablePhysicsMovementComponent::SetFacingControlEnabled(bool bEnabled)
 {
 	const bool bShouldEnable = bEnabled
 		&& !bFacingControlSuppressed
+		&& !bTemporaryRagdollActive
 		&& bOrientRotationToMovement
 		&& bFacingControlCreated;
 	if (!PhysicsControl || bFacingControlEnabled == bShouldEnable)
@@ -158,6 +177,37 @@ void UNPStablePhysicsMovementComponent::SetFacingControlEnabled(bool bEnabled)
 		true,
 		false);
 	bFacingControlEnabled = bShouldEnable;
+}
+
+void UNPStablePhysicsMovementComponent::SetTemporaryRagdollActive(
+	const bool bActive)
+{
+	if (bTemporaryRagdollActive == bActive)
+	{
+		return;
+	}
+
+	bTemporaryRagdollActive = bActive;
+	PendingInput.MoveInput = FVector::ZeroVector;
+	PendingInput.bJumpRequested = false;
+	if (bTemporaryRagdollActive)
+	{
+		SetFacingControlEnabled(false);
+		return;
+	}
+
+	ResetFacingControlTarget();
+}
+
+void UNPStablePhysicsMovementComponent::SetTemporaryRagdollRecoveryActive(
+	const bool bActive)
+{
+	bTemporaryRagdollRecoveryActive = bActive;
+	if (bTemporaryRagdollRecoveryActive)
+	{
+		PendingInput.MoveInput = FVector::ZeroVector;
+		PendingInput.bJumpRequested = false;
+	}
 }
 
 void UNPStablePhysicsMovementComponent::BeginRelicSwingRotation(
@@ -249,20 +299,27 @@ void UNPStablePhysicsMovementComponent::SimulateLocomotion(
 {
 	UpdateMovementState();
 	UpdateGroundedState();
-	if (!bPhysicsUpdatesEnabled)
+	if (!bPhysicsUpdatesEnabled || bTemporaryRagdollActive)
 	{
 		return;
 	}
 
 	UpdateGroundSupportPhysics();
-	UpdateMovementPhysics(Input.MoveInput);
+	UpdateMovementPhysics(
+		bTemporaryRagdollRecoveryActive
+			? FVector::ZeroVector
+			: Input.MoveInput);
 	UpdateFacingPhysicsControl(
 		DeltaTime,
 		Input.FacingDirection,
 		Input.bHasFacingDirection);
-	UpdateRelicSwingRotation();
+	if (!bTemporaryRagdollRecoveryActive)
+	{
+		UpdateRelicSwingRotation();
+	}
 	UpdateBalancePhysics();
-	UpdateJumpPhysics(Input.bJumpRequested);
+	UpdateJumpPhysics(
+		!bTemporaryRagdollRecoveryActive && Input.bJumpRequested);
 }
 
 void UNPStablePhysicsMovementComponent::UpdateMovementState()
@@ -427,8 +484,31 @@ void UNPStablePhysicsMovementComponent::ResetFacingControlTarget()
 		return;
 	}
 
-	FacingTargetOrientation = PelvisBody->GetUnrealWorldTransform().GetRotation();
-	FacingTargetVisualYaw = GetCurrentFacingDirection().Rotation().Yaw;
+	const FQuat PelvisWorldRotation =
+		PelvisBody->GetUnrealWorldTransform().GetRotation();
+	if (bHasPelvisUprightReference)
+	{
+		FVector VisualForward = PelvisWorldRotation.RotateVector(
+			PelvisVisualForwardLocalDirection);
+		VisualForward.Z = 0.0f;
+		if (!VisualForward.IsNearlyZero())
+		{
+			FacingTargetVisualYaw = VisualForward.Rotation().Yaw;
+		}
+
+		const FQuat VisualYawRotation(
+			FVector::UpVector,
+			FMath::DegreesToRadians(FacingTargetVisualYaw));
+		FacingTargetOrientation =
+			VisualYawRotation * PelvisRotationFromVisualYaw;
+	}
+	else
+	{
+		FRotator UprightTargetRotation = PelvisWorldRotation.Rotator();
+		UprightTargetRotation.Pitch = 0.0f;
+		UprightTargetRotation.Roll = 0.0f;
+		FacingTargetOrientation = UprightTargetRotation.Quaternion();
+	}
 	if (PhysicsControl && bFacingControlCreated)
 	{
 		PhysicsControl->SetControlTargetOrientation(
@@ -466,7 +546,17 @@ void UNPStablePhysicsMovementComponent::UpdateRelicSwingRotation()
 
 void UNPStablePhysicsMovementComponent::UpdateBalancePhysics()
 {
-	const FVector CurrentUp = PhysicsMesh->GetUpVector();
+	const FBodyInstance* PelvisBody =
+		PhysicsMesh->GetBodyInstance(PelvisBodyName);
+	if (!PelvisBody)
+	{
+		return;
+	}
+
+	const FVector CurrentUp = PelvisBody->GetUnrealWorldTransform()
+		.GetRotation()
+		.RotateVector(PelvisUprightLocalDirection)
+		.GetSafeNormal();
 	const FVector TiltError = FVector::CrossProduct(CurrentUp, FVector::UpVector);
 	FVector AngularVelocity = PhysicsMesh->GetPhysicsAngularVelocityInRadians(PelvisBodyName);
 	AngularVelocity.Z = 0.0f;
@@ -475,6 +565,27 @@ void UNPStablePhysicsMovementComponent::UpdateBalancePhysics()
 	BalanceTorque.Z = 0.0f;
 	BalanceTorque = BalanceTorque.GetClampedToMaxSize(MaxBalanceTorque);
 	PhysicsMesh->AddTorqueInRadians(BalanceTorque, PelvisBodyName);
+}
+
+float UNPStablePhysicsMovementComponent::GetPelvisUprightDot() const
+{
+	if (!PhysicsMesh || !bHasPelvisUprightReference)
+	{
+		return -1.0f;
+	}
+
+	const FBodyInstance* PelvisBody =
+		PhysicsMesh->GetBodyInstance(PelvisBodyName);
+	if (!PelvisBody)
+	{
+		return -1.0f;
+	}
+
+	const FVector CurrentUp = PelvisBody->GetUnrealWorldTransform()
+		.GetRotation()
+		.RotateVector(PelvisUprightLocalDirection)
+		.GetSafeNormal();
+	return FVector::DotProduct(CurrentUp, FVector::UpVector);
 }
 
 void UNPStablePhysicsMovementComponent::UpdateJumpPhysics(bool bInJumpRequested)
