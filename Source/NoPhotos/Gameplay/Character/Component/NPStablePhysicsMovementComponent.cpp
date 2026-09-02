@@ -41,6 +41,11 @@ void UNPStablePhysicsMovementComponent::SetMaxMoveSpeed(float InMaxMoveSpeed)
 	MaxMoveSpeed = FMath::Max(InMaxMoveSpeed, 0.0f);
 }
 
+void UNPStablePhysicsMovementComponent::SetGravityScale(float InGravityScale)
+{
+	GravityScale = FMath::Max(InGravityScale, 0.0f);
+}
+
 void UNPStablePhysicsMovementComponent::SetJumpVelocityChange(
 	float InJumpVelocityChange)
 {
@@ -346,7 +351,13 @@ void UNPStablePhysicsMovementComponent::SimulateLocomotion(
 {
 	UpdateMovementState();
 	UpdateGroundedState();
-	if (!bPhysicsUpdatesEnabled || bTemporaryRagdollActive)
+	if (!bPhysicsUpdatesEnabled)
+	{
+		return;
+	}
+
+	UpdateGravityPhysics();
+	if (bTemporaryRagdollActive)
 	{
 		return;
 	}
@@ -440,6 +451,25 @@ bool UNPStablePhysicsMovementComponent::FindPelvisGroundDistance(float& OutGroun
 
 	OutGroundDistance = Hit.Distance + GroundProbeRadius;
 	return true;
+}
+
+void UNPStablePhysicsMovementComponent::UpdateGravityPhysics()
+{
+	const float AdditionalGravityScale = GravityScale - 1.0f;
+	if (FMath::IsNearlyZero(AdditionalGravityScale))
+	{
+		return;
+	}
+
+	const FVector AdditionalGravity(
+		0.0f,
+		0.0f,
+		GetWorld()->GetGravityZ() * AdditionalGravityScale);
+	PhysicsMesh->AddForceToAllBodiesBelow(
+		AdditionalGravity,
+		PelvisBodyName,
+		true,
+		true);
 }
 
 void UNPStablePhysicsMovementComponent::UpdateGroundSupportPhysics()

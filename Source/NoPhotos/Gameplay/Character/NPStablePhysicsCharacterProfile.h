@@ -99,6 +99,10 @@ public:
 	UPROPERTY(EditAnywhere, Category="이동", meta=(DisplayName="최대 이동 속도", ClampMin="0.0"))
 	float MaxMoveSpeed = 350.0f;
 
+	/** 월드 중력에 적용할 캐릭터 전용 배율입니다. */
+	UPROPERTY(EditAnywhere, Category="이동", meta=(DisplayName="중력 배율", ClampMin="0.0"))
+	float GravityScale = 1.0f;
+
 	UPROPERTY(EditAnywhere, Category="이동", meta=(DisplayName="점프 속도 변화량", ClampMin="0.0"))
 	float JumpVelocityChange = 350.0f;
 

@@ -33,6 +33,7 @@ public:
 	void ConfigureBoneNames(FName InPelvisBodyName, FName InLeftFootBoneName, FName InRightFootBoneName);
 	void SetTargetPelvisHeight(float InTargetPelvisHeight);
 	void SetMaxMoveSpeed(float InMaxMoveSpeed);
+	void SetGravityScale(float InGravityScale);
 	void SetJumpVelocityChange(float InJumpVelocityChange);
 	void SetJumpCooldown(float InJumpCooldown);
 	void SetWalkableSlopeAngle(float InWalkableSlopeAngle);
@@ -180,6 +181,7 @@ private:
 	void UpdateGroundedState();
 	bool IsFootGrounded(FName FootBoneName) const;
 	bool FindPelvisGroundDistance(float& OutGroundDistance) const;
+	void UpdateGravityPhysics();
 	void UpdateGroundSupportPhysics();
 	void UpdateMovementPhysics(const FVector& InMoveInput);
 	void UpdateFacingPhysicsControl(
@@ -209,6 +211,7 @@ private:
 	FVector Velocity = FVector::ZeroVector;
 	FVector CurrentAcceleration = FVector::ZeroVector;
 	float CharacterForwardYawOffset = 90.0f;
+	float GravityScale = 1.0f;
 	bool bPhysicsUpdatesEnabled = true;
 	bool bFacingControlCreated = false;
 	bool bFacingControlEnabled = false;
