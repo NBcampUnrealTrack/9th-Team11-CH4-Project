@@ -34,6 +34,7 @@ public:
 	virtual FVector GetVelocity() const override;
 	/** 외부 게임 규칙이 현재 이동 의도를 즉시 제거할 때 사용합니다. */
 	void StopMovementInput();
+	void SetLadderVolumeActive(bool bActive) { bInsideLadderVolume = bActive; }
 	/** 점프대처럼 외부 게임 규칙이 물리 캐릭터 전체에 즉시 속도 변화를 적용할 때 사용합니다. */
 	virtual void AddExternalVelocityChange(const FVector& VelocityChange);
 	/** 캐릭터 설정에 따라 일시적인 래그돌과 골반 직립 복구를 시작합니다. */
@@ -314,6 +315,7 @@ private:
 	float SpinePitchInterpSpeed = 8.0f;
 	bool bPhotoViewActive = false;
 	bool bRelicAimViewActive = false;
+	bool bInsideLadderVolume = false;
 	float DefaultCameraArmLength = 400.0f;
 	float DefaultCameraFOV = 90.0f;
 	float CurrentCameraTargetHeight = 60.0f;

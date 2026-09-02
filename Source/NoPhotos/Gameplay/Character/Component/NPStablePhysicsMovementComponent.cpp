@@ -419,6 +419,19 @@ void UNPStablePhysicsMovementComponent::UpdateGroundSupportPhysics()
 
 void UNPStablePhysicsMovementComponent::UpdateMovementPhysics(const FVector& InMoveInput)
 {
+	FVector UpwardAcceleration = FVector::ZeroVector;
+	if (InMoveInput.Z > UE_SMALL_NUMBER)
+	{
+		UpwardAcceleration = FVector::UpVector
+			* ClimbAcceleration
+			* FMath::Clamp(InMoveInput.Z, 0.0f, 1.0f);
+		PhysicsMesh->AddForceToAllBodiesBelow(
+			UpwardAcceleration,
+			PelvisBodyName,
+			true,
+			true);
+	}
+
 	FVector HorizontalVelocity = Velocity;
 	HorizontalVelocity.Z = 0.0f;
 
@@ -433,7 +446,7 @@ void UNPStablePhysicsMovementComponent::UpdateMovementPhysics(const FVector& InM
 	PhysicsMesh->AddForce(MoveForce, PelvisBodyName);
 
 	const float TotalMass = FMath::Max(PhysicsMesh->GetMass(), 1.0f);
-	CurrentAcceleration = MoveForce / TotalMass;
+	CurrentAcceleration = MoveForce / TotalMass + UpwardAcceleration;
 }
 
 void UNPStablePhysicsMovementComponent::UpdateFacingPhysicsControl(
