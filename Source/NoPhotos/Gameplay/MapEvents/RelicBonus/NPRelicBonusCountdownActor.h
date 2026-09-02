@@ -9,7 +9,7 @@ class UNPRelicBonusCountdownWidget;
 class USceneComponent;
 class UWidgetComponent;
 
-/** 반환 존 위에 남은 이벤트 시간을 표시하는 복제 월드 UI 액터입니다. */
+/** 반환 존 위에 현재 헬리콥터 체류시간을 표시하는 복제 월드 UI 액터입니다. */
 UCLASS(Blueprintable)
 class NOPHOTOS_API ANPRelicBonusCountdownActor : public AActor
 {
@@ -25,7 +25,7 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Relic Bonus Countdown")
 	void SetCountdownDuration(float DurationSeconds);
 
-	/** 이벤트 액터와 완전히 동일한 서버 종료 시각을 사용합니다. */
+	/** 서버가 지정한 카운트다운 종료 시각을 모든 클라이언트에서 동일하게 사용합니다. */
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Relic Bonus Countdown")
 	void SetCountdownEndServerWorldTime(float InEndServerWorldTime);
 

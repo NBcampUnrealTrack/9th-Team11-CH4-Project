@@ -44,7 +44,9 @@ ANPBaseRelic* UNPRelicSlotComponent::SpawnRelic(
 		return nullptr;
 	}
 
-	bIsRelicReleased = bInitiallyReleased;
+	bIsRelicReleased = bInitiallyReleased
+		|| bInitiallyAccessible
+		|| bSimulatePhysicsOnSpawn;
 	if (!IsValid(SpawnedRelic))
 	{
 		SpawnedRelic = CreateConfiguredRelic(RF_NoFlags);
@@ -55,8 +57,15 @@ ANPBaseRelic* UNPRelicSlotComponent::SpawnRelic(
 		return nullptr;
 	}
 
+	const bool bShouldSimulatePhysics = bSimulatePhysicsOnSpawn
+		|| SpawnedRelic->ShouldStartWithPhysicsEnabled();
+	bIsRelicReleased = bIsRelicReleased || bShouldSimulatePhysics;
 	SpawnedRelic->SetUnlocked(bIsRelicReleased);
 	ApplyRelicState();
+	if (bShouldSimulatePhysics)
+	{
+		SpawnedRelic->ReleaseWithVelocityImpulse(FVector::ZeroVector);
+	}
 	Owner->ForceNetUpdate();
 	return SpawnedRelic;
 }
@@ -82,12 +91,19 @@ ANPBaseRelic* UNPRelicSlotComponent::RecreateRelicInEditor()
 		SpawnedRelic = nullptr;
 	}
 
-	bIsRelicReleased = false;
+	bIsRelicReleased = bInitiallyAccessible || bSimulatePhysicsOnSpawn;
 	SpawnedRelic = CreateConfiguredRelic(RF_Transactional);
 	if (IsValid(SpawnedRelic))
 	{
-		SpawnedRelic->SetUnlocked(false);
+		const bool bShouldSimulatePhysics = bSimulatePhysicsOnSpawn
+			|| SpawnedRelic->ShouldStartWithPhysicsEnabled();
+		bIsRelicReleased = bIsRelicReleased || bShouldSimulatePhysics;
+		SpawnedRelic->SetUnlocked(bIsRelicReleased);
 		ApplyRelicState();
+		if (bShouldSimulatePhysics)
+		{
+			SpawnedRelic->ReleaseWithVelocityImpulse(FVector::ZeroVector);
+		}
 	}
 
 	Owner->MarkPackageDirty();
@@ -157,8 +173,30 @@ void UNPRelicSlotComponent::ReleaseRelic()
 	Owner->ForceNetUpdate();
 }
 
-void UNPRelicSlotComponent::SetCaseAccessible(bool bAccessible)
+void UNPRelicSlotComponent::SetCaseAccessible(const bool bAccessible)
 {
+	bCaseAccessible = bAccessible;
+	if (!IsValid(SpawnedRelic))
+	{
+		return;
+	}
+
+	AActor* Owner = GetOwner();
+	if (Owner && Owner->HasAuthority())
+	{
+		if (!bIsRelicReleased && !SpawnedRelic->IsDisplayed())
+		{
+			bIsRelicReleased = true;
+			Owner->ForceNetUpdate();
+		}
+
+		SpawnedRelic->SetUnlocked(
+			bInitiallyAccessible
+			|| bIsRelicReleased
+			|| bCaseAccessible);
+	}
+
+	ApplyRelicState();
 }
 
 void UNPRelicSlotComponent::OnRep_SpawnedRelic()
@@ -178,12 +216,15 @@ void UNPRelicSlotComponent::ApplyRelicState()
 		return;
 	}
 
+	const bool bCanAccessRelic = bInitiallyAccessible
+		|| bIsRelicReleased
+		|| bCaseAccessible;
 	if (UPrimitiveComponent* RelicPrimitive =
 		Cast<UPrimitiveComponent>(SpawnedRelic->GetRootComponent()))
 	{
 		RelicPrimitive->SetCollisionResponseToChannel(
 			ECC_Destructible,
-			ECR_Ignore);
+			bCanAccessRelic ? ECR_Block : ECR_Ignore);
 	}
-	SpawnedRelic->SetActorEnableCollision(bIsRelicReleased);
+	SpawnedRelic->SetActorEnableCollision(bCanAccessRelic);
 }

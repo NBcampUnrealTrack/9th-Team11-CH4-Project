@@ -1,11 +1,18 @@
 #include "UI/GameScreen/Event/NPNoticeEventWidget.h"
 
 #include "Animation/WidgetAnimation.h"
-#include "Components/TextBlock.h"
+#include "Components/Image.h"
+#include "Engine/DataTable.h"
 #include "Engine/World.h"
 #include "GameFramework/GameStateBase.h"
 #include "Gameplay/MapEvents/NPMapEventManager.h"
 #include "TimerManager.h"
+#include "UI/GameScreen/Event/NPEventUIDataRow.h"
+
+namespace
+{
+	const FName DefaultEventUIRowName(TEXT("Default"));
+}
 
 void UNPNoticeEventWidget::NativeConstruct()
 {
@@ -39,11 +46,30 @@ void UNPNoticeEventWidget::NativeDestruct()
 	Super::NativeDestruct();
 }
 
-void UNPNoticeEventWidget::ShowEventNotice(const FText& EventTitle)
+void UNPNoticeEventWidget::ShowEventNotice(const FName EventId)
 {
-	if (IsValid(EventNameText))
+	if (IsValid(EventLogoImage))
 	{
-		EventNameText->SetText(FText::Format(NSLOCTEXT("MapEvent", "EventOccurredNotice", "{0} 발생!"), EventTitle));
+		UTexture2D* LogoTexture = nullptr;
+		if (UDataTable* DataTable = EventUIDataTable.LoadSynchronous())
+		{
+			constexpr TCHAR FindRowContext[] = TEXT("Event UI logo lookup");
+			const FNPEventUIDataRow* EventUIData =
+				DataTable->FindRow<FNPEventUIDataRow>(EventId, FindRowContext, false);
+
+			// 이벤트 행이 없거나 로고 로드에 실패하면 Default 행을 사용
+			if (!EventUIData || EventUIData->LogoImage.IsNull() || !(LogoTexture = EventUIData->LogoImage.LoadSynchronous()))
+			{
+				const FNPEventUIDataRow* DefaultEventUIData =
+					DataTable->FindRow<FNPEventUIDataRow>(DefaultEventUIRowName, FindRowContext, false);
+				if (DefaultEventUIData && !DefaultEventUIData->LogoImage.IsNull())
+				{
+					LogoTexture = DefaultEventUIData->LogoImage.LoadSynchronous();
+				}
+			}
+		}
+		
+		EventLogoImage->SetBrushFromTexture(LogoTexture, true);
 	}
 
 	SetVisibility(ESlateVisibility::HitTestInvisible);
@@ -143,7 +169,7 @@ void UNPNoticeEventWidget::RefreshActiveEventNotices(const bool bShowNewNotices)
 		CurrentActiveEventIds.Add(Presentation.EventId);
 		if (bShowNewNotices && !KnownActiveEventIds.Contains(Presentation.EventId))
 		{
-			// 매니저는 가장 최근에 시작된 이벤트를 배열 끝에 추가합니다.
+			// 가장 최근에 시작된 이벤트를 배열 끝에 추가
 			MostRecentNewEvent = &Presentation;
 		}
 	}
@@ -151,7 +177,7 @@ void UNPNoticeEventWidget::RefreshActiveEventNotices(const bool bShowNewNotices)
 	KnownActiveEventIds = MoveTemp(CurrentActiveEventIds);
 	if (MostRecentNewEvent)
 	{
-		ShowEventNotice(MostRecentNewEvent->Title);
+		ShowEventNotice(MostRecentNewEvent->EventId);
 	}
 }
 

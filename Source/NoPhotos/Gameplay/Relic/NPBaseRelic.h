@@ -27,6 +27,9 @@ public:
 	UFUNCTION(BlueprintPure, Category="Relic")
 	bool IsUnlocked() const { return bIsUnlocked; }
 
+	UFUNCTION(BlueprintPure, Category="Relic|Physics")
+	bool ShouldStartWithPhysicsEnabled() const { return bStartWithPhysicsEnabled; }
+
 	UFUNCTION(BlueprintPure, Category="Relic|Delivery")
 	bool IsReturned() const { return bIsReturned; }
 
@@ -75,6 +78,10 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Relic", meta=(RowType="/Script/NoPhotos.NPRelicTableRow"))
 	FDataTableRowHandle RelicTableData;
+
+	/** 유물 Blueprint가 시작부터 전시 상태를 해제하고 물리를 적용할지 설정합니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Relic|Physics")
+	bool bStartWithPhysicsEnabled = false;
 
 	UPROPERTY(ReplicatedUsing=OnRep_IsDisplayed, VisibleInstanceOnly, BlueprintReadOnly, Category="Relic")
 	bool bIsDisplayed = true;
