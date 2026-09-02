@@ -382,6 +382,7 @@ void UNPStablePhysicsGrabComponent::HandleConstraintBroken(int32)
 		return;
 	}
 
+	OnGrabConstraintBroken.Broadcast();
 	bGrabRetryCoolingDown = true;
 	GrabRetryCooldownRemaining = GrabRetryCooldown;
 	ReleaseGrab();

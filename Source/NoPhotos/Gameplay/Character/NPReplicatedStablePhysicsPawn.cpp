@@ -73,6 +73,9 @@ void ANPReplicatedStablePhysicsPawn::BeginPlay()
 		RightHandGrab->OnGrabbedComponentChanged.AddUObject(
 			this,
 			&ANPReplicatedStablePhysicsPawn::HandleGrabbedComponentChanged);
+		RightHandGrab->OnGrabConstraintBroken.AddUObject(
+			this,
+			&ANPReplicatedStablePhysicsPawn::HandleGrabConstraintBroken);
 	}
 	else if (IsReplicatedGrabActive())
 	{
@@ -535,6 +538,7 @@ void ANPReplicatedStablePhysicsPawn::OnRep_GrabState()
 	{
 		RightHandGrab->ClearReplicatedGrab();
 		ClearRightHandIKWorldTarget();
+		UpdateBlueprintGrabState(nullptr);
 		return;
 	}
 
@@ -542,6 +546,7 @@ void ANPReplicatedStablePhysicsPawn::OnRep_GrabState()
 	{
 		RightHandGrab->ClearReplicatedGrab();
 		ClearRightHandIKWorldTarget();
+		UpdateBlueprintGrabState(nullptr);
 		return;
 	}
 
@@ -565,12 +570,14 @@ void ANPReplicatedStablePhysicsPawn::OnRep_GrabState()
 			ReplicatedGrabState.GrabbedBoneName,
 			ReplicatedGrabState.ConstraintFrame1,
 			ReplicatedGrabState.ConstraintFrame2);
+		UpdateBlueprintGrabState(RightHandGrab->GetGrabbedComponent());
 		return;
 	}
 
 	RightHandGrab->ApplyReplicatedGrabState(
 		GrabbedComponent,
 		ReplicatedGrabState.GrabbedBoneName);
+	UpdateBlueprintGrabState(RightHandGrab->GetGrabbedComponent());
 }
 
 void ANPReplicatedStablePhysicsPawn::OnRep_ExternallyGrabbed()
@@ -704,7 +711,34 @@ void ANPReplicatedStablePhysicsPawn::HandleGrabbedComponentChanged(
 	{
 		ReplicatedGrabState = FReplicatedStableGrabState();
 	}
+	UpdateBlueprintGrabState(NewGrabbedComponent);
 	ForceNetUpdate();
+}
+
+void ANPReplicatedStablePhysicsPawn::HandleGrabConstraintBroken()
+{
+	MulticastNotifyGrabConstraintBroken();
+}
+
+void ANPReplicatedStablePhysicsPawn::MulticastNotifyGrabConstraintBroken_Implementation()
+{
+	OnGrabConstraintBroken();
+}
+
+void ANPReplicatedStablePhysicsPawn::UpdateBlueprintGrabState(
+	UPrimitiveComponent* NewGrabbedComponent)
+{
+	const bool bNewGrabActive = IsValid(NewGrabbedComponent);
+	if (bBlueprintGrabActive == bNewGrabActive)
+	{
+		return;
+	}
+
+	bBlueprintGrabActive = bNewGrabActive;
+	if (bBlueprintGrabActive)
+	{
+		OnGrabSucceeded(NewGrabbedComponent);
+	}
 }
 
 void ANPReplicatedStablePhysicsPawn::AddExternalGrabber()
