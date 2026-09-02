@@ -1,8 +1,11 @@
 #include "UI/MainMenu/Room/NPRoomListWidget.h"
 #include "UI/MainMenu/Room/NPRoomItemWidget.h"
 
+#include "Blueprint/WidgetTree.h"
 #include "Components/ScrollBox.h"
+#include "Components/ScrollBoxSlot.h"
 #include "Components/Button.h"
+#include "Components/TextBlock.h"
 #include "Core/Room/NPRoomSubsystem.h"
 #include "Core/Title/NPTitlePlayerController.h"
 #include "SubSystem/NPUIManagerSubsystem.h"
@@ -21,17 +24,27 @@ void UNPRoomListWidget::NativeConstruct()
 		CloseButton->OnClicked.AddDynamic(this, &UNPRoomListWidget::OnCloseClicked);
 	}
 
-	// UNPRoomSubsystem의 방 검색 완료 델리게이트 바인딩
 	if (UGameInstance* GI = GetGameInstance())
     	{
     		if (UNPRoomSubsystem* RoomSubsystem = GI->GetSubsystem<UNPRoomSubsystem>())
     		{
     			RoomSubsystem->OnFindRoomsComplete.AddDynamic(this, &UNPRoomListWidget::OnFindRoomsComplete);
+			bIsSearching = RoomSubsystem->IsFindingRooms();
     		}
     	}
     
-    	// 방 목록 UI가 켜질 때 자동으로 첫 검색 수행
-    	OnRefreshClicked();
+	//미리 검색해둔 결과를 표시
+	RefreshRoomList();
+
+	//사전검색 결과가 비어있으면 재검색
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (const UNPRoomSubsystem* RoomSubsystem = GameInstance->GetSubsystem<UNPRoomSubsystem>();
+			RoomSubsystem && RoomSubsystem->GetListedRooms().IsEmpty())
+		{
+			OnRefreshClicked();
+		}
+	}
 }
 
 void UNPRoomListWidget::NativeDestruct()
@@ -63,10 +76,30 @@ void UNPRoomListWidget::OnRefreshClicked()
 	{
 		TitlePlayerController->FindRooms();
 	}
+
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (const UNPRoomSubsystem* RoomSubsystem = GameInstance->GetSubsystem<UNPRoomSubsystem>())
+		{
+			UpdateSearchState(RoomSubsystem->IsFindingRooms());
+		}
+	}
 }
 
 void UNPRoomListWidget::OnFindRoomsComplete(const TArray<int32>& RoomIndices)
 {
+	UpdateSearchState(false);
+}
+
+void UNPRoomListWidget::UpdateSearchState(const bool bInIsSearching)
+{
+	bIsSearching = bInIsSearching;
+
+	if (IsValid(RefreshButton))
+	{
+		RefreshButton->SetIsEnabled(!bIsSearching);
+	}
+
 	RefreshRoomList();
 }
 
@@ -79,6 +112,30 @@ void UNPRoomListWidget::RefreshRoomList()
 	UGameInstance* GI = GetGameInstance();
 	UNPRoomSubsystem* RoomSubsystem = GI ? GI->GetSubsystem<UNPRoomSubsystem>() : nullptr;
 	if (!IsValid(RoomSubsystem)) return;
+
+	if (bIsSearching && WidgetTree)
+	{
+		UTextBlock* SearchingText = WidgetTree->ConstructWidget<UTextBlock>();
+		if (IsValid(SearchingText))
+		{
+			SearchingText->SetText(FText::FromString(TEXT("~ 검색중 ~")));
+			if (SearchingTextFont.FontObject)
+			{
+				SearchingText->SetFont(SearchingTextFont);
+			}
+			SearchingText->SetColorAndOpacity(FSlateColor(SearchingTextColor));
+			SearchingText->SetJustification(ETextJustify::Center);
+			if (UScrollBoxSlot* SearchingTextSlot = Cast<UScrollBoxSlot>(RoomListScrollBox->AddChild(SearchingText)))
+			{
+				SearchingTextSlot->SetHorizontalAlignment(HAlign_Fill);
+			}
+		}
+	}
+
+	if (bIsSearching)
+	{
+		return;
+	}
 
 	const TArray<FNPRoomListEntry> Rooms = RoomSubsystem->GetListedRooms();
 	for (const FNPRoomListEntry& Room : Rooms)

@@ -49,6 +49,12 @@ void UNPMainMenuWidget::NativeConstruct()
 			}
 		}
 	}
+
+	// 미리 방 검색
+	if (ANPTitlePlayerController* TitlePlayerController = Cast<ANPTitlePlayerController>(GetOwningPlayer()))
+	{
+		TitlePlayerController->FindRooms();
+	}
 }
 
 void UNPMainMenuWidget::NativeDestruct()
@@ -86,7 +92,6 @@ void UNPMainMenuWidget::OnHostGameClicked()
 
 void UNPMainMenuWidget::OnJoinGameClicked()
 {
-	// 방 목록 UI(WBP_RoomList)를 화면 위에 PopUp 형태로 띄움
 	if (UGameInstance* GI = GetGameInstance())
 	{
 		if (UNPUIManagerSubsystem* UIManager = GI->GetSubsystem<UNPUIManagerSubsystem>())

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Styling/SlateTypes.h"
 #include "UI/NPUserWidget.h"
 #include "NPRoomListWidget.generated.h"
 
@@ -29,9 +30,13 @@ private:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> CloseButton;
 
-	// 방 항목 위젯 BPP 클래스 (WBP_RoomItem 지정)
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UNPRoomItemWidget> RoomItemClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Room Search")
+	FSlateFontInfo SearchingTextFont;
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Room Search")
+	FLinearColor SearchingTextColor = FLinearColor::White;
 
 	UFUNCTION()
 	void OnRefreshClicked();
@@ -39,7 +44,9 @@ private:
 	void OnCloseClicked();
 	UFUNCTION()
 	void OnFindRoomsComplete(const TArray<int32>& RoomIndices);
-	// 특정 방 항목을 클릭했을 때 호출될 함수
+	void UpdateSearchState(bool bInIsSearching);
 	UFUNCTION()
 	void OnRoomItemSelected(int32 SelectedRoomNumber);
+
+	bool bIsSearching = false;
 };

@@ -1,6 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
-
 #include "Core/Room/NPRoomPlayerController.h"
 
 #include "EnhancedInputComponent.h"
@@ -12,6 +9,8 @@
 #include "Core/Room/NPRoomCheatManager.h"
 #include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
+#include "InputCoreTypes.h"
+#include "InputKeyEventArgs.h"
 #include "SubSystem/NPUIManagerSubsystem.h"
 #include "UI/NPUserWidget.h"
 #include "Widgets/Input/SVirtualJoystick.h"
@@ -115,9 +114,22 @@ void ANPRoomPlayerController::SetupInputComponent()
 	{
 		if (ChangeInputAction)
 		{
-			EnhancedInput->BindAction(ChangeInputAction, ETriggerEvent::Started, this, &ANPRoomPlayerController::ChangeInputMode);
+			EnhancedInput->BindAction(ChangeInputAction, ETriggerEvent::Started, this, &ANPRoomPlayerController::ToggleLobbyInputMode);
 		}
 	}
+}
+
+bool ANPRoomPlayerController::InputKey(const FInputKeyEventArgs& Params)
+{
+	const bool bHandled = Super::InputKey(Params);
+	if (IsLocalController() && bIsMouseInput
+		&& Params.Key == EKeys::LeftMouseButton && Params.Event == IE_Pressed
+		&& (!IsValid(ChatComponent) || !ChatComponent->IsChatInputOpen()))
+	{
+		ApplyLobbyInputMode();
+	}
+
+	return bHandled;
 }
 
 bool ANPRoomPlayerController::ShouldUseTouchControls() const
@@ -125,7 +137,7 @@ bool ANPRoomPlayerController::ShouldUseTouchControls() const
 	return SVirtualJoystick::ShouldDisplayTouchInterface() || bForceTouchControls;
 }
 
-void ANPRoomPlayerController::ChangeInputMode()
+void ANPRoomPlayerController::ToggleLobbyInputMode()
 {
 	if (!IsLocalController())
 	{

@@ -1,5 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
 
 #include "CoreMinimal.h"
@@ -12,6 +10,7 @@ class UUserWidget;
 class UInputMappingContext;
 class UInputAction;
 class UNPChatComponent;
+struct FInputKeyEventArgs;
 
 /** 대기방의 방 기능, UI와 입력을 담당하는 PlayerController입니다. */
 UCLASS()
@@ -56,10 +55,13 @@ public:
 
 	UFUNCTION(Client, Reliable)
 	void ClientShowLobbyUI();
+	
+	void ToggleLobbyInputMode();
 
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
+	virtual bool InputKey(const FInputKeyEventArgs& Params) override;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UNPRoomPlayerComponent> RoomComponent;
@@ -86,7 +88,6 @@ protected:
 	TSubclassOf<UNPUserWidget> LobbyWidgetClass;
 
 	bool bIsMouseInput = false;
-	void ChangeInputMode();
 
 private:
 	bool ShouldUseTouchControls() const;
