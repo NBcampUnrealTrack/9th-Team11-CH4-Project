@@ -73,6 +73,14 @@ void UNPImpactReceiveComponent::IgnoreGrabImpact()
 	}
 }
 
+void UNPImpactReceiveComponent::SetImpactThresholds(
+	const float InMinThreshold,
+	const float InMaxThreshold)
+{
+	MinImpactThreshold = FMath::Max(0.0f, InMinThreshold);
+	MaxImpactThreshold = FMath::Max(0.0f, InMaxThreshold);
+}
+
 void UNPImpactReceiveComponent::HandleHit(
 	UPrimitiveComponent* HitComponent,
 	AActor* OtherActor,

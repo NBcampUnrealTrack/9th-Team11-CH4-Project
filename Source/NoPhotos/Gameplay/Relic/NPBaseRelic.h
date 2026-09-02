@@ -30,11 +30,11 @@ public:
 	UFUNCTION(BlueprintPure, Category="Relic|Physics")
 	bool ShouldStartWithPhysicsEnabled() const { return bStartWithPhysicsEnabled; }
 
-	UFUNCTION(BlueprintPure, Category="Relic")
-	virtual FVector GetRelicWorldLocation() const;
-
 	UFUNCTION(BlueprintPure, Category="Relic|Delivery")
 	bool IsReturned() const { return bIsReturned; }
+
+	UFUNCTION(BlueprintPure, Category="Relic|Bonus Quest")
+	virtual bool IsBonusQuestResolved() const { return IsReturned(); }
 
 	UFUNCTION(BlueprintPure, Category="Relic|Delivery")
 	int32 GetBasePrice() const;

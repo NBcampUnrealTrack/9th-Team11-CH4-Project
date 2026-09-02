@@ -57,13 +57,6 @@ void ANPBaseRelic::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(ANPBaseRelic, bIsReturned);
 }
 
-FVector ANPBaseRelic::GetRelicWorldLocation() const
-{
-	return IsValid(RelicMesh)
-		? RelicMesh->GetComponentLocation()
-		: GetActorLocation();
-}
-
 int32 ANPBaseRelic::GetBasePrice() const
 {
 	const FNPRelicTableRow* Data = GetRelicTableData();
