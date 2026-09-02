@@ -1,16 +1,20 @@
 #include "UI/MainMenu/NPLobbyWidget.h"
 
 #include "Components/Button.h"
+#include "Core/Chat/NPChatComponent.h"
 #include "Core/Room/NPRoomGameState.h"
 #include "Core/Room/NPRoomPlayerController.h"
+#include "InputCoreTypes.h"
 
 UNPLobbyWidget::UNPLobbyWidget(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
+	SetInputModeState(ENPWidgetInputMode::GameOnly);
 }
 
 void UNPLobbyWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+	SetIsFocusable(true);
 
 	if (IsValid(StartButton))
 	{
@@ -31,6 +35,22 @@ void UNPLobbyWidget::NativeConstruct()
 	}
 
 	RefreshStartButtonVisibility();
+}
+
+FReply UNPLobbyWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
+{
+	if (InKeyEvent.GetKey() == EKeys::E)
+	{
+		ANPRoomPlayerController* RoomPlayerController = Cast<ANPRoomPlayerController>(GetOwningPlayer());
+		UNPChatComponent* ChatComponent = RoomPlayerController ? RoomPlayerController->GetChatComponent() : nullptr;
+		if (IsValid(RoomPlayerController) && (!IsValid(ChatComponent) || !ChatComponent->IsChatInputOpen()))
+		{
+			RoomPlayerController->ToggleLobbyInputMode();
+			return FReply::Handled();
+		}
+	}
+
+	return Super::NativeOnPreviewKeyDown(InGeometry, InKeyEvent);
 }
 
 void UNPLobbyWidget::NativeDestruct()
