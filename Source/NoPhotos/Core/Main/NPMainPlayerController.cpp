@@ -12,6 +12,7 @@
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerState.h"
+#include "InputCoreTypes.h"
 #include "Gameplay/Photo/NPPhotoCaptureComponent.h"
 #include "Gameplay/Photo/NPPhotoFlashWidget.h"
 #include "Gameplay/Photo/NPPhotoLog.h"
@@ -222,6 +223,18 @@ void ANPMainPlayerController::SetupInputComponent()
 	{
 		UE_LOG(LogNPPhoto, Warning, TEXT("[Input] FireAction is not assigned."));
 	}
+}
+
+bool ANPMainPlayerController::InputKey(const FInputKeyEventArgs& Params)
+{
+	if (IsLocalController() && IsValid(ChatComponent) && ChatComponent->IsChatInputOpen()
+		&& Params.Key == EKeys::LeftMouseButton && Params.Event == IE_Pressed)
+	{
+		ChatComponent->CloseChatInput();
+		return true;
+	}
+
+	return Super::InputKey(Params);
 }
 
 void ANPMainPlayerController::HandleAimStarted()

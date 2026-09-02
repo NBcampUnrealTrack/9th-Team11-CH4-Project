@@ -104,7 +104,6 @@ void UNPChatWidget::CloseChatInput()
 {
 	if (IsValid(ChatInput))
 	{
-		ChatInput->SetText(FText::GetEmpty());
 		ChatInput->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	SetChatBackgroundVisible(false);

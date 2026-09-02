@@ -121,6 +121,13 @@ void ANPRoomPlayerController::SetupInputComponent()
 
 bool ANPRoomPlayerController::InputKey(const FInputKeyEventArgs& Params)
 {
+	if (IsLocalController() && IsValid(ChatComponent) && ChatComponent->IsChatInputOpen()
+		&& Params.Key == EKeys::LeftMouseButton && Params.Event == IE_Pressed)
+	{
+		ChatComponent->CloseChatInput();
+		return true;
+	}
+
 	const bool bHandled = Super::InputKey(Params);
 	if (IsLocalController() && bIsMouseInput
 		&& Params.Key == EKeys::LeftMouseButton && Params.Event == IE_Pressed

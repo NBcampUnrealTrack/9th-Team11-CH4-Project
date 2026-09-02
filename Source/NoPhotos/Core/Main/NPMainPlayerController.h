@@ -14,6 +14,7 @@ class UNPNoticeEventWidget;
 class UNPUserWidget;
 class UUserWidget;
 class UNPChatComponent;
+struct FInputKeyEventArgs;
 
 UCLASS()
 class NOPHOTOS_API ANPMainPlayerController : public APlayerController
@@ -65,6 +66,7 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
+	virtual bool InputKey(const FInputKeyEventArgs& Params) override;
 
 	/** 사진 모드와 조준 유물이 함께 사용하는 조준 입력입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Aim and Fire")
