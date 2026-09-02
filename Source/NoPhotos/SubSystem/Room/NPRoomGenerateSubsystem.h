@@ -56,7 +56,6 @@ private:
 	void HandleLevelShown();
 
 	bool CollectRoomRelicCollectors();
-	void LogQuestRelics() const;
 
 	UPROPERTY(Transient)
 	TArray<FNPRoomInstanceInfo> GeneratedRooms;

@@ -118,7 +118,6 @@ void UNPRoomGenerateSubsystem::HandleLevelShown()
 	}
 
 	bGenerationComplete = true;
-	LogQuestRelics();
 	OnRoomGenerationCompleted.Broadcast();
 }
 
@@ -155,26 +154,4 @@ bool UNPRoomGenerateSubsystem::CollectRoomRelicCollectors()
 	}
 
 	return bCollectedAllRooms;
-}
-
-void UNPRoomGenerateSubsystem::LogQuestRelics() const
-{
-	for (const FNPRoomInstanceInfo& RoomInfo : GeneratedRooms)
-	{
-		const ANPRoomRelicCollector* RelicCollector =
-			RoomInfo.RelicCollector.Get();
-		if (!IsValid(RelicCollector))
-		{
-			continue;
-		}
-
-		//TODO 임시로 퀘스트 유물 로그로 찍고 있음. 제거 필요.
-		const ANPBaseRelic* QuestRelic = RelicCollector->GetQuestRelic();
-		UE_LOG(
-			LogNPRoomGenerate,
-			Display,
-			TEXT("%d번 방 퀘스트 유물: %s"),
-			RoomInfo.SlotIndex + 1,
-			QuestRelic ? *GetNameSafe(QuestRelic) : TEXT("(없음)"));
-	}
 }

@@ -75,7 +75,9 @@ void UNPBonusItemWidget::HandleRelicReturned()
 
 void UNPBonusItemWidget::UpdateReturnedState()
 {
-	SetReturnedState(AssignedRelic.IsValid() && AssignedRelic->IsReturned());
+	SetReturnedState(
+		AssignedRelic.IsValid()
+		&& AssignedRelic->IsBonusQuestResolved());
 }
 
 void UNPBonusItemWidget::SetReturnedState(const bool bInIsReturned)
