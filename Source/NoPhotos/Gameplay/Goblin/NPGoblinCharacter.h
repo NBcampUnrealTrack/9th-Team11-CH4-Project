@@ -10,6 +10,7 @@ class ANPBaseRelic;
 class APlayerState;
 class UAnimMontage;
 class ANPGoblinPresentationDoor;
+class UDataTable;
 
 UENUM(BlueprintType)
 enum class ENPGoblinLifecycleState : uint8
@@ -180,7 +181,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Photo|Health", meta = (ClampMin = "1", UIMin = "1"))
 	int32 PhotoDamagePerCapture = 1;
 
-	/** 유효한 사진이 찍힐 때마다 서버에서 고블린 위치에 생성할 유물 BP입니다. */
+	/** 지정하면 유효한 RelicClass를 가진 행 중 하나를 무작위로 골라 보상으로 생성합니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Photo|Reward")
+	TObjectPtr<UDataTable> RelicDropTable;
+
+	/** RelicDropTable을 사용하지 못할 때 서버에서 생성할 예비 유물 BP입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Photo|Reward")
 	TSubclassOf<ANPBaseRelic> PhotographedRelicClass;
 
