@@ -714,6 +714,8 @@ void UNPRoomSubsystem::HandleFindSessionsComplete(const bool bWasSuccessful)
 		else
 		{
 			NPRoomLog::Warning(this, TEXT("방 목록 검색 실패: 온라인 검색이 정상적으로 완료되지 않았습니다."));
+			OnFindRoomsComplete.Broadcast(ListedRoomResultIndices);
+			OnRoomListUpdated.Broadcast(ListedRooms);
 		}
 		return;
 	}

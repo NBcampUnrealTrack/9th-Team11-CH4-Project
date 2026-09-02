@@ -64,6 +64,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Room")
 	bool FindRooms();
 
+	UFUNCTION(BlueprintPure, Category = "Room")
+	bool IsFindingRooms() const { return FindSessionsCompleteHandle.IsValid(); }
+
 	UFUNCTION(BlueprintCallable, Category = "Room")
 	bool JoinRoom(int32 RoomNumber);
 
