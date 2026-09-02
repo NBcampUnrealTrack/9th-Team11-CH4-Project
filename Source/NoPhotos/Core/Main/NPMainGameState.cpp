@@ -2,7 +2,6 @@
 
 #include "Core/Main/NPMainPlayerController.h"
 #include "Core/NPPlayerState.h"
-#include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
@@ -233,7 +232,6 @@ void ANPMainGameState::RefreshPlayerRankings()
 
 	ForceNetUpdate();
 	OnPlayerRankingsChanged.Broadcast();
-	ShowPlayerRankingsDebugMessage();
 }
 
 void ANPMainGameState::StartMainGame(const int32 DurationSeconds)
@@ -308,7 +306,6 @@ void ANPMainGameState::FinishMainGame()
 void ANPMainGameState::OnRep_PlayerRankings()
 {
 	OnPlayerRankingsChanged.Broadcast();
-	ShowPlayerRankingsDebugMessage();
 	TryLogFinalRankings();
 }
 
@@ -428,40 +425,4 @@ void ANPMainGameState::TryLogFinalRankings()
 				*PlayerName,
 				Ranking.Score));
 	}
-}
-
-void ANPMainGameState::ShowPlayerRankingsDebugMessage() const
-{
-#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
-	if (!GEngine)
-	{
-		return;
-	}
-
-	FString ScoreText = TEXT("=== 현재 점수 ===\n");
-	if (PlayerRankings.IsEmpty())
-	{
-		ScoreText += TEXT("플레이어 없음");
-	}
-	else
-	{
-		for (int32 RankingIndex = 0; RankingIndex < PlayerRankings.Num(); ++RankingIndex)
-		{
-			const FNPPlayerRanking& Ranking = PlayerRankings[RankingIndex];
-			ScoreText += FString::Printf(
-				TEXT("%d. %s : %d점%s"),
-				RankingIndex + 1,
-				Ranking.PlayerState ? *Ranking.PlayerState->GetPlayerName() : TEXT("Unknown"),
-				Ranking.Score,
-				RankingIndex + 1 < PlayerRankings.Num() ? TEXT("\n") : TEXT(""));
-		}
-	}
-	
-	constexpr uint64 PlayerRankingsDebugMessageKey = 1001;
-	GEngine->AddOnScreenDebugMessage(
-		PlayerRankingsDebugMessageKey,
-		10.0f,
-		FColor::Cyan,
-		ScoreText);
-#endif
 }
