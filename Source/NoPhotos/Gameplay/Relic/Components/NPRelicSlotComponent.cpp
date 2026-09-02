@@ -173,8 +173,30 @@ void UNPRelicSlotComponent::ReleaseRelic()
 	Owner->ForceNetUpdate();
 }
 
-void UNPRelicSlotComponent::SetCaseAccessible(bool bAccessible)
+void UNPRelicSlotComponent::SetCaseAccessible(const bool bAccessible)
 {
+	bCaseAccessible = bAccessible;
+	if (!IsValid(SpawnedRelic))
+	{
+		return;
+	}
+
+	AActor* Owner = GetOwner();
+	if (Owner && Owner->HasAuthority())
+	{
+		if (!bIsRelicReleased && !SpawnedRelic->IsDisplayed())
+		{
+			bIsRelicReleased = true;
+			Owner->ForceNetUpdate();
+		}
+
+		SpawnedRelic->SetUnlocked(
+			bInitiallyAccessible
+			|| bIsRelicReleased
+			|| bCaseAccessible);
+	}
+
+	ApplyRelicState();
 }
 
 void UNPRelicSlotComponent::OnRep_SpawnedRelic()
@@ -194,12 +216,15 @@ void UNPRelicSlotComponent::ApplyRelicState()
 		return;
 	}
 
+	const bool bCanAccessRelic = bInitiallyAccessible
+		|| bIsRelicReleased
+		|| bCaseAccessible;
 	if (UPrimitiveComponent* RelicPrimitive =
 		Cast<UPrimitiveComponent>(SpawnedRelic->GetRootComponent()))
 	{
 		RelicPrimitive->SetCollisionResponseToChannel(
 			ECC_Destructible,
-			ECR_Ignore);
+			bCanAccessRelic ? ECR_Block : ECR_Ignore);
 	}
-	SpawnedRelic->SetActorEnableCollision(bIsRelicReleased);
+	SpawnedRelic->SetActorEnableCollision(bCanAccessRelic);
 }
