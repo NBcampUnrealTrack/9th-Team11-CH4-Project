@@ -99,6 +99,14 @@ protected:
 	virtual void OnRep_PlayerState() override;
 	virtual FRotator GetTargetViewRotation() const override;
 
+	/** 서버에서 잡기가 확정되었을 때 각 클라이언트에서 호출됩니다. */
+	UFUNCTION(BlueprintImplementableEvent, Category="Grab|Audio", meta=(DisplayName="잡기 성공"))
+	void OnGrabSucceeded(UPrimitiveComponent* GrabbedComponent);
+
+	/** 물리 Constraint가 힘에 의해 끊어졌을 때 각 클라이언트에서 호출됩니다. */
+	UFUNCTION(BlueprintImplementableEvent, Category="Grab|Audio", meta=(DisplayName="잡기 Constraint 파손"))
+	void OnGrabConstraintBroken();
+
 private:
 	static constexpr float ViewRotationSendInterval = 0.05f;
 
@@ -121,6 +129,9 @@ private:
 		FVector_NetQuantize100 PelvisLocation,
 		FRotator PelvisRotation);
 
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastNotifyGrabConstraintBroken();
+
 	UFUNCTION()
 	void OnRep_RightHandActive();
 
@@ -131,6 +142,8 @@ private:
 	void OnRep_ExternallyGrabbed();
 
 	void HandleGrabbedComponentChanged(UPrimitiveComponent* NewGrabbedComponent);
+	void HandleGrabConstraintBroken();
+	void UpdateBlueprintGrabState(UPrimitiveComponent* NewGrabbedComponent);
 	void AddExternalGrabber();
 	void RemoveExternalGrabber();
 	UPrimitiveComponent* ResolveReplicatedGrabbedComponent() const;
@@ -218,6 +231,7 @@ private:
 	bool bClientWasMoving = false;
 	bool bLocalRightHandActive = false;
 	bool bAwaitingServerGrabConfirmation = false;
+	bool bBlueprintGrabActive = false;
 	float LocalGrabPredictionTimeRemaining = 0.0f;
 	float ViewRotationSendAccumulator = ViewRotationSendInterval;
 	

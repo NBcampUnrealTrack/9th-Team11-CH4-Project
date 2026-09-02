@@ -10,6 +10,7 @@ class UGrabbableComponent;
 class UNPStablePhysicsDebugComponent;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnStableGrabChanged, UPrimitiveComponent*);
+DECLARE_MULTICAST_DELEGATE(FOnStableGrabConstraintBroken);
 
 /** 손 주변의 잡을 수 있는 물리 Body를 찾아 Physics Constraint로 연결합니다. */
 UCLASS(ClassGroup=(Physics), meta=(BlueprintSpawnableComponent))
@@ -43,6 +44,7 @@ public:
 	void NotifyJumpIntent();
 
 	FOnStableGrabChanged OnGrabbedComponentChanged;
+	FOnStableGrabConstraintBroken OnGrabConstraintBroken;
 
 	UFUNCTION(BlueprintPure, Category="Grab")
 	bool IsHoldingObject() const { return IsValid(GrabbedComponent); }
