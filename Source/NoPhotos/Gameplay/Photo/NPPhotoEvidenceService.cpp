@@ -128,7 +128,7 @@ FNPPhotoEvidenceResult UNPPhotoEvidenceService::EvaluatePhoto(
 
 		if (FVector::DistSquared(Request.CameraLocation, CandidateThief->GetActorLocation())
 			> MaximumDistanceSquared
-			|| FVector::DistSquared(Request.CameraLocation, Relic->GetRelicWorldLocation())
+			|| FVector::DistSquared(Request.CameraLocation, Relic->GetActorLocation())
 			> MaximumDistanceSquared)
 		{
 			continue;

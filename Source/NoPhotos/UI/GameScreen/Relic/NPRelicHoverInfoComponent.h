@@ -30,7 +30,6 @@ private:
 	void RefreshHoverVisibility();
 	void UpdateFacingCamera();
 
-	FVector RelicLocationOffset = FVector::ZeroVector;
 	bool bVisibleByGameplay = true;
 	bool bFocusedByLocalPlayer = false;
 };

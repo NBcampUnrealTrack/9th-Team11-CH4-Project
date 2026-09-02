@@ -36,6 +36,5 @@ private:
 	TWeakObjectPtr<UNPPlayerBonusQuestComponent> BoundBonusQuestComponent;
 	TWeakObjectPtr<UTextBlock> PointText;
 	TWeakObjectPtr<UTextBlock> LeftDistanceText;
-	FVector RelicLocationOffset = FVector::ZeroVector;
 	bool bWasReturned = false;
 };
