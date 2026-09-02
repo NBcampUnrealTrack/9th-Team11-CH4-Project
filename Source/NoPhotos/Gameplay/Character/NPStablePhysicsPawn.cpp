@@ -860,9 +860,14 @@ void ANPStablePhysicsPawn::Move(const FInputActionValue& Value)
 	const FRotator YawRotation(0.0f, Controller->GetControlRotation().Yaw, 0.0f);
 	const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
 	const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
-	ApplyMoveInput(
+	FVector WorldMoveInput =
 		ForwardDirection * MovementInput.Y
-		+ RightDirection * MovementInput.X);
+		+ RightDirection * MovementInput.X;
+	if (bInsideLadderVolume && MovementInput.Y > UE_SMALL_NUMBER)
+	{
+		WorldMoveInput += FVector::UpVector * MovementInput.Y;
+	}
+	ApplyMoveInput(WorldMoveInput);
 }
 
 void ANPStablePhysicsPawn::Look(const FInputActionValue& Value)
