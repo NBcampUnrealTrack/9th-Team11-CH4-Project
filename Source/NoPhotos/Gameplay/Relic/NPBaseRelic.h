@@ -30,6 +30,9 @@ public:
 	UFUNCTION(BlueprintPure, Category="Relic|Physics")
 	bool ShouldStartWithPhysicsEnabled() const { return bStartWithPhysicsEnabled; }
 
+	UFUNCTION(BlueprintPure, Category="Relic")
+	virtual FVector GetRelicWorldLocation() const;
+
 	UFUNCTION(BlueprintPure, Category="Relic|Delivery")
 	bool IsReturned() const { return bIsReturned; }
 

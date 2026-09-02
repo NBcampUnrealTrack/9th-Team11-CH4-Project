@@ -11,6 +11,7 @@ UNPRelicHoverInfoComponent::UNPRelicHoverInfoComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = true;
+	PrimaryComponentTick.TickGroup = TG_PostPhysics;
 
 	SetWidgetSpace(EWidgetSpace::World);
 	SetDrawAtDesiredSize(true);
@@ -22,6 +23,12 @@ UNPRelicHoverInfoComponent::UNPRelicHoverInfoComponent()
 void UNPRelicHoverInfoComponent::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (const ANPBaseRelic* Relic = Cast<ANPBaseRelic>(GetOwner()))
+	{
+		RelicLocationOffset =
+			GetComponentLocation() - Relic->GetRelicWorldLocation();
+	}
 
 	RefreshRelicInfo();
 	RefreshHoverVisibility();
@@ -99,7 +106,16 @@ void UNPRelicHoverInfoComponent::UpdateFacingCamera()
 		return;
 	}
 
+	const ANPBaseRelic* Relic = Cast<ANPBaseRelic>(GetOwner());
+	if (!IsValid(Relic))
+	{
+		return;
+	}
+
+	const FVector HoverLocation =
+		Relic->GetRelicWorldLocation() + RelicLocationOffset;
+	SetWorldLocation(HoverLocation);
 	SetWorldRotation(UKismetMathLibrary::FindLookAtRotation(
-		GetComponentLocation(),
+		HoverLocation,
 		CameraManager->GetCameraLocation()));
 }

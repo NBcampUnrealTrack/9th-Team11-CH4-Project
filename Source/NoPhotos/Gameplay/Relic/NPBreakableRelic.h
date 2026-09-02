@@ -18,6 +18,7 @@ public:
 		const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual FVector GetRelicWorldLocation() const override;
 
 	UFUNCTION(BlueprintPure, Category = "Relic|Breakable")
 	bool IsBroken() const { return bIsBroken; }

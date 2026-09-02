@@ -40,7 +40,7 @@ void ANPBreakableRelic::BeginPlay()
 		}
 		GeometryCollectionComponent->SetVisibility(true, true);
 		GeometryCollectionComponent->SetHiddenInGame(false, true);
-		GeometryCollectionComponent->ForceBrokenForCustomRenderer(true);
+		GeometryCollectionComponent->ForceBrokenForCustomRenderer(false);
 		GeometryCollectionComponent->SetEnableDamageFromCollision(false);
 		GeometryCollectionComponent->SetNotifyBreaks(true);
 		GeometryCollectionComponent->SetCollisionEnabled(
@@ -81,6 +81,19 @@ void ANPBreakableRelic::GetLifetimeReplicatedProps(
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ANPBreakableRelic, bIsBroken);
 	DOREPLIFETIME(ANPBreakableRelic, BreakLocation);
+}
+
+FVector ANPBreakableRelic::GetRelicWorldLocation() const
+{
+	if (!IsValid(GeometryCollectionComponent)
+		|| !GeometryCollectionComponent->GetRestCollection())
+	{
+		return Super::GetRelicWorldLocation();
+	}
+
+	return bIsBroken
+		? GeometryCollectionComponent->Bounds.Origin
+		: GeometryCollectionComponent->GetRootCurrentTransform().GetLocation();
 }
 
 void ANPBreakableRelic::OnRep_IsBroken()
@@ -181,6 +194,7 @@ void ANPBreakableRelic::ApplyBrokenState()
 	GeometryCollectionComponent->SetSimulatePhysics(true);
 	GeometryCollectionComponent->RemoveAllAnchors();
 	GeometryCollectionComponent->WakeAllRigidBodies();
+	GeometryCollectionComponent->ForceBrokenForCustomRenderer(true);
 
 	BreakRootCluster();
 }
