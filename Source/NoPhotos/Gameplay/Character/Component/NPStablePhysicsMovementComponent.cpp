@@ -76,6 +76,34 @@ void UNPStablePhysicsMovementComponent::SetMoveInput(const FVector& InMoveInput)
 	PendingInput.MoveInput = InMoveInput.GetClampedToMaxSize(1.0f);
 }
 
+void UNPStablePhysicsMovementComponent::SetExternalFlowVelocity(
+	UObject* Source,
+	const FVector& InFlowVelocity)
+{
+	if (!IsValid(Source))
+	{
+		return;
+	}
+
+	FVector FlowVelocity = InFlowVelocity;
+	FlowVelocity.Z = 0.0f;
+	if (FlowVelocity.IsNearlyZero())
+	{
+		ExternalFlowVelocities.Remove(TWeakObjectPtr<UObject>(Source));
+		return;
+	}
+
+	ExternalFlowVelocities.FindOrAdd(Source) = FlowVelocity;
+}
+
+void UNPStablePhysicsMovementComponent::ClearExternalFlowVelocity(UObject* Source)
+{
+	if (IsValid(Source))
+	{
+		ExternalFlowVelocities.Remove(TWeakObjectPtr<UObject>(Source));
+	}
+}
+
 void UNPStablePhysicsMovementComponent::SetFacingDirection(
 	const FVector& InFacingDirection)
 {
@@ -243,6 +271,25 @@ FVector UNPStablePhysicsMovementComponent::GetCurrentFacingDirection() const
 		FVector::UpVector);
 	CurrentForward.Z = 0.0f;
 	return CurrentForward.GetSafeNormal();
+}
+
+FVector UNPStablePhysicsMovementComponent::GetExternalFlowVelocity()
+{
+	FVector TotalFlowVelocity = FVector::ZeroVector;
+	int32 FlowCount = 0;
+	for (auto Iterator = ExternalFlowVelocities.CreateIterator(); Iterator; ++Iterator)
+	{
+		if (!IsValid(Iterator.Key().Get()))
+		{
+			Iterator.RemoveCurrent();
+			continue;
+		}
+
+		TotalFlowVelocity += Iterator.Value();
+		++FlowCount;
+	}
+
+	return FlowCount > 0 ? TotalFlowVelocity / FlowCount : FVector::ZeroVector;
 }
 
 void UNPStablePhysicsMovementComponent::SetAnimationStateOverride(
@@ -436,7 +483,7 @@ void UNPStablePhysicsMovementComponent::UpdateMovementPhysics(const FVector& InM
 	HorizontalVelocity.Z = 0.0f;
 
 	// 힘을 계속 누적하지 않고 현재 속도가 목표 속도에 가까워지도록 제어합니다.
-	const FVector DesiredVelocity = InMoveInput * MaxMoveSpeed;
+	const FVector DesiredVelocity = InMoveInput * MaxMoveSpeed + GetExternalFlowVelocity();
 	FVector MoveForce = (DesiredVelocity - HorizontalVelocity) * MoveStrength;
 	MoveForce -= HorizontalVelocity * MoveDamping;
 	MoveForce.Z = 0.0f;

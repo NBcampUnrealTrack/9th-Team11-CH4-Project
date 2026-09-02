@@ -45,6 +45,10 @@ public:
 	/** 카메라 기준으로 계산된 월드 공간 이동 방향을 전달받습니다. */
 	void SetMoveInput(const FVector& InMoveInput);
 
+	/** 지정한 월드 오브젝트가 제공하는 수평 이동 속도를 등록합니다. */
+	void SetExternalFlowVelocity(UObject* Source, const FVector& InFlowVelocity);
+	void ClearExternalFlowVelocity(UObject* Source);
+
 	/** 캐릭터가 따라볼 월드 공간의 수평 방향을 설정합니다. */
 	void SetFacingDirection(const FVector& InFacingDirection);
 	void InitializeFacingControl(UPhysicsControlComponent* InPhysicsControl);
@@ -73,6 +77,7 @@ public:
 
 	/** 수평면을 기준으로 메시가 실제 바라보는 정면 방향을 반환합니다. */
 	FVector GetCurrentFacingDirection() const;
+	FVector GetExternalFlowVelocity();
 
 	UFUNCTION(BlueprintPure, Category="Stable Physics Movement")
 	FVector GetVelocity() const { return bUseAnimationStateOverride ? AnimationVelocity : Velocity; }
@@ -105,6 +110,8 @@ protected:
 	FName RightFootBoneName = TEXT("foot_r");
 
 	float MaxMoveSpeed = 350.0f;
+
+	TMap<TWeakObjectPtr<UObject>, FVector> ExternalFlowVelocities;
 
 	UPROPERTY(EditAnywhere, Category="Movement", meta=(ClampMin="0.0"))
 	float MoveStrength = 350.0f;
