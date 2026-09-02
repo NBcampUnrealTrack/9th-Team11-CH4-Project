@@ -13,6 +13,7 @@
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
+#include "TimerManager.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogNPRelicBonus, Log, All);
 
@@ -118,9 +119,9 @@ void ANPRelicBonusMapEvent::Tick(const float DeltaSeconds)
 
 	if (ActiveRopeDeployments.IsEmpty() && ActiveDepartures.IsEmpty())
 	{
-		if (!IsEventActive() && !SpawnedHelicopters.IsEmpty())
+		if (bDepartureInProgress)
 		{
-			DestroySpawnedActors();
+			FinishDepartureCycle();
 			return;
 		}
 		SetActorTickEnabled(false);
@@ -144,22 +145,112 @@ void ANPRelicBonusMapEvent::ApplyEventState_Implementation(const bool bNewActive
 
 	if (bNewActive)
 	{
-		SpawnReturnZones();
+		GetWorldTimerManager().ClearTimer(HelicopterStayTimer);
+		GetWorldTimerManager().ClearTimer(NextCycleTimer);
+		bDepartureInProgress = false;
+		bRespawnAfterDeparture = false;
+		StartNextHelicopterCycle();
 		return;
 	}
 
-	BeginDeparture();
+	GetWorldTimerManager().ClearTimer(HelicopterStayTimer);
+	GetWorldTimerManager().ClearTimer(NextCycleTimer);
+	BeginDeparture(false);
 }
 
 void ANPRelicBonusMapEvent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (HasAuthority())
 	{
+		GetWorldTimerManager().ClearTimer(HelicopterStayTimer);
+		GetWorldTimerManager().ClearTimer(NextCycleTimer);
 		DestroySpawnedActors();
 	}
 	StopGroundWindImmediately();
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void ANPRelicBonusMapEvent::StartNextHelicopterCycle()
+{
+	if (!HasAuthority() || !IsEventActive() || IsActorBeingDestroyed())
+	{
+		return;
+	}
+
+	GetWorldTimerManager().ClearTimer(NextCycleTimer);
+	bDepartureInProgress = false;
+	bRespawnAfterDeparture = false;
+	SpawnReturnZones();
+	if (!SpawnedHelicopters.IsEmpty())
+	{
+		ScheduleHelicopterDeparture();
+		return;
+	}
+
+	const float RetryDelay = FMath::IsFinite(CycleSpawnRetryDelay)
+		? FMath::Max(0.1f, CycleSpawnRetryDelay) : 1.0f;
+	UE_LOG(LogNPRelicBonus, Warning,
+		TEXT("RelicBonus 사이클 생성 실패, 재시도 예약: Delay=%.2fs Remaining=%.2fs"),
+		RetryDelay, GetRemainingEventTime());
+	GetWorldTimerManager().SetTimer(
+		NextCycleTimer,
+		this,
+		&ThisClass::StartNextHelicopterCycle,
+		RetryDelay,
+		false);
+}
+
+void ANPRelicBonusMapEvent::ScheduleHelicopterDeparture()
+{
+	if (!HasAuthority() || !IsEventActive() || SpawnedHelicopters.IsEmpty())
+	{
+		return;
+	}
+
+	const float MinimumStay = FMath::Max(
+		0.1f,
+		FMath::Min(MinimumHelicopterStayDuration, MaximumHelicopterStayDuration));
+	const float MaximumStay = FMath::Max(
+		0.1f,
+		FMath::Max(MinimumHelicopterStayDuration, MaximumHelicopterStayDuration));
+	const float SampledStayDuration = FMath::FRandRange(MinimumStay, MaximumStay);
+	const float RemainingEventTime = GetRemainingEventTime();
+	const float StayDuration = FMath::Min(SampledStayDuration, RemainingEventTime);
+	if (StayDuration <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+	for (ANPRelicBonusCountdownActor* Countdown : SpawnedCountdownActors)
+	{
+		if (IsValid(Countdown))
+		{
+			Countdown->SetCountdownDuration(StayDuration);
+		}
+	}
+	GetWorldTimerManager().SetTimer(
+		HelicopterStayTimer,
+		this,
+		&ThisClass::HandleHelicopterStayFinished,
+		StayDuration,
+		false);
+	UE_LOG(LogNPRelicBonus, Log,
+		TEXT("RelicBonus 헬리콥터 체류 시작: Duration=%.2fs Sampled=%.2fs Range=[%.2f, %.2f] EventRemaining=%.2fs Helicopters=%d"),
+		StayDuration, SampledStayDuration, MinimumStay, MaximumStay, RemainingEventTime,
+		SpawnedHelicopters.Num());
+}
+
+void ANPRelicBonusMapEvent::HandleHelicopterStayFinished()
+{
+	if (!HasAuthority() || !IsEventActive())
+	{
+		return;
+	}
+
+	UE_LOG(LogNPRelicBonus, Log,
+		TEXT("RelicBonus 헬리콥터 체류 종료, 사이클 퇴장 시작: Remaining=%.2fs"),
+		GetRemainingEventTime());
+	BeginDeparture(true);
 }
 
 void ANPRelicBonusMapEvent::SpawnReturnZones()
@@ -356,8 +447,7 @@ ANPRelicBonusCountdownActor* ANPRelicBonusMapEvent::SpawnCountdownAt(
 	const FTransform& GroundTransform)
 {
 	UWorld* World = GetWorld();
-	const float EventDuration = GetEventDuration();
-	if (!World || !CountdownActorClass || EventDuration <= 0.0f)
+	if (!World || !CountdownActorClass)
 	{
 		return nullptr;
 	}
@@ -376,12 +466,11 @@ ANPRelicBonusCountdownActor* ANPRelicBonusMapEvent::SpawnCountdownAt(
 		return nullptr;
 	}
 
-	Countdown->SetCountdownEndServerWorldTime(GetEventEndServerWorldTime());
 	UGameplayStatics::FinishSpawningActor(Countdown, SpawnTransform);
 	UE_LOG(
 		LogNPRelicBonus,
 		Log,
-		TEXT("반환 존 카운트다운 생성 성공: Actor=%s Remaining=%.2f초 Location=%s"),
+		TEXT("반환 존 카운트다운 생성 성공: Actor=%s EventRemaining=%.2f초 Location=%s (체류시간 추첨 대기)"),
 		*GetNameSafe(Countdown),
 		GetRemainingEventTime(),
 		*SpawnTransform.GetLocation().ToCompactString());
@@ -523,10 +612,13 @@ bool ANPRelicBonusMapEvent::BeginRopeDeployment(
 	return true;
 }
 
-void ANPRelicBonusMapEvent::BeginDeparture()
+void ANPRelicBonusMapEvent::BeginDeparture(const bool bShouldRespawn)
 {
+	GetWorldTimerManager().ClearTimer(HelicopterStayTimer);
 	ActiveRopeDeployments.Reset();
 	ActiveDepartures.Reset();
+	bDepartureInProgress = true;
+	bRespawnAfterDeparture = bShouldRespawn && IsEventActive();
 	MulticastFadeGroundWind();
 
 	// 아래쪽 끝을 먼저 풀어 운반체에 매달린 로프가 끊어지는 연출을 만듭니다.
@@ -574,11 +666,60 @@ void ANPRelicBonusMapEvent::BeginDeparture()
 
 	if (ActiveDepartures.IsEmpty())
 	{
-		DestroySpawnedActors();
+		FinishDepartureCycle();
 		return;
 	}
 
 	SetActorTickEnabled(true);
+}
+
+void ANPRelicBonusMapEvent::FinishDepartureCycle()
+{
+	const bool bStartAnotherCycle = bRespawnAfterDeparture
+		&& IsEventActive() && !IsActorBeingDestroyed();
+	bDepartureInProgress = false;
+	bRespawnAfterDeparture = false;
+	DestroySpawnedActors();
+
+	if (!bStartAnotherCycle)
+	{
+		return;
+	}
+
+	const float MinimumDelay = FMath::Max(
+		0.0f,
+		FMath::Min(MinimumCycleRespawnDelay, MaximumCycleRespawnDelay));
+	const float MaximumDelay = FMath::Max(
+		0.0f,
+		FMath::Max(MinimumCycleRespawnDelay, MaximumCycleRespawnDelay));
+	const float RespawnDelay = FMath::FRandRange(MinimumDelay, MaximumDelay);
+	const float RemainingTime = GetRemainingEventTime();
+	if (RespawnDelay >= RemainingTime)
+	{
+		UE_LOG(LogNPRelicBonus, Log,
+			TEXT("RelicBonus 다음 사이클 생략: RespawnDelay=%.2fs Remaining=%.2fs"),
+			RespawnDelay, RemainingTime);
+		return;
+	}
+
+	UE_LOG(LogNPRelicBonus, Log,
+		TEXT("RelicBonus 헬리콥터 퇴장 완료, 다음 사이클 예약: Delay=%.2fs Range=[%.2f, %.2f] Remaining=%.2fs"),
+		RespawnDelay, MinimumDelay, MaximumDelay, RemainingTime);
+	if (RespawnDelay <= KINDA_SMALL_NUMBER)
+	{
+		GetWorldTimerManager().SetTimerForNextTick(
+			this,
+			&ThisClass::StartNextHelicopterCycle);
+	}
+	else
+	{
+		GetWorldTimerManager().SetTimer(
+			NextCycleTimer,
+			this,
+			&ThisClass::StartNextHelicopterCycle,
+			RespawnDelay,
+			false);
+	}
 }
 
 void ANPRelicBonusMapEvent::MulticastSpawnGroundWind_Implementation(
