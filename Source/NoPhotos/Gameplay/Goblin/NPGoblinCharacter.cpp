@@ -5,6 +5,8 @@
 #include "CollisionQueryParams.h"
 #include "CollisionShape.h"
 #include "Components/CapsuleComponent.h"
+#include "Data/Structs/NPRelicData.h"
+#include "Engine/DataTable.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerState.h"
 #include "Gameplay/Photo/NPPhotoLog.h"
@@ -16,6 +18,7 @@
 #include "NavigationPath.h"
 #include "NavigationSystem.h"
 #include "TimerManager.h"
+#include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogNPGoblinCharacter, Log, All);
 
@@ -24,6 +27,13 @@ ANPGoblinCharacter::ANPGoblinCharacter()
 	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
 	SetReplicateMovement(true);
+
+	static ConstructorHelpers::FObjectFinder<UDataTable> RelicDropTableFinder(
+		TEXT("/Game/NoPhotos/Table/Relic/DT_Relic.DT_Relic"));
+	if (RelicDropTableFinder.Succeeded())
+	{
+		RelicDropTable = RelicDropTableFinder.Object;
+	}
 
 	AIControllerClass = ANPGoblinAIController::StaticClass();
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
@@ -549,7 +559,46 @@ void ANPGoblinCharacter::TrySpawnPhotographedRelic()
 		return;
 	}
 
-	if (!PhotographedRelicClass)
+	TSubclassOf<ANPBaseRelic> SelectedRelicClass = PhotographedRelicClass;
+	FDataTableRowHandle SelectedRelicData;
+
+	if (RelicDropTable)
+	{
+		TArray<TPair<FName, TSubclassOf<ANPBaseRelic>>> ValidRelics;
+		for (const FName RowName : RelicDropTable->GetRowNames())
+		{
+			const FNPRelicTableRow* Row = RelicDropTable->FindRow<FNPRelicTableRow>(
+				RowName,
+				TEXT("GoblinRelicDrop"),
+				false);
+			UClass* RelicClass = Row ? Row->RelicClass.LoadSynchronous() : nullptr;
+			if (RelicClass && RelicClass->IsChildOf(ANPBaseRelic::StaticClass())
+				&& !RelicClass->HasAnyClassFlags(CLASS_Abstract))
+			{
+				ValidRelics.Emplace(RowName, RelicClass);
+			}
+		}
+
+		if (!ValidRelics.IsEmpty())
+		{
+			const TPair<FName, TSubclassOf<ANPBaseRelic>>& SelectedRelic =
+				ValidRelics[FMath::RandRange(0, ValidRelics.Num() - 1)];
+			SelectedRelicClass = SelectedRelic.Value;
+			SelectedRelicData.DataTable = RelicDropTable;
+			SelectedRelicData.RowName = SelectedRelic.Key;
+		}
+		else
+		{
+			UE_LOG(
+				LogNPGoblinCharacter,
+				Warning,
+				TEXT("촬영 보상 테이블에 유효한 유물 행이 없습니다. Goblin=%s Table=%s"),
+				*GetNameSafe(this),
+				*GetNameSafe(RelicDropTable));
+		}
+	}
+
+	if (!SelectedRelicClass)
 	{
 		UE_LOG(
 			LogNPGoblinCharacter,
@@ -559,18 +608,15 @@ void ANPGoblinCharacter::TrySpawnPhotographedRelic()
 		return;
 	}
 
-	FActorSpawnParameters SpawnParameters;
-	SpawnParameters.Owner = this;
-	SpawnParameters.SpawnCollisionHandlingOverride =
-		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-
 	const FVector SpawnLocation = GetActorLocation()
 		+ GetActorTransform().TransformVectorNoScale(PhotographedRelicSpawnOffset);
-	ANPBaseRelic* Relic = World->SpawnActor<ANPBaseRelic>(
-		PhotographedRelicClass,
-		SpawnLocation,
-		GetActorRotation(),
-		SpawnParameters);
+	const FTransform SpawnTransform(GetActorRotation(), SpawnLocation);
+	ANPBaseRelic* Relic = World->SpawnActorDeferred<ANPBaseRelic>(
+		SelectedRelicClass,
+		SpawnTransform,
+		this,
+		nullptr,
+		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
 	if (!IsValid(Relic))
 	{
 		UE_LOG(
@@ -578,12 +624,16 @@ void ANPGoblinCharacter::TrySpawnPhotographedRelic()
 			Error,
 			TEXT("촬영 보상 유물 생성에 실패했습니다. Goblin=%s RelicClass=%s"),
 			*GetNameSafe(this),
-			*GetNameSafe(PhotographedRelicClass.Get()));
+			*GetNameSafe(SelectedRelicClass.Get()));
 		return;
 	}
 
-	Relic->SetReplicates(true);
-	Relic->SetReplicateMovement(true);
+	if (!SelectedRelicData.RowName.IsNone())
+	{
+		Relic->SetRelicTableData(SelectedRelicData);
+	}
+	Relic->FinishSpawning(SpawnTransform);
+
 	const FVector2D HorizontalDirection = FMath::RandPointInCircle(1.0f).GetSafeNormal();
 	const FVector LaunchVelocity(
 		HorizontalDirection.X * FMath::Max(0.0f, PhotographedRelicHorizontalLaunchSpeed),
@@ -594,9 +644,10 @@ void ANPGoblinCharacter::TrySpawnPhotographedRelic()
 	UE_LOG(
 		LogNPGoblinCharacter,
 		Display,
-		TEXT("고블린 촬영 보상 유물 생성 완료. Goblin=%s Relic=%s Location=%s PhysicsLaunch=%s Velocity=%s"),
+		TEXT("고블린 촬영 보상 유물 생성 완료. Goblin=%s Relic=%s Row=%s Location=%s PhysicsLaunch=%s Velocity=%s"),
 		*GetNameSafe(this),
 		*GetNameSafe(Relic),
+		*SelectedRelicData.RowName.ToString(),
 		*Relic->GetActorLocation().ToCompactString(),
 		bLaunched ? TEXT("true") : TEXT("false"),
 		*LaunchVelocity.ToCompactString());
