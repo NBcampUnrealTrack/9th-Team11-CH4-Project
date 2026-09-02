@@ -82,6 +82,26 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Helicopter", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
 	float MaximumHelicopterHeight = 2000.0f;
 
+	/** 한 사이클에서 헬리콥터가 머무르는 최소 시간입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Helicopter|Cycle", meta = (ClampMin = "0.1", UIMin = "0.1", Units = "s"))
+	float MinimumHelicopterStayDuration = 10.0f;
+
+	/** 한 사이클에서 헬리콥터가 머무르는 최대 시간입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Helicopter|Cycle", meta = (ClampMin = "0.1", UIMin = "0.1", Units = "s"))
+	float MaximumHelicopterStayDuration = 20.0f;
+
+	/** 한 사이클의 헬리콥터 생성에 실패했을 때 다시 시도할 시간입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Helicopter|Cycle", meta = (ClampMin = "0.1", UIMin = "0.1", Units = "s"))
+	float CycleSpawnRetryDelay = 1.0f;
+
+	/** 퇴장 완료 후 다음 헬리콥터 사이클까지 기다릴 최소 시간입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Helicopter|Cycle", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
+	float MinimumCycleRespawnDelay = 2.0f;
+
+	/** 퇴장 완료 후 다음 헬리콥터 사이클까지 기다릴 최대 시간입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Helicopter|Cycle", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
+	float MaximumCycleRespawnDelay = 5.0f;
+
 	/** 이벤트 연출에 사용할 RopeSegment BP 클래스입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Rope")
 	TSubclassOf<ANPRopeSegmentActor> RopeClass;
@@ -147,6 +167,10 @@ private:
 	};
 
 	void SpawnReturnZones();
+	void StartNextHelicopterCycle();
+	void ScheduleHelicopterDeparture();
+	void HandleHelicopterStayFinished();
+	void FinishDepartureCycle();
 	ANPRelicReturnZone* SpawnReturnZoneAt(const FTransform& GroundTransform);
 	ANPRelicBonusCountdownActor* SpawnCountdownAt(const FTransform& GroundTransform);
 	AActor* SpawnHelicopterAt(const FTransform& GroundTransform);
@@ -154,7 +178,7 @@ private:
 		AActor* Helicopter,
 		ANPRelicReturnZone* ReturnZone,
 		const FTransform& GroundTransform);
-	void BeginDeparture();
+	void BeginDeparture(bool bShouldRespawn);
 
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastSpawnGroundWind(FVector GroundLocation);
@@ -191,4 +215,8 @@ private:
 
 	TArray<FActiveRopeDeployment> ActiveRopeDeployments;
 	TArray<FActiveDeparture> ActiveDepartures;
+	FTimerHandle HelicopterStayTimer;
+	FTimerHandle NextCycleTimer;
+	bool bDepartureInProgress = false;
+	bool bRespawnAfterDeparture = false;
 };
