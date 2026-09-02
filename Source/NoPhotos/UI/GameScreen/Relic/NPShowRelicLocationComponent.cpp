@@ -26,6 +26,7 @@ UNPShowRelicLocationComponent::UNPShowRelicLocationComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = true;
+	PrimaryComponentTick.TickGroup = TG_PostPhysics;
 
 	SetWidgetSpace(EWidgetSpace::Screen);
 	SetDrawAtDesiredSize(true);
@@ -48,6 +49,12 @@ void UNPShowRelicLocationComponent::BeginPlay()
 		SetMarkerVisibility(false);
 		SetComponentTickEnabled(false);
 		return;
+	}
+
+	if (const ANPBaseRelic* Relic = Cast<ANPBaseRelic>(GetOwner()))
+	{
+		RelicLocationOffset =
+			GetComponentLocation() - Relic->GetRelicWorldLocation();
 	}
 
 	if (APlayerController* PlayerController = UGameplayStatics::GetPlayerController(this, 0))
@@ -92,6 +99,10 @@ void UNPShowRelicLocationComponent::RefreshMarker()
 		SetMarkerVisibility(false);
 		return;
 	}
+
+	const FVector RelicLocation = OwnerRelic->GetRelicWorldLocation();
+	SetWorldLocation(RelicLocation + RelicLocationOffset);
+
 	if (OwnerRelic->IsReturned())
 	{
 		if (!bWasReturned)
@@ -152,7 +163,7 @@ void UNPShowRelicLocationComponent::RefreshMarker()
 	if (LeftDistanceText.IsValid() && IsValid(PlayerPawn))
 	{
 		const int32 DistanceInMeters = FMath::RoundToInt(
-			FVector::Distance(PlayerPawn->GetActorLocation(), GetComponentLocation()) / 100.0f);
+			FVector::Distance(PlayerPawn->GetActorLocation(), RelicLocation) / 100.0f);
 		LeftDistanceText->SetText(FText::FromString(FString::Printf(TEXT("%dm"), DistanceInMeters)));
 	}
 }

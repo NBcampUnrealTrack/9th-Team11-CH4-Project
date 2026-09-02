@@ -108,12 +108,13 @@ FNPPhotoEvidenceResult UNPPhotoEvidenceService::EvaluatePhoto(
 			TEXT("[Evidence] Holder candidate. Thief=%s Relic=%s"),
 			*GetNameSafe(CandidateThief),
 			*GetNameSafe(HeldRelic));
-		if (!IsValid(HeldRelic) || !HeldRelic->IsA<ANPBaseRelic>())
+		const ANPBaseRelic* Relic = Cast<ANPBaseRelic>(HeldRelic);
+		if (!IsValid(Relic))
 		{
 			continue;
 		}
 
-		if (const ANPBreakableRelic* BreakableRelic = Cast<ANPBreakableRelic>(HeldRelic);
+		if (const ANPBreakableRelic* BreakableRelic = Cast<ANPBreakableRelic>(Relic);
 			BreakableRelic && BreakableRelic->IsBroken())
 		{
 			UE_LOG(
@@ -127,7 +128,7 @@ FNPPhotoEvidenceResult UNPPhotoEvidenceService::EvaluatePhoto(
 
 		if (FVector::DistSquared(Request.CameraLocation, CandidateThief->GetActorLocation())
 			> MaximumDistanceSquared
-			|| FVector::DistSquared(Request.CameraLocation, HeldRelic->GetActorLocation())
+			|| FVector::DistSquared(Request.CameraLocation, Relic->GetRelicWorldLocation())
 			> MaximumDistanceSquared)
 		{
 			continue;
