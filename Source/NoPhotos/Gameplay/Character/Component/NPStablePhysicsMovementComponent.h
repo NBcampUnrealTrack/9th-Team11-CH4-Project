@@ -33,6 +33,7 @@ public:
 	void ConfigureBoneNames(FName InPelvisBodyName, FName InLeftFootBoneName, FName InRightFootBoneName);
 	void SetTargetPelvisHeight(float InTargetPelvisHeight);
 	void SetMaxMoveSpeed(float InMaxMoveSpeed);
+	void SetClimbAcceleration(float InClimbAcceleration);
 	void SetGravityScale(float InGravityScale);
 	void SetJumpVelocityChange(float InJumpVelocityChange);
 	void SetJumpCooldown(float InJumpCooldown);
@@ -126,7 +127,6 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Movement", meta=(ClampMin="0.0", ClampMax="1.0"))
 	float AirControlMultiplier = 0.15f;
 
-	UPROPERTY(EditAnywhere, Category="Ladder", meta=(ClampMin="0.0", Units="cm/s^2"))
 	float ClimbAcceleration = 2000.0f;
 
 	UPROPERTY(EditAnywhere, Category="Turning")

@@ -553,6 +553,7 @@ void ANPStablePhysicsPawn::ApplyCharacterProfile()
 		CharacterProfile->RightFootBoneName);
 	PhysicsMovement->SetTargetPelvisHeight(CharacterProfile->PelvisHeight);
 	PhysicsMovement->SetMaxMoveSpeed(CharacterProfile->MaxMoveSpeed);
+	PhysicsMovement->SetClimbAcceleration(CharacterProfile->ClimbAcceleration);
 	PhysicsMovement->SetGravityScale(CharacterProfile->GravityScale);
 	PhysicsMovement->SetJumpVelocityChange(CharacterProfile->JumpVelocityChange);
 	PhysicsMovement->SetJumpCooldown(CharacterProfile->JumpCooldown);

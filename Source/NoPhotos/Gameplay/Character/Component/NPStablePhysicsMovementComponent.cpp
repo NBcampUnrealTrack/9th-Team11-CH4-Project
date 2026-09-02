@@ -41,6 +41,12 @@ void UNPStablePhysicsMovementComponent::SetMaxMoveSpeed(float InMaxMoveSpeed)
 	MaxMoveSpeed = FMath::Max(InMaxMoveSpeed, 0.0f);
 }
 
+void UNPStablePhysicsMovementComponent::SetClimbAcceleration(
+	float InClimbAcceleration)
+{
+	ClimbAcceleration = FMath::Max(InClimbAcceleration, 0.0f);
+}
+
 void UNPStablePhysicsMovementComponent::SetGravityScale(float InGravityScale)
 {
 	GravityScale = FMath::Max(InGravityScale, 0.0f);
