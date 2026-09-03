@@ -4,8 +4,10 @@
 #include "Core/Room/NPRoomPlayerController.h"
 #include "Core/NPPlayerState.h"
 #include "Engine/GameInstance.h"
+#include "EngineUtils.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerStart.h"
 #include "GameFramework/PlayerState.h"
 #include "NPRoomGameState.h"
 #include "NPRoomLog.h"
@@ -135,6 +137,103 @@ void ANPRoomGameMode::HandleSeamlessTravelPlayer(AController*& Controller)
 	{
 		NPPlayerController->ClientShowLobbyUI();
 	}
+}
+
+AActor* ANPRoomGameMode::ChoosePlayerStart_Implementation(AController* Player)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return Super::ChoosePlayerStart_Implementation(Player);
+	}
+
+	TSet<const AActor*> AssignedStartSpots;
+	for (FConstPlayerControllerIterator Iterator = World->GetPlayerControllerIterator(); Iterator; ++Iterator)
+	{
+		const APlayerController* PlayerController = Iterator->Get();
+		if (IsValid(PlayerController) && PlayerController != Player && PlayerController->StartSpot.IsValid())
+		{
+			AssignedStartSpots.Add(PlayerController->StartSpot.Get());
+		}
+	}
+
+	TArray<APlayerStart*> AvailableStartSpots;
+	TArray<APlayerStart*> BlockedStartSpots;
+	TArray<APlayerStart*> AssignedStarts;
+	UClass* PawnClass = GetDefaultPawnClassForController(Player);
+	APawn* PawnDefaults = PawnClass ? PawnClass->GetDefaultObject<APawn>() : nullptr;
+	for (TActorIterator<APlayerStart> Iterator(World); Iterator; ++Iterator)
+	{
+		APlayerStart* PlayerStart = *Iterator;
+		if (IsValid(PlayerStart) && AssignedStartSpots.Contains(PlayerStart))
+		{
+			AssignedStarts.Add(PlayerStart);
+		}
+		if (IsValid(PlayerStart) && !AssignedStartSpots.Contains(PlayerStart))
+		{
+			if (PawnDefaults && World->EncroachingBlockingGeometry(
+				PawnDefaults, PlayerStart->GetActorLocation(), PlayerStart->GetActorRotation()))
+			{
+				BlockedStartSpots.Add(PlayerStart);
+			}
+			else
+			{
+				AvailableStartSpots.Add(PlayerStart);
+			}
+		}
+	}
+
+	if (AvailableStartSpots.IsEmpty())
+	{
+		if (!BlockedStartSpots.IsEmpty())
+		{
+			return BlockedStartSpots[FMath::RandHelper(BlockedStartSpots.Num())];
+		}
+		if (!AssignedStarts.IsEmpty())
+		{
+			return AssignedStarts[FMath::RandHelper(AssignedStarts.Num())];
+		}
+		return Super::ChoosePlayerStart_Implementation(Player);
+	}
+
+	return AvailableStartSpots[FMath::RandHelper(AvailableStartSpots.Num())];
+}
+
+APawn* ANPRoomGameMode::SpawnDefaultPawnAtTransform_Implementation(
+	AController* NewPlayer, const FTransform& SpawnTransform)
+{
+	UWorld* World = GetWorld();
+	UClass* PawnClass = GetDefaultPawnClassForController(NewPlayer);
+	APawn* PawnDefaults = PawnClass ? PawnClass->GetDefaultObject<APawn>() : nullptr;
+	if (!World || !PawnDefaults)
+	{
+		return nullptr;
+	}
+
+	const FVector Offsets[] = {
+		FVector::ZeroVector, FVector(150, 0, 0), FVector(-150, 0, 0),
+		FVector(0, 150, 0), FVector(0, -150, 0), FVector(150, 150, 0),
+		FVector(150, -150, 0), FVector(-150, 150, 0), FVector(-150, -150, 0)
+	};
+	for (const float Height : {0.0f, 50.0f, 100.0f, 200.0f})
+	{
+		for (const FVector& Offset : Offsets)
+		{
+			FTransform Candidate = SpawnTransform;
+			Candidate.AddToTranslation(Offset + FVector::UpVector * Height);
+			if (World->EncroachingBlockingGeometry(PawnDefaults, Candidate.GetLocation(), Candidate.Rotator()))
+			{
+				continue;
+			}
+			if (APawn* Pawn = Super::SpawnDefaultPawnAtTransform_Implementation(NewPlayer, Candidate))
+			{
+				return Pawn;
+			}
+		}
+	}
+
+	NPRoomLog::Warning(this, TEXT("플레이어 생성 실패: PlayerStart 주변 150cm/높이 200cm 이내에 빈 공간이 없습니다. 배치와 Pawn 충돌을 확인하세요."));
+	return nullptr;
 }
 
 bool ANPRoomGameMode::ActivateRoom(APlayerController* HostPlayer)
