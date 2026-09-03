@@ -10,7 +10,9 @@ class UNPRelicOwnershipComponent;
 class UPrimitiveComponent;
 class FLifetimeProperty;
 struct FNPRelicTableRow;
+class ANPBaseRelic; //델리게이트 때문에 추가
 
+DECLARE_MULTICAST_DELEGATE_OneParam(FNPOnRelicValueChanged, ANPBaseRelic*);
 UCLASS(Abstract, Blueprintable)
 class NOPHOTOS_API ANPBaseRelic : public AActor
 {
@@ -39,11 +41,16 @@ public:
 	UFUNCTION(BlueprintPure, Category="Relic|Delivery")
 	int32 GetBasePrice() const;
 
+	UFUNCTION(BlueprintPure, Category="Relic|Delivery")
+	int32 GetCurrentPrice() const;
+
 	const FNPRelicTableRow* GetRelicTableData() const;
 	void SetRelicTableData(const FDataTableRowHandle& InRelicTableData);
 
 	UFUNCTION(BlueprintPure, BlueprintAuthorityOnly, Category="Relic|Delivery")
 	int32 GetAccumulatedPhotoPenalty() const { return AccumulatedPhotoPenalty; }
+
+	FNPOnRelicValueChanged OnRelicValueChanged;
 
 	UFUNCTION(BlueprintPure, Category="Relic|Ownership")
 	UNPRelicOwnershipComponent* GetOwnershipComponent() const { return OwnershipComponent; }
@@ -66,6 +73,9 @@ protected:
 
 	UFUNCTION()
 	void OnRep_IsReturned();
+
+	UFUNCTION()
+	void OnRep_AccumulatedPhotoPenalty();
 
 	void ReleaseFromDisplay();
 	void HandleGrabStarted(UPrimitiveComponent* GrabbedComponent);
@@ -95,7 +105,7 @@ protected:
 	UPROPERTY(ReplicatedUsing=OnRep_IsReturned, VisibleInstanceOnly, BlueprintReadOnly, Category="Relic|Delivery")
 	bool bIsReturned = false;
 
-	/** 서버에서만 누적되는 사진 판정 감점입니다. */
-	UPROPERTY(Transient, VisibleInstanceOnly, BlueprintReadOnly, Category="Relic|Delivery")
+	/** 사진 판정으로 누적된 감점. 들고 있는 모든 클라이언트 UI에 현재 가치가 보이도록 복제합니다. */
+	UPROPERTY(ReplicatedUsing=OnRep_AccumulatedPhotoPenalty, VisibleInstanceOnly, BlueprintReadOnly, Category="Relic|Delivery")
 	int32 AccumulatedPhotoPenalty = 0;
 };

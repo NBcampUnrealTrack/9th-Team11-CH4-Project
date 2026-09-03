@@ -19,21 +19,23 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Relic Info")
 	void ResetRelicInfo();
 
-	/** 유물 정보 UI가 나타날 때 ShowAnimation을 정방향으로 재생합니다. */
 	void PlayShowAnimation();
 
 protected:
 	virtual void OnPopRequested_Implementation() override;
+	virtual void NativeDestruct() override;
 
-	/** WBP_RelicInfoWidget의 ShowAnimation을 연결합니다. */
 	UPROPERTY(Transient, meta=(BindWidgetAnim))
 	TObjectPtr<UWidgetAnimation> ShowAnimation;
 
-	/** WBP_RelicInfoWidget의 OutAnimation을 연결합니다. */
 	UPROPERTY(Transient, meta=(BindWidgetAnim))
 	TObjectPtr<UWidgetAnimation> OutAnimation;
 
 private:
+	void RefreshRelicScore();
+	void HandleRelicValueChanged(ANPBaseRelic* Relic);
+	void UnbindObservedRelic();
+
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UTextBlock> RelicNameText;
 	
@@ -42,4 +44,6 @@ private:
 	
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UTextBlock> RelicDescriptionText;
+
+	TWeakObjectPtr<ANPBaseRelic> ObservedRelic;
 };

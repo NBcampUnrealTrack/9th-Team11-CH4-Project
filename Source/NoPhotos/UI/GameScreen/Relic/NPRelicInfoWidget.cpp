@@ -32,12 +32,16 @@ void UNPRelicInfoWidget::SetRelicInfo(ANPBaseRelic* Relic)
 
 	if (IsValid(RelicScoreText))
 	{
-		RelicScoreText->SetText(FText::AsNumber(FMath::Max(0, RelicData->Price)));
+		ObservedRelic = Relic;
+		Relic->OnRelicValueChanged.AddUObject(this, &ThisClass::HandleRelicValueChanged);
+		RefreshRelicScore();
 	}
 }
 
 void UNPRelicInfoWidget::ResetRelicInfo()
 {
+	UnbindObservedRelic();
+
 	if (IsValid(RelicNameText))
 	{
 		RelicNameText->SetText(FText::FromString(TEXT("유물명")));
@@ -56,6 +60,8 @@ void UNPRelicInfoWidget::ResetRelicInfo()
 
 void UNPRelicInfoWidget::PlayShowAnimation()
 {
+	StopAllAnimations();
+
 	if (IsValid(ShowAnimation))
 	{
 		PlayAnimation(ShowAnimation, 0.0f, 1, EUMGSequencePlayMode::Forward);
@@ -64,8 +70,41 @@ void UNPRelicInfoWidget::PlayShowAnimation()
 
 void UNPRelicInfoWidget::OnPopRequested_Implementation()
 {
+	StopAllAnimations();
+
 	if (IsValid(OutAnimation))
 	{
 		PlayAnimation(OutAnimation, 0.0f, 1, EUMGSequencePlayMode::Forward);
 	}
+}
+
+void UNPRelicInfoWidget::NativeDestruct()
+{
+	UnbindObservedRelic();
+	Super::NativeDestruct();
+}
+
+void UNPRelicInfoWidget::RefreshRelicScore()
+{
+	if (IsValid(RelicScoreText) && ObservedRelic.IsValid())
+	{
+		RelicScoreText->SetText(FText::AsNumber(ObservedRelic->GetCurrentPrice()));
+	}
+}
+
+void UNPRelicInfoWidget::HandleRelicValueChanged(ANPBaseRelic* Relic)
+{
+	if (Relic == ObservedRelic.Get())
+	{
+		RefreshRelicScore();
+	}
+}
+
+void UNPRelicInfoWidget::UnbindObservedRelic()
+{
+	if (ObservedRelic.IsValid())
+	{
+		ObservedRelic->OnRelicValueChanged.RemoveAll(this);
+	}
+	ObservedRelic.Reset();
 }
