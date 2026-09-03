@@ -32,14 +32,17 @@ bool UNPRelicDeliveryService::RegisterPhotoEvidence(const FNPPhotoEvidenceResult
 		return false;
 	}
 
-	const bool bPenaltyChanged = Relic->AddPhotoPenalty(PhotoPenaltyPerCapture);
+	const bool bPenaltyChanged = Relic->AddPhotoPenaltyCapture(
+		PhotoPenaltyRatePerCapture);
 	UE_LOG(
 		LogNoPhotos,
 		Log,
-		TEXT("[RelicDelivery] Evidence penalty %s. Relic=%s Photographer=%s AccumulatedPenalty=%d ReturnScore=%d"),
+		TEXT("[RelicDelivery] Evidence penalty %s. Relic=%s Photographer=%s CaptureCount=%d PenaltyRate=%.2f AccumulatedPenalty=%d ReturnScore=%d"),
 		bPenaltyChanged ? TEXT("applied") : TEXT("clamped/ignored"),
 		*GetNameSafe(Relic),
 		*GetNameSafe(Evidence.Photographer),
+		Relic->GetSuccessfulEvidenceCaptureCount(),
+		PhotoPenaltyRatePerCapture,
 		Relic->GetAccumulatedPhotoPenalty(),
 		CalculateReturnScore(Relic));
 	return bPenaltyChanged;

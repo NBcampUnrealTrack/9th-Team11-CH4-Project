@@ -33,6 +33,10 @@ public:
 	void ConfigureBoneNames(FName InPelvisBodyName, FName InLeftFootBoneName, FName InRightFootBoneName);
 	void SetTargetPelvisHeight(float InTargetPelvisHeight);
 	void SetMaxMoveSpeed(float InMaxMoveSpeed);
+	/** 기본 이동 속도에 곱해지는 이름 기반 배율을 등록합니다. 같은 Source는 덮어씁니다. */
+	void SetMoveSpeedMultiplier(FName Source, float Multiplier);
+	void ClearMoveSpeedMultiplier(FName Source);
+	float GetEffectiveMaxMoveSpeed() const { return MaxMoveSpeed; }
 	void SetClimbAcceleration(float InClimbAcceleration);
 	void SetGravityScale(float InGravityScale);
 	void SetJumpVelocityChange(float InJumpVelocityChange);
@@ -111,7 +115,11 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Bones")
 	FName RightFootBoneName = TEXT("foot_r");
 
+	void RefreshEffectiveMaxMoveSpeed();
+
+	float BaseMaxMoveSpeed = 350.0f;
 	float MaxMoveSpeed = 350.0f;
+	TMap<FName, float> MoveSpeedMultipliers;
 
 	TMap<TWeakObjectPtr<UObject>, FVector> ExternalFlowVelocities;
 

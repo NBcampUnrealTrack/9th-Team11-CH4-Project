@@ -63,6 +63,18 @@ public:
 	UFUNCTION(Server, Reliable)
 	void ServerConfirmPictureSelection(const TArray<FGuid>& SelectedPhotoIds);
 
+	/** 개발 빌드에서 현재 Pawn의 Grab 입력을 창 포커스와 무관하게 유지합니다. */
+	UFUNCTION(Exec)
+	void NPTestLockGrab();
+
+	/** 개발 빌드에서 Grab 입력 고정을 해제하고 현재 물체를 놓습니다. */
+	UFUNCTION(Exec)
+	void NPTestUnlockGrab();
+
+	/** 개발 빌드에서 현재 Pawn의 Grab 및 보유 유물 상태를 로그로 출력합니다. */
+	UFUNCTION(Exec)
+	void NPTestPrintGrabState();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;

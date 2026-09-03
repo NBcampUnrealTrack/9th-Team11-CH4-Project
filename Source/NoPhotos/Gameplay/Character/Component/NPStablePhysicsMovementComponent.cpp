@@ -38,7 +38,45 @@ void UNPStablePhysicsMovementComponent::SetTargetPelvisHeight(
 
 void UNPStablePhysicsMovementComponent::SetMaxMoveSpeed(float InMaxMoveSpeed)
 {
-	MaxMoveSpeed = FMath::Max(InMaxMoveSpeed, 0.0f);
+	BaseMaxMoveSpeed = FMath::IsFinite(InMaxMoveSpeed)
+		? FMath::Max(InMaxMoveSpeed, 0.0f)
+		: 0.0f;
+	RefreshEffectiveMaxMoveSpeed();
+}
+
+void UNPStablePhysicsMovementComponent::SetMoveSpeedMultiplier(
+	const FName Source,
+	const float Multiplier)
+{
+	if (Source.IsNone())
+	{
+		return;
+	}
+
+	MoveSpeedMultipliers.FindOrAdd(Source) = FMath::IsFinite(Multiplier)
+		? FMath::Max(Multiplier, 0.0f)
+		: 1.0f;
+	RefreshEffectiveMaxMoveSpeed();
+}
+
+void UNPStablePhysicsMovementComponent::ClearMoveSpeedMultiplier(
+	const FName Source)
+{
+	if (!Source.IsNone() && MoveSpeedMultipliers.Remove(Source) > 0)
+	{
+		RefreshEffectiveMaxMoveSpeed();
+	}
+}
+
+void UNPStablePhysicsMovementComponent::RefreshEffectiveMaxMoveSpeed()
+{
+	float CombinedMultiplier = 1.0f;
+	for (const TPair<FName, float>& Entry : MoveSpeedMultipliers)
+	{
+		CombinedMultiplier *= Entry.Value;
+	}
+
+	MaxMoveSpeed = FMath::Max(0.0f, BaseMaxMoveSpeed * CombinedMultiplier);
 }
 
 void UNPStablePhysicsMovementComponent::SetClimbAcceleration(

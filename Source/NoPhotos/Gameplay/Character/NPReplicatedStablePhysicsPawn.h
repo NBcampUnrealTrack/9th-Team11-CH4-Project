@@ -17,6 +17,8 @@ class UNPControlReversalComponent;
 class UNPVisionRestrictionComponent;
 class UNPStablePhysicsNetworkPredictionComponent;
 class UNPPhotoWorldFeedbackComponent;
+class UNPPhotoCapturePenaltyComponent;
+class UNPPhotoPenaltyWidgetComponent;
 class ANPBaseRelic;
 
 USTRUCT()
@@ -65,6 +67,10 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Network|Grab")
 	bool IsReplicatedGrabActive() const { return IsValid(ReplicatedGrabState.GrabbedActor); }
+
+	/** PIE 사진 판정 테스트용으로 로컬 Grab 입력을 고정하거나 해제합니다. */
+	void SetDebugGrabLocked(bool bLocked);
+	bool IsDebugGrabLocked() const { return bDebugGrabLocked; }
 
 	/** 서버 사진 검증 등에서 소유 클라이언트가 복제한 최신 시점 회전을 조회합니다. */
 	FRotator GetServerViewRotation() const { return GetTargetViewRotation(); }
@@ -217,6 +223,14 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Photo|World Feedback", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UNPPhotoWorldFeedbackComponent> PhotoWorldFeedback;
 
+	/** 유물 증거 사진에 찍혔을 때 Drop, 감속과 Overlay 연출을 처리합니다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Photo|Penalty", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UNPPhotoCapturePenaltyComponent> PhotoCapturePenalty;
+
+	/** 로컬 소유자를 포함해 실제 유물 가격 감점액을 머리 위에 표시합니다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Photo|Penalty", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UNPPhotoPenaltyWidgetComponent> PhotoPenaltyWidget;
+
 	/** 서버에서 이 캐릭터가 현재 잡고 있는 다른 캐릭터를 추적합니다. */
 	UPROPERTY(Transient)
 	TObjectPtr<ANPReplicatedStablePhysicsPawn> ExternallyGrabbedTargetPawn = nullptr;
@@ -230,6 +244,10 @@ private:
 
 	bool bClientWasMoving = false;
 	bool bLocalRightHandActive = false;
+	/** PIE 창 포커스를 옮겨도 Grab 해제 입력을 무시하기 위한 개발용 상태입니다. */
+	bool bDebugGrabLocked = false;
+	/** 확정된 Grab이 강제로 해제된 경우 테스트 잠금도 자동 해제하기 위한 상태입니다. */
+	bool bDebugGrabWasConfirmed = false;
 	bool bAwaitingServerGrabConfirmation = false;
 	bool bBlueprintGrabActive = false;
 	float LocalGrabPredictionTimeRemaining = 0.0f;
