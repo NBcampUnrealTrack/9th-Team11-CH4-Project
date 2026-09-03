@@ -144,7 +144,7 @@ private:
 	float MaximumCorrectionAcceleration = 1800.0f;
 
 	UPROPERTY(EditAnywhere, Category="Network Prediction", meta=(ClampMin="0.0"))
-	float HardSnapDistance = 250.0f;
+	float HardSnapDistance = 130.0f;
 
 	UPROPERTY(EditAnywhere, Category="Network Prediction", meta=(ClampMin="0.0"))
 	float MaximumExtrapolationTime = 0.25f;
@@ -159,7 +159,7 @@ private:
 	float DynamicBodyCorrectionScale = 0.2f;
 
 	UPROPERTY(EditAnywhere, Category="Network Prediction|Blocked Correction", meta=(ClampMin="0.0"))
-	float CorrectionSweepRadius = 25.0f;
+	float CorrectionSweepRadius = 20.0f;
 
 	UPROPERTY(EditAnywhere, Category="Network Prediction|Blocked Correction", meta=(ClampMin="0.0"))
 	float RecoveryTargetCheckHeightOffset = 20.0f;
