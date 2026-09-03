@@ -17,7 +17,7 @@
 #include "Gameplay/Relic/Components/NPAimableRelicComponent.h"
 #include "Gameplay/Photo/NPPhotoWorldFeedbackComponent.h"
 #include "Gameplay/Photo/NPPhotoCapturePenaltyComponent.h"
-#include "UI/GameScreen/NPPhotoPenaltyWidgetComponent.h"
+#include "UI/GameScreen/NPScoreFeedbackWidgetComponent.h"
 #include "Core/NPPlayerState.h"
 #include "Gameplay/Character/Component/NPStablePhysicsMovementComponent.h"
 #include "NoPhotos.h"
@@ -41,9 +41,11 @@ ANPReplicatedStablePhysicsPawn::ANPReplicatedStablePhysicsPawn()
 	PhotoCapturePenalty = CreateDefaultSubobject<
 		UNPPhotoCapturePenaltyComponent>(TEXT("PhotoCapturePenalty"));
 
-	PhotoPenaltyWidget = CreateDefaultSubobject<
-		UNPPhotoPenaltyWidgetComponent>(TEXT("PhotoPenaltyWidget"));
-	PhotoPenaltyWidget->SetupAttachment(GetRootComponent());
+	// 기존 Blueprint의 네이티브 컴포넌트 설정을 보존하기 위해
+	// 서브오브젝트 이름은 클래스 이름 변경 전 값을 유지합니다.
+	ScoreFeedbackWidget = CreateDefaultSubobject<
+		UNPScoreFeedbackWidgetComponent>(TEXT("PhotoPenaltyWidget"));
+	ScoreFeedbackWidget->SetupAttachment(GetRootComponent());
 
 	AbilitySystem = CreateDefaultSubobject<UNPAbilitySystemComponent>(
 		TEXT("AbilitySystem"));

@@ -9,7 +9,7 @@
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
-#include "UI/GameScreen/NPPhotoPenaltyWidgetComponent.h"
+#include "UI/GameScreen/NPScoreFeedbackWidgetComponent.h"
 
 namespace
 {
@@ -92,29 +92,17 @@ bool UNPPhotoCapturePenaltyComponent::ApplyCapturedWithRelicPenalty(
 		false);
 	if (AppliedPhotoPenalty > 0)
 	{
-		MulticastShowPhotoPenalty(AppliedPhotoPenalty);
+		if (UNPScoreFeedbackWidgetComponent* ScoreFeedback =
+			Pawn->FindComponentByClass<UNPScoreFeedbackWidgetComponent>())
+		{
+			ScoreFeedback->ShowScoreFeedback(
+				AppliedPhotoPenalty,
+				ENPScoreFeedbackType::PhotoPenalty,
+				PriceReductionMessageDuration);
+		}
 	}
 	Pawn->ForceNetUpdate();
 	return true;
-}
-
-void UNPPhotoCapturePenaltyComponent::MulticastShowPhotoPenalty_Implementation(
-	const int32 AppliedPhotoPenalty)
-{
-	AActor* OwnerActor = GetOwner();
-	if (!IsValid(OwnerActor) || GetNetMode() == NM_DedicatedServer
-		|| AppliedPhotoPenalty <= 0)
-	{
-		return;
-	}
-
-	if (UNPPhotoPenaltyWidgetComponent* PenaltyWidget =
-		OwnerActor->FindComponentByClass<UNPPhotoPenaltyWidgetComponent>())
-	{
-		PenaltyWidget->ShowPenalty(
-			AppliedPhotoPenalty,
-			PriceReductionMessageDuration);
-	}
 }
 
 void UNPPhotoCapturePenaltyComponent::OnRep_PhotoSlowActive()

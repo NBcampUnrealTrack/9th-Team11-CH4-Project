@@ -6,8 +6,10 @@
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Gameplay/Relic/Components/NPRelicOwnershipComponent.h"
 #include "Gameplay/Relic/NPRelicReturnZone.h"
+#include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 #include "NoPhotos.h"
 #include "Core/Main/NPMainGameMode.h"
+#include "UI/GameScreen/NPScoreFeedbackWidgetComponent.h"
 
 void UNPRelicDeliveryService::Initialize(ANPMainGameMode* InGameMode)
 {
@@ -115,6 +117,19 @@ bool UNPRelicDeliveryService::TryDeliverRelic(
 		if (OwnerScore > 0)
 		{
 			Owners[OwnerIndex]->AddScore(OwnerScore);
+
+			ANPReplicatedStablePhysicsPawn* OwnerPawn =
+				Cast<ANPReplicatedStablePhysicsPawn>(
+					Owners[OwnerIndex]->GetPawn());
+			if (UNPScoreFeedbackWidgetComponent* ScoreFeedback = OwnerPawn
+				? OwnerPawn->FindComponentByClass<UNPScoreFeedbackWidgetComponent>()
+				: nullptr)
+			{
+				ScoreFeedback->ShowScoreFeedback(
+					OwnerScore,
+					ENPScoreFeedbackType::RelicReturnReward,
+					2.0f);
+			}
 		}
 	}
 	Ownership->ClearOwnership();

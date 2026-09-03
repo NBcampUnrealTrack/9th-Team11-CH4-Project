@@ -1,4 +1,4 @@
-#include "UI/GameScreen/NPPhotoPenaltyWidgetComponent.h"
+#include "UI/GameScreen/NPScoreFeedbackWidgetComponent.h"
 
 #include "Camera/PlayerCameraManager.h"
 #include "Engine/World.h"
@@ -6,12 +6,12 @@
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "TimerManager.h"
-#include "UI/GameScreen/NPPhotoPenaltyWidget.h"
 
-UNPPhotoPenaltyWidgetComponent::UNPPhotoPenaltyWidgetComponent()
+UNPScoreFeedbackWidgetComponent::UNPScoreFeedbackWidgetComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
+	SetIsReplicatedByDefault(true);
 
 	SetWidgetSpace(EWidgetSpace::World);
 	SetDrawSize(FVector2D(320.0f, 80.0f));
@@ -22,14 +22,14 @@ UNPPhotoPenaltyWidgetComponent::UNPPhotoPenaltyWidgetComponent()
 	SetOnlyOwnerSee(false);
 }
 
-void UNPPhotoPenaltyWidgetComponent::BeginPlay()
+void UNPScoreFeedbackWidgetComponent::BeginPlay()
 {
 	Super::BeginPlay();
 	SetVisibility(false, true);
 	SetComponentTickEnabled(false);
 }
 
-void UNPPhotoPenaltyWidgetComponent::EndPlay(
+void UNPScoreFeedbackWidgetComponent::EndPlay(
 	const EEndPlayReason::Type EndPlayReason)
 {
 	if (UWorld* World = GetWorld())
@@ -40,31 +40,57 @@ void UNPPhotoPenaltyWidgetComponent::EndPlay(
 	Super::EndPlay(EndPlayReason);
 }
 
-void UNPPhotoPenaltyWidgetComponent::ShowPenalty(
-	const int32 AppliedPhotoPenalty,
+void UNPScoreFeedbackWidgetComponent::ShowScoreFeedback(
+	const int32 Amount,
+	const ENPScoreFeedbackType FeedbackType,
 	const float DurationSeconds)
 {
-	if (AppliedPhotoPenalty <= 0 || GetNetMode() == NM_DedicatedServer)
+	const AActor* OwnerActor = GetOwner();
+	if (!IsValid(OwnerActor) || !OwnerActor->HasAuthority() || Amount <= 0)
+	{
+		return;
+	}
+
+	MulticastShowScoreFeedback(
+		Amount,
+		FeedbackType,
+		FMath::Max(0.01f, DurationSeconds));
+}
+
+void UNPScoreFeedbackWidgetComponent::MulticastShowScoreFeedback_Implementation(
+	const int32 Amount,
+	const ENPScoreFeedbackType FeedbackType,
+	const float DurationSeconds)
+{
+	ShowScoreFeedbackLocally(Amount, FeedbackType, DurationSeconds);
+}
+
+void UNPScoreFeedbackWidgetComponent::ShowScoreFeedbackLocally(
+	const int32 Amount,
+	const ENPScoreFeedbackType FeedbackType,
+	const float DurationSeconds)
+{
+	if (Amount <= 0 || GetNetMode() == NM_DedicatedServer)
 	{
 		return;
 	}
 
 	InitWidget();
-	UNPPhotoPenaltyWidget* PenaltyWidget =
-		Cast<UNPPhotoPenaltyWidget>(GetUserWidgetObject());
-	if (!IsValid(PenaltyWidget))
+	UNPScoreFeedbackWidget* FeedbackWidget =
+		Cast<UNPScoreFeedbackWidget>(GetUserWidgetObject());
+	if (!IsValid(FeedbackWidget))
 	{
 		UE_LOG(
 			LogNPPhoto,
 			Warning,
-			TEXT("[PhotoPenaltyUI] Invalid WidgetClass. Owner=%s Component=%s Widget=%s"),
+			TEXT("[ScoreFeedbackUI] Invalid WidgetClass. Owner=%s Component=%s Widget=%s"),
 			*GetNameSafe(GetOwner()),
 			*GetNameSafe(this),
 			*GetNameSafe(GetUserWidgetObject()));
 		return;
 	}
 
-	PenaltyWidget->SetPenaltyAmount(AppliedPhotoPenalty);
+	FeedbackWidget->SetScoreFeedback(Amount, FeedbackType);
 	SetVisibility(true, true);
 	SetComponentTickEnabled(true);
 	UpdateFacingCamera();
@@ -74,7 +100,7 @@ void UNPPhotoPenaltyWidgetComponent::ShowPenalty(
 		World->GetTimerManager().SetTimer(
 			HideTimer,
 			this,
-			&ThisClass::HidePenalty,
+			&ThisClass::HideFeedback,
 			FMath::Max(0.01f, DurationSeconds),
 			false);
 	}
@@ -82,13 +108,14 @@ void UNPPhotoPenaltyWidgetComponent::ShowPenalty(
 	UE_LOG(
 		LogNPPhoto,
 		Log,
-		TEXT("[PhotoPenaltyUI] Penalty shown. Owner=%s Amount=%d Duration=%.2f"),
+		TEXT("[ScoreFeedbackUI] Feedback shown. Owner=%s Amount=%d Type=%d Duration=%.2f"),
 		*GetNameSafe(GetOwner()),
-		AppliedPhotoPenalty,
+		Amount,
+		static_cast<int32>(FeedbackType),
 		DurationSeconds);
 }
 
-void UNPPhotoPenaltyWidgetComponent::TickComponent(
+void UNPScoreFeedbackWidgetComponent::TickComponent(
 	float DeltaTime,
 	ELevelTick TickType,
 	FActorComponentTickFunction* ThisTickFunction)
@@ -97,13 +124,13 @@ void UNPPhotoPenaltyWidgetComponent::TickComponent(
 	UpdateFacingCamera();
 }
 
-void UNPPhotoPenaltyWidgetComponent::HidePenalty()
+void UNPScoreFeedbackWidgetComponent::HideFeedback()
 {
 	SetVisibility(false, true);
 	SetComponentTickEnabled(false);
 }
 
-void UNPPhotoPenaltyWidgetComponent::UpdateFacingCamera()
+void UNPScoreFeedbackWidgetComponent::UpdateFacingCamera()
 {
 	APlayerCameraManager* CameraManager =
 		UGameplayStatics::GetPlayerCameraManager(this, 0);

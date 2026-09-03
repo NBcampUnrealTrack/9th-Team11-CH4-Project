@@ -58,9 +58,6 @@ private:
 	UFUNCTION()
 	void OnRep_PhotoSlowActive();
 
-	UFUNCTION(NetMulticast, Reliable)
-	void MulticastShowPhotoPenalty(int32 AppliedPhotoPenalty);
-
 	void ApplySlowStateLocally();
 	void FinishSlowPenalty();
 

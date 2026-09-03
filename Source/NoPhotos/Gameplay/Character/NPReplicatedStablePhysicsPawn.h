@@ -18,7 +18,7 @@ class UNPVisionRestrictionComponent;
 class UNPStablePhysicsNetworkPredictionComponent;
 class UNPPhotoWorldFeedbackComponent;
 class UNPPhotoCapturePenaltyComponent;
-class UNPPhotoPenaltyWidgetComponent;
+class UNPScoreFeedbackWidgetComponent;
 class ANPBaseRelic;
 
 USTRUCT()
@@ -229,7 +229,7 @@ private:
 
 	/** 로컬 소유자를 포함해 실제 유물 가격 감점액을 머리 위에 표시합니다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Photo|Penalty", meta=(AllowPrivateAccess="true"))
-	TObjectPtr<UNPPhotoPenaltyWidgetComponent> PhotoPenaltyWidget;
+	TObjectPtr<UNPScoreFeedbackWidgetComponent> ScoreFeedbackWidget;
 
 	/** 서버에서 이 캐릭터가 현재 잡고 있는 다른 캐릭터를 추적합니다. */
 	UPROPERTY(Transient)

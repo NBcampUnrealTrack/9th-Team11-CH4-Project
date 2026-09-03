@@ -55,6 +55,7 @@ void ANPBaseRelic::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(ANPBaseRelic, bIsDisplayed);
 	DOREPLIFETIME(ANPBaseRelic, bIsUnlocked);
 	DOREPLIFETIME(ANPBaseRelic, bIsReturned);
+	DOREPLIFETIME(ANPBaseRelic, AccumulatedPhotoPenalty);
 }
 
 FVector ANPBaseRelic::GetRelicWorldLocation() const
@@ -68,6 +69,11 @@ int32 ANPBaseRelic::GetBasePrice() const
 {
 	const FNPRelicTableRow* Data = GetRelicTableData();
 	return Data ? FMath::Max(0, Data->Price) : 0;
+}
+
+int32 ANPBaseRelic::GetCurrentPrice() const
+{
+	return FMath::Max(0, GetBasePrice() - AccumulatedPhotoPenalty);
 }
 
 const FNPRelicTableRow* ANPBaseRelic::GetRelicTableData() const
@@ -135,7 +141,15 @@ bool ANPBaseRelic::AddPhotoPenaltyCapture(
 		FMath::RoundToInt(AccumulatedPenalty),
 		0,
 		BasePrice);
-	return AccumulatedPhotoPenalty != PreviousPenalty;
+	if (AccumulatedPhotoPenalty == PreviousPenalty)
+	{
+		return false;
+	}
+
+	// 서버의 Listen UI도 즉시 갱신하고, 이후 복제로 각 클라이언트 UI를 갱신합니다.
+	OnRep_AccumulatedPhotoPenalty();
+	ForceNetUpdate();
+	return true;
 }
 
 bool ANPBaseRelic::TryMarkReturned()
@@ -184,6 +198,11 @@ void ANPBaseRelic::OnRep_IsReturned()
 	RelicMesh->SetSimulatePhysics(false);
 	RelicMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	RelicMesh->SetVisibility(false, true);
+}
+
+void ANPBaseRelic::OnRep_AccumulatedPhotoPenalty()
+{
+	OnRelicValueChanged.Broadcast(this);
 }
 
 void ANPBaseRelic::ReleaseFromDisplay()
