@@ -73,9 +73,18 @@ FNPPhotoEvidenceResult ANPMainGameMode::HandlePhotoCaptureRequest(const FNPPhoto
 		return Result;
 	}
 
-	if (Result.bSuccess && RelicDeliveryService)
+	ANPBaseRelic* EvidenceRelic = Result.bSuccess
+		? Cast<ANPBaseRelic>(Result.Relic.Get())
+		: nullptr;
+	int32 AppliedPhotoPenalty = 0;
+	if (Result.bSuccess && RelicDeliveryService && IsValid(EvidenceRelic))
 	{
+		const int32 PreviousPenalty =
+			EvidenceRelic->GetAccumulatedPhotoPenalty();
 		RelicDeliveryService->RegisterPhotoEvidence(Result);
+		AppliedPhotoPenalty = FMath::Max(
+			0,
+			EvidenceRelic->GetAccumulatedPhotoPenalty() - PreviousPenalty);
 	}
 	if (Result.bSuccess && IsValid(Result.Thief))
 	{
@@ -86,7 +95,8 @@ FNPPhotoEvidenceResult ANPMainGameMode::HandlePhotoCaptureRequest(const FNPPhoto
 			: nullptr)
 		{
 			PenaltyComponent->ApplyCapturedWithRelicPenalty(
-				Cast<ANPBaseRelic>(Result.Relic.Get()));
+				EvidenceRelic,
+				AppliedPhotoPenalty);
 		}
 	}
 	if (Result.bSuccess)

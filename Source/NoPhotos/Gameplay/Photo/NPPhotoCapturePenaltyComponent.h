@@ -21,7 +21,9 @@ public:
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	/** 서버에서 증거 사진에 포함된 유물과 현재 보유 유물이 같은 경우 패널티를 적용합니다. */
-	bool ApplyCapturedWithRelicPenalty(ANPBaseRelic* EvidenceRelic);
+	bool ApplyCapturedWithRelicPenalty(
+		ANPBaseRelic* EvidenceRelic,
+		int32 AppliedPhotoPenalty);
 
 	UFUNCTION(BlueprintPure, Category="Photo Penalty")
 	bool IsPhotoSlowActive() const { return bPhotoSlowActive; }
@@ -47,9 +49,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Photo Penalty|Visual")
 	TObjectPtr<UMaterialInterface> SlowOverlayMaterial;
 
+	/** 머리 위 가격 감소 알림이 유지되는 시간입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Photo Penalty|Visual",
+		meta=(ClampMin="0.01", Units="s"))
+	float PriceReductionMessageDuration = 2.0f;
+
 private:
 	UFUNCTION()
 	void OnRep_PhotoSlowActive();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastShowPhotoPenalty(int32 AppliedPhotoPenalty);
 
 	void ApplySlowStateLocally();
 	void FinishSlowPenalty();

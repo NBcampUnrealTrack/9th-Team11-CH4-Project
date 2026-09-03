@@ -9,6 +9,7 @@
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
+#include "UI/GameScreen/NPPhotoPenaltyWidgetComponent.h"
 
 namespace
 {
@@ -50,7 +51,8 @@ void UNPPhotoCapturePenaltyComponent::EndPlay(
 }
 
 bool UNPPhotoCapturePenaltyComponent::ApplyCapturedWithRelicPenalty(
-	ANPBaseRelic* EvidenceRelic)
+	ANPBaseRelic* EvidenceRelic,
+	const int32 AppliedPhotoPenalty)
 {
 	ANPReplicatedStablePhysicsPawn* Pawn =
 		Cast<ANPReplicatedStablePhysicsPawn>(GetOwner());
@@ -88,8 +90,31 @@ bool UNPPhotoCapturePenaltyComponent::ApplyCapturedWithRelicPenalty(
 		&ThisClass::FinishSlowPenalty,
 		SafeSlowDuration,
 		false);
+	if (AppliedPhotoPenalty > 0)
+	{
+		MulticastShowPhotoPenalty(AppliedPhotoPenalty);
+	}
 	Pawn->ForceNetUpdate();
 	return true;
+}
+
+void UNPPhotoCapturePenaltyComponent::MulticastShowPhotoPenalty_Implementation(
+	const int32 AppliedPhotoPenalty)
+{
+	AActor* OwnerActor = GetOwner();
+	if (!IsValid(OwnerActor) || GetNetMode() == NM_DedicatedServer
+		|| AppliedPhotoPenalty <= 0)
+	{
+		return;
+	}
+
+	if (UNPPhotoPenaltyWidgetComponent* PenaltyWidget =
+		OwnerActor->FindComponentByClass<UNPPhotoPenaltyWidgetComponent>())
+	{
+		PenaltyWidget->ShowPenalty(
+			AppliedPhotoPenalty,
+			PriceReductionMessageDuration);
+	}
 }
 
 void UNPPhotoCapturePenaltyComponent::OnRep_PhotoSlowActive()

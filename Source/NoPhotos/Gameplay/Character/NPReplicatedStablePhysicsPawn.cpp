@@ -17,6 +17,7 @@
 #include "Gameplay/Relic/Components/NPAimableRelicComponent.h"
 #include "Gameplay/Photo/NPPhotoWorldFeedbackComponent.h"
 #include "Gameplay/Photo/NPPhotoCapturePenaltyComponent.h"
+#include "UI/GameScreen/NPPhotoPenaltyWidgetComponent.h"
 #include "Core/NPPlayerState.h"
 #include "Gameplay/Character/Component/NPStablePhysicsMovementComponent.h"
 #include "NoPhotos.h"
@@ -39,6 +40,10 @@ ANPReplicatedStablePhysicsPawn::ANPReplicatedStablePhysicsPawn()
 
 	PhotoCapturePenalty = CreateDefaultSubobject<
 		UNPPhotoCapturePenaltyComponent>(TEXT("PhotoCapturePenalty"));
+
+	PhotoPenaltyWidget = CreateDefaultSubobject<
+		UNPPhotoPenaltyWidgetComponent>(TEXT("PhotoPenaltyWidget"));
+	PhotoPenaltyWidget->SetupAttachment(GetRootComponent());
 
 	AbilitySystem = CreateDefaultSubobject<UNPAbilitySystemComponent>(
 		TEXT("AbilitySystem"));
@@ -398,6 +403,13 @@ void ANPReplicatedStablePhysicsPawn::ApplyJumpRequest()
 
 void ANPReplicatedStablePhysicsPawn::ApplyRightHandState(bool bActive)
 {
+#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+	if (!bActive && IsLocallyControlled() && bDebugGrabLocked)
+	{
+		return;
+	}
+#endif
+
 	if (HasAuthority())
 	{
 		SetServerRightHandState(bActive);
@@ -423,6 +435,20 @@ void ANPReplicatedStablePhysicsPawn::ApplyRightHandState(bool bActive)
 		}
 		ServerSetRightHandActive(bActive);
 	}
+}
+
+void ANPReplicatedStablePhysicsPawn::SetDebugGrabLocked(const bool bLocked)
+{
+#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+	if (!IsLocallyControlled())
+	{
+		return;
+	}
+
+	bDebugGrabLocked = bLocked;
+	bDebugGrabWasConfirmed = false;
+	ApplyRightHandState(bLocked);
+#endif
 }
 
 void ANPReplicatedStablePhysicsPawn::OnRep_PlayerState()
@@ -646,6 +672,34 @@ void ANPReplicatedStablePhysicsPawn::UpdateLocalPredictedGrab(float DeltaSeconds
 void ANPReplicatedStablePhysicsPawn::HandleGrabbedComponentChanged(
 	UPrimitiveComponent* NewGrabbedComponent)
 {
+#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+	if (IsLocallyControlled() && bDebugGrabLocked)
+	{
+		if (IsValid(NewGrabbedComponent))
+		{
+			bDebugGrabWasConfirmed = true;
+		}
+		else if (bDebugGrabWasConfirmed)
+		{
+			// 사진 패널티나 Constraint 파손으로 놓친 뒤 자동 재Grab하지 않습니다.
+			bDebugGrabLocked = false;
+			bDebugGrabWasConfirmed = false;
+			bLocalRightHandActive = false;
+			RightHandGrab->SetGrabRequested(false);
+			RightHandGrab->SetGameplayNotificationsEnabled(true);
+			SetRightHandVisualState(false);
+			if (HasAuthority())
+			{
+				SetServerRightHandState(false);
+			}
+			else
+			{
+				ServerSetRightHandActive(false);
+			}
+		}
+	}
+#endif
+
 	ANPBaseRelic* NewGrabbedRelic = IsValid(NewGrabbedComponent)
 		? Cast<ANPBaseRelic>(NewGrabbedComponent->GetOwner())
 		: nullptr;
