@@ -456,6 +456,8 @@ void ANPGoblinCharacter::OnPhotographed_Implementation(
 		CurrentPhotoHP,
 		FMath::Max(1, PhotoDamagePerCapture));
 	CurrentPhotoHP -= AppliedDamage;
+	// BP 콜백 이후 HP가 바뀌어도 이 촬영이 처치한 것인지 판정은 유지합니다.
+	const bool bDefeatedByThisPhoto = CurrentPhotoHP == 0;
 	OnRep_CurrentPhotoHP();
 	ForceNetUpdate();
 	UE_LOG(
@@ -471,11 +473,16 @@ void ANPGoblinCharacter::OnPhotographed_Implementation(
 		CurrentPhotoHP,
 		GetMaxPhotoHP());
 
-	TrySpawnPhotographedRelic();
+	const int32 PhotoDropCount = FMath::Clamp(PhotoRelicDropCount, 0, 100);
+	const int32 DefeatDropCount = bDefeatedByThisPhoto ? FMath::Clamp(DefeatRelicDropCount, 0, 100) : 0;
+	for (int32 Index = 0; Index < PhotoDropCount + DefeatDropCount; ++Index)
+	{
+		TrySpawnPhotographedRelic();
+	}
 	OnGoblinPhotographed.Broadcast(Photographer, Visibility, CaptureSequence);
 	BP_OnPhotographed(Photographer, Visibility, CaptureSequence);
 
-	if (PreviousPhotoHP > 0 && CurrentPhotoHP == 0)
+	if (bDefeatedByThisPhoto)
 	{
 		UE_LOG(
 			LogNPPhoto,
