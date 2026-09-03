@@ -6,8 +6,10 @@
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Gameplay/Relic/Components/NPRelicOwnershipComponent.h"
 #include "Gameplay/Relic/NPRelicReturnZone.h"
+#include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 #include "NoPhotos.h"
 #include "Core/Main/NPMainGameMode.h"
+#include "UI/GameScreen/NPScoreFeedbackWidgetComponent.h"
 
 void UNPRelicDeliveryService::Initialize(ANPMainGameMode* InGameMode)
 {
@@ -32,14 +34,17 @@ bool UNPRelicDeliveryService::RegisterPhotoEvidence(const FNPPhotoEvidenceResult
 		return false;
 	}
 
-	const bool bPenaltyChanged = Relic->AddPhotoPenalty(PhotoPenaltyPerCapture);
+	const bool bPenaltyChanged = Relic->AddPhotoPenaltyCapture(
+		PhotoPenaltyRatePerCapture);
 	UE_LOG(
 		LogNoPhotos,
 		Log,
-		TEXT("[RelicDelivery] Evidence penalty %s. Relic=%s Photographer=%s AccumulatedPenalty=%d ReturnScore=%d"),
+		TEXT("[RelicDelivery] Evidence penalty %s. Relic=%s Photographer=%s CaptureCount=%d PenaltyRate=%.2f AccumulatedPenalty=%d ReturnScore=%d"),
 		bPenaltyChanged ? TEXT("applied") : TEXT("clamped/ignored"),
 		*GetNameSafe(Relic),
 		*GetNameSafe(Evidence.Photographer),
+		Relic->GetSuccessfulEvidenceCaptureCount(),
+		PhotoPenaltyRatePerCapture,
 		Relic->GetAccumulatedPhotoPenalty(),
 		CalculateReturnScore(Relic));
 	return bPenaltyChanged;
@@ -112,6 +117,19 @@ bool UNPRelicDeliveryService::TryDeliverRelic(
 		if (OwnerScore > 0)
 		{
 			Owners[OwnerIndex]->AddScore(OwnerScore);
+
+			ANPReplicatedStablePhysicsPawn* OwnerPawn =
+				Cast<ANPReplicatedStablePhysicsPawn>(
+					Owners[OwnerIndex]->GetPawn());
+			if (UNPScoreFeedbackWidgetComponent* ScoreFeedback = OwnerPawn
+				? OwnerPawn->FindComponentByClass<UNPScoreFeedbackWidgetComponent>()
+				: nullptr)
+			{
+				ScoreFeedback->ShowScoreFeedback(
+					OwnerScore,
+					ENPScoreFeedbackType::RelicReturnReward,
+					2.0f);
+			}
 		}
 	}
 	Ownership->ClearOwnership();

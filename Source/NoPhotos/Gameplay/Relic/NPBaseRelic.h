@@ -10,9 +10,12 @@ class UNPRelicOwnershipComponent;
 class UPrimitiveComponent;
 class FLifetimeProperty;
 struct FNPRelicTableRow;
-class ANPBaseRelic; //델리게이트 때문에 추가
+class ANPBaseRelic;
 
-DECLARE_MULTICAST_DELEGATE_OneParam(FNPOnRelicValueChanged, ANPBaseRelic*);
+DECLARE_MULTICAST_DELEGATE_OneParam(
+	FNPOnRelicValueChanged,
+	ANPBaseRelic*);
+
 UCLASS(Abstract, Blueprintable)
 class NOPHOTOS_API ANPBaseRelic : public AActor
 {
@@ -32,6 +35,9 @@ public:
 	UFUNCTION(BlueprintPure, Category="Relic|Physics")
 	bool ShouldStartWithPhysicsEnabled() const { return bStartWithPhysicsEnabled; }
 
+	UFUNCTION(BlueprintPure, Category="Relic")
+	virtual FVector GetRelicWorldLocation() const;
+
 	UFUNCTION(BlueprintPure, Category="Relic|Delivery")
 	bool IsReturned() const { return bIsReturned; }
 
@@ -50,13 +56,21 @@ public:
 	UFUNCTION(BlueprintPure, BlueprintAuthorityOnly, Category="Relic|Delivery")
 	int32 GetAccumulatedPhotoPenalty() const { return AccumulatedPhotoPenalty; }
 
+	UFUNCTION(BlueprintPure, BlueprintAuthorityOnly, Category="Relic|Delivery")
+	int32 GetSuccessfulEvidenceCaptureCount() const
+	{
+		return SuccessfulEvidenceCaptureCount;
+	}
+
+	/** 서버와 클라이언트에서 현재 유물 가치가 변경될 때 실행됩니다. */
 	FNPOnRelicValueChanged OnRelicValueChanged;
 
 	UFUNCTION(BlueprintPure, Category="Relic|Ownership")
 	UNPRelicOwnershipComponent* GetOwnershipComponent() const { return OwnershipComponent; }
 
 	void SetUnlocked(bool bUnlocked);
-	bool AddPhotoPenalty(int32 PenaltyAmount);
+	/** 성공 촬영 횟수를 증가시키고 기본 가격에 대한 누적 비율로 감점을 다시 계산합니다. */
+	bool AddPhotoPenaltyCapture(float PenaltyRatePerCapture);
 	bool TryMarkReturned();
 
 	/** 서버에서 전시 상태를 해제하고 물리를 활성화한 뒤 질량과 무관한 속도 충격을 적용합니다. */
@@ -105,7 +119,11 @@ protected:
 	UPROPERTY(ReplicatedUsing=OnRep_IsReturned, VisibleInstanceOnly, BlueprintReadOnly, Category="Relic|Delivery")
 	bool bIsReturned = false;
 
-	/** 사진 판정으로 누적된 감점. 들고 있는 모든 클라이언트 UI에 현재 가치가 보이도록 복제합니다. */
+	/** 사진 판정으로 누적된 감점입니다. 현재 가격 UI 갱신을 위해 클라이언트에 복제합니다. */
 	UPROPERTY(ReplicatedUsing=OnRep_AccumulatedPhotoPenalty, VisibleInstanceOnly, BlueprintReadOnly, Category="Relic|Delivery")
 	int32 AccumulatedPhotoPenalty = 0;
+
+	/** 서버에서만 관리하는 유효한 유물 증거 사진의 누적 횟수입니다. */
+	UPROPERTY(Transient, VisibleInstanceOnly, BlueprintReadOnly, Category="Relic|Delivery")
+	int32 SuccessfulEvidenceCaptureCount = 0;
 };

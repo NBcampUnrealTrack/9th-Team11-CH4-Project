@@ -83,6 +83,75 @@ ANPMainPlayerController::ANPMainPlayerController()
 	}
 }
 
+void ANPMainPlayerController::NPTestLockGrab()
+{
+#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+	ANPReplicatedStablePhysicsPawn* StablePawn =
+		GetPawn<ANPReplicatedStablePhysicsPawn>();
+	if (!IsValid(StablePawn))
+	{
+		UE_LOG(
+			LogNoPhotos,
+			Warning,
+			TEXT("[PhotoTest] Grab lock failed: invalid replicated physics Pawn. Controller=%s"),
+			*GetNameSafe(this));
+		return;
+	}
+
+	StablePawn->SetDebugGrabLocked(true);
+	UE_LOG(
+		LogNoPhotos,
+		Log,
+		TEXT("[PhotoTest] Grab lock enabled. Pawn=%s"),
+		*GetNameSafe(StablePawn));
+#endif
+}
+
+void ANPMainPlayerController::NPTestUnlockGrab()
+{
+#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+	ANPReplicatedStablePhysicsPawn* StablePawn =
+		GetPawn<ANPReplicatedStablePhysicsPawn>();
+	if (!IsValid(StablePawn))
+	{
+		return;
+	}
+
+	StablePawn->SetDebugGrabLocked(false);
+	UE_LOG(
+		LogNoPhotos,
+		Log,
+		TEXT("[PhotoTest] Grab lock disabled. Pawn=%s"),
+		*GetNameSafe(StablePawn));
+#endif
+}
+
+void ANPMainPlayerController::NPTestPrintGrabState()
+{
+#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+	const ANPReplicatedStablePhysicsPawn* StablePawn =
+		GetPawn<ANPReplicatedStablePhysicsPawn>();
+	if (!IsValid(StablePawn))
+	{
+		UE_LOG(
+			LogNoPhotos,
+			Warning,
+			TEXT("[PhotoTest] Grab state unavailable: invalid replicated physics Pawn. Controller=%s"),
+			*GetNameSafe(this));
+		return;
+	}
+
+	UE_LOG(
+		LogNoPhotos,
+		Log,
+		TEXT("[PhotoTest] Grab state. Pawn=%s Locked=%s ReplicatedActive=%s HeldRelic=%s"),
+		*GetNameSafe(StablePawn),
+		StablePawn->IsDebugGrabLocked() ? TEXT("true") : TEXT("false"),
+		StablePawn->IsReplicatedGrabActive() ? TEXT("true") : TEXT("false"),
+		*GetNameSafe(StablePawn->GetHeldRelic_Implementation()));
+#endif
+}
+
 void ANPMainPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
