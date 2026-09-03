@@ -31,6 +31,7 @@ public:
 
 private:
 	bool HasServerAuthority() const;
+	void UpdateReplicationOwner();
 
 	TMap<
 		TWeakObjectPtr<UNPStablePhysicsGrabComponent>,

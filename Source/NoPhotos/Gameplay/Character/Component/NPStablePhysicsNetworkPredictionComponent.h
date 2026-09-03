@@ -161,6 +161,12 @@ private:
 	UPROPERTY(EditAnywhere, Category="Network Prediction|Blocked Correction", meta=(ClampMin="0.0"))
 	float CorrectionSweepRadius = 25.0f;
 
+	UPROPERTY(EditAnywhere, Category="Network Prediction|Blocked Correction", meta=(ClampMin="0.0"))
+	float RecoveryTargetCheckHeightOffset = 20.0f;
+
+	UPROPERTY(EditAnywhere, Category="Network Prediction|Blocked Correction")
+	bool bDrawRecoveryTargetDebug = true;
+
 	/** 이보다 작은 수직 오차에서는 바닥과 천장 Hit를 막힘 판정에서 제외합니다. */
 	UPROPERTY(EditAnywhere, Category="Network Prediction|Blocked Correction", meta=(ClampMin="0.0"))
 	float VerticalLayerSeparationDistance = 50.0f;
