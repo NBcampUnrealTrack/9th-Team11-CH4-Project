@@ -142,7 +142,7 @@ void ANPBreakableRelic::HandleFullyDecayed()
 {
 	if (HasAuthority())
 	{
-		Destroy();
+		SetLifeSpan(0.01f);
 	}
 }
 
