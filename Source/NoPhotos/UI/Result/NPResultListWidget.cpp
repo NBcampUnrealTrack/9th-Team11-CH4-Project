@@ -2,8 +2,10 @@
 
 #include "Components/VerticalBox.h"
 #include "Core/Main/NPMainGameState.h"
+#include "Core/Main/NPMainPlayerController.h"
 #include "Core/NPPlayerState.h"
 #include "Engine/World.h"
+#include "Gameplay/Photo/NPPhotoTransferComponent.h"
 #include "TimerManager.h"
 #include "UI/Result/NPPersonalResultWidget.h"
 
@@ -12,6 +14,22 @@ void UNPResultListWidget::NativeConstruct()
 	Super::NativeConstruct();
 
 	RefreshResultList();
+	ObservedGameState = GetWorld() ? GetWorld()->GetGameState<ANPMainGameState>() : nullptr;
+	if (IsValid(ObservedGameState))
+	{
+		ObservedGameState->OnPhotoEvidenceChanged.AddUniqueDynamic(
+			this, &ThisClass::HandlePhotoEvidenceChanged);
+	}
+
+	ANPMainPlayerController* PlayerController = Cast<ANPMainPlayerController>(GetOwningPlayer());
+	TransferComponent = IsValid(PlayerController) ? PlayerController->GetPhotoTransferComponent() : nullptr;
+	if (IsValid(TransferComponent))
+	{
+		TransferComponent->OnPhotoTextureReceived.AddUniqueDynamic(
+			this, &ThisClass::HandlePhotoTextureReceived);
+	}
+
+	RebuildPhotoDownloadQueue();
 }
 
 void UNPResultListWidget::NativeDestruct()
@@ -20,9 +38,22 @@ void UNPResultListWidget::NativeDestruct()
 	{
 		World->GetTimerManager().ClearTimer(ResultEntryTimer);
 	}
+	if (IsValid(ObservedGameState))
+	{
+		ObservedGameState->OnPhotoEvidenceChanged.RemoveDynamic(
+			this, &ThisClass::HandlePhotoEvidenceChanged);
+	}
+	if (IsValid(TransferComponent))
+	{
+		TransferComponent->OnPhotoTextureReceived.RemoveDynamic(
+			this, &ThisClass::HandlePhotoTextureReceived);
+	}
 
 	PendingPlayerRankings.Reset();
 	ResultEntryWidgets.Reset();
+	PendingPhotoDownloads.Reset();
+	DownloadingPhotoId.Invalidate();
+	DownloadTargetWidget.Reset();
 	NextRankingIndex = INDEX_NONE;
 
 	Super::NativeDestruct();
@@ -99,6 +130,112 @@ void UNPResultListWidget::RefreshResultList()
 				false);
 		}
 	}
+}
+
+void UNPResultListWidget::HandlePhotoEvidenceChanged()
+{
+	RefreshPictureLists();
+}
+
+void UNPResultListWidget::RefreshPictureLists()
+{
+	for (UNPPersonalResultWidget* ResultEntryWidget : ResultEntryWidgets)
+	{
+		if (IsValid(ResultEntryWidget))
+		{
+			ResultEntryWidget->RefreshPictureButtons();
+		}
+	}
+
+	if (DownloadingPhotoId.IsValid())
+	{
+		bPhotoQueueRefreshPending = true;
+		return;
+	}
+
+	RebuildPhotoDownloadQueue();
+}
+
+void UNPResultListWidget::RebuildPhotoDownloadQueue()
+{
+	if (!IsValid(TransferComponent) || DownloadingPhotoId.IsValid())
+	{
+		return;
+	}
+
+	bPhotoQueueRefreshPending = false;
+	PendingPhotoDownloads.Reset();
+	for (UNPPersonalResultWidget* ResultEntryWidget : ResultEntryWidgets)
+	{
+		if (!IsValid(ResultEntryWidget))
+		{
+			continue;
+		}
+
+		for (const FGuid& PhotoId : ResultEntryWidget->GetPicturePhotoIds())
+		{
+			if (!PhotoId.IsValid())
+			{
+				continue;
+			}
+
+			if (UTexture2D* CachedTexture = TransferComponent->FindReceivedPhoto(PhotoId))
+			{
+				ResultEntryWidget->SetPictureTexture(PhotoId, CachedTexture);
+				continue;
+			}
+
+			PendingPhotoDownloads.Add({ResultEntryWidget, PhotoId});
+		}
+	}
+
+	RequestNextPhoto();
+}
+
+void UNPResultListWidget::RequestNextPhoto()
+{
+	if (!IsValid(TransferComponent) || DownloadingPhotoId.IsValid())
+	{
+		return;
+	}
+
+	while (!PendingPhotoDownloads.IsEmpty())
+	{
+		const FQueuedPhotoDownload NextDownload = PendingPhotoDownloads[0];
+		PendingPhotoDownloads.RemoveAt(0);
+		if (!NextDownload.PhotoId.IsValid() || !NextDownload.TargetWidget.IsValid())
+		{
+			continue;
+		}
+
+		DownloadingPhotoId = NextDownload.PhotoId;
+		DownloadTargetWidget = NextDownload.TargetWidget;
+		TransferComponent->RequestPhoto(DownloadingPhotoId);
+		return;
+	}
+}
+
+void UNPResultListWidget::HandlePhotoTextureReceived(const FGuid PhotoId, UTexture2D* Texture)
+{
+	if (PhotoId != DownloadingPhotoId || !IsValid(Texture))
+	{
+		return;
+	}
+
+	if (DownloadTargetWidget.IsValid())
+	{
+		DownloadTargetWidget->SetPictureTexture(PhotoId, Texture);
+	}
+	DownloadingPhotoId.Invalidate();
+	DownloadTargetWidget.Reset();
+
+	if (bPhotoQueueRefreshPending)
+	{
+		RebuildPhotoDownloadQueue();
+		return;
+	}
+
+	RequestNextPhoto();
 }
 
 void UNPResultListWidget::AddNextResultEntry()

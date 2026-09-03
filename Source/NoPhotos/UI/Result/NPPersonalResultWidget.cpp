@@ -3,21 +3,9 @@
 #include "Components/HorizontalBox.h"
 #include "Components/TextBlock.h"
 #include "Core/Main/NPMainGameState.h"
-#include "Core/Main/NPMainPlayerController.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerState.h"
-#include "Gameplay/Photo/NPPhotoTransferComponent.h"
 #include "UI/Result/Result/NPResultPictureButton.h"
-
-void UNPPersonalResultWidget::NativeDestruct()
-{
-	if (IsValid(TransferComponent))
-	{
-		TransferComponent->OnPhotoTextureReceived.RemoveDynamic(this, &ThisClass::HandlePhotoTextureReceived);
-	}
-
-	Super::NativeDestruct();
-}
 
 void UNPPersonalResultWidget::SetupResult(const int32 InRank, const FString& InPlayerName, const int32 InScore, APlayerState* InPlayerState)
 {
@@ -41,6 +29,11 @@ void UNPPersonalResultWidget::SetupResult(const int32 InRank, const FString& InP
 	CreatePictureButtons();
 }
 
+void UNPPersonalResultWidget::RefreshPictureButtons()
+{
+	CreatePictureButtons();
+}
+
 void UNPPersonalResultWidget::CreatePictureButtons()
 {
 	if (!IsValid(PictureList))
@@ -49,14 +42,8 @@ void UNPPersonalResultWidget::CreatePictureButtons()
 	}
 
 	PictureList->ClearChildren();
-	if (IsValid(TransferComponent))
-	{
-		TransferComponent->OnPhotoTextureReceived.RemoveDynamic(this, &ThisClass::HandlePhotoTextureReceived);
-	}
-
 	PictureButtonsById.Empty();
-	PendingPhotoIds.Empty();
-	DownloadingPhotoId.Invalidate();
+	PicturePhotoIds.Empty();
 	if (!IsValid(ResultPlayerState) || !IsValid(PictureButtonWidgetClass))
 	{
 		return;
@@ -68,8 +55,8 @@ void UNPPersonalResultWidget::CreatePictureButtons()
 		return;
 	}
 
-	PendingPhotoIds = GameState->GetSelectedPhotoIds(ResultPlayerState);
-	for (const FGuid& PhotoId : PendingPhotoIds)
+	PicturePhotoIds = GameState->GetSelectedPhotoIds(ResultPlayerState);
+	for (const FGuid& PhotoId : PicturePhotoIds)
 	{
 		if (!PhotoId.IsValid())
 		{
@@ -86,54 +73,15 @@ void UNPPersonalResultWidget::CreatePictureButtons()
 		PictureList->AddChild(PictureButton);
 		PictureButtonsById.Add(PhotoId, PictureButton);
 	}
-
-	ANPMainPlayerController* PlayerController = Cast<ANPMainPlayerController>(GetOwningPlayer());
-	TransferComponent = IsValid(PlayerController) ? PlayerController->GetPhotoTransferComponent() : nullptr;
-	if (!IsValid(TransferComponent))
-	{
-		return;
-	}
-
-	TransferComponent->OnPhotoTextureReceived.AddUniqueDynamic(this, &ThisClass::HandlePhotoTextureReceived);
-	RequestNextPhoto();
 }
 
-void UNPPersonalResultWidget::RequestNextPhoto()
+void UNPPersonalResultWidget::SetPictureTexture(const FGuid PhotoId, UTexture2D* Texture)
 {
-	if (!IsValid(TransferComponent) || DownloadingPhotoId.IsValid())
+	if (!IsValid(Texture))
 	{
 		return;
 	}
 
-	while (!PendingPhotoIds.IsEmpty())
-	{
-		const FGuid NextPhotoId = PendingPhotoIds[0];
-		PendingPhotoIds.RemoveAt(0);
-		if (!NextPhotoId.IsValid() || !PictureButtonsById.Contains(NextPhotoId))
-		{
-			continue;
-		}
-
-		DownloadingPhotoId = NextPhotoId;
-		if (UTexture2D* CachedTexture = TransferComponent->FindReceivedPhoto(NextPhotoId))
-		{
-			HandlePhotoTextureReceived(NextPhotoId, CachedTexture);
-			return;
-		}
-
-		TransferComponent->RequestPhoto(NextPhotoId);
-		return;
-	}
-}
-
-void UNPPersonalResultWidget::HandlePhotoTextureReceived(const FGuid PhotoId, UTexture2D* Texture)
-{
-	if (PhotoId != DownloadingPhotoId || !IsValid(Texture))
-	{
-		return;
-	}
-
-	DownloadingPhotoId.Invalidate();
 	if (TObjectPtr<UNPResultPictureButton>* PictureButton = PictureButtonsById.Find(PhotoId))
 	{
 		if (IsValid(*PictureButton))
@@ -150,10 +98,7 @@ void UNPPersonalResultWidget::HandlePhotoTextureReceived(const FGuid PhotoId, UT
 					}
 				}
 			}
-
 			(*PictureButton)->SetPictureTexture(Texture, CapturedPlayerName);
 		}
 	}
-
-	RequestNextPhoto();
 }
