@@ -17,6 +17,7 @@ class UNPControlReversalComponent;
 class UNPVisionRestrictionComponent;
 class UNPStablePhysicsNetworkPredictionComponent;
 class UNPPhotoWorldFeedbackComponent;
+class UNPPhotoCapturePenaltyComponent;
 class ANPBaseRelic;
 
 USTRUCT()
@@ -216,6 +217,10 @@ private:
 	/** 사진 촬영/피촬영 상태를 발밑 데칼로 표시합니다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Photo|World Feedback", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UNPPhotoWorldFeedbackComponent> PhotoWorldFeedback;
+
+	/** 유물 증거 사진에 찍혔을 때 Drop, 감속과 Overlay 연출을 처리합니다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Photo|Penalty", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UNPPhotoCapturePenaltyComponent> PhotoCapturePenalty;
 
 	/** 서버에서 이 캐릭터가 현재 잡고 있는 다른 캐릭터를 추적합니다. */
 	UPROPERTY(Transient)

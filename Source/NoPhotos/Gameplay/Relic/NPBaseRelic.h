@@ -45,11 +45,18 @@ public:
 	UFUNCTION(BlueprintPure, BlueprintAuthorityOnly, Category="Relic|Delivery")
 	int32 GetAccumulatedPhotoPenalty() const { return AccumulatedPhotoPenalty; }
 
+	UFUNCTION(BlueprintPure, BlueprintAuthorityOnly, Category="Relic|Delivery")
+	int32 GetSuccessfulEvidenceCaptureCount() const
+	{
+		return SuccessfulEvidenceCaptureCount;
+	}
+
 	UFUNCTION(BlueprintPure, Category="Relic|Ownership")
 	UNPRelicOwnershipComponent* GetOwnershipComponent() const { return OwnershipComponent; }
 
 	void SetUnlocked(bool bUnlocked);
-	bool AddPhotoPenalty(int32 PenaltyAmount);
+	/** 성공 촬영 횟수를 증가시키고 기본 가격에 대한 누적 비율로 감점을 다시 계산합니다. */
+	bool AddPhotoPenaltyCapture(float PenaltyRatePerCapture);
 	bool TryMarkReturned();
 
 	/** 서버에서 전시 상태를 해제하고 물리를 활성화한 뒤 질량과 무관한 속도 충격을 적용합니다. */
@@ -98,4 +105,8 @@ protected:
 	/** 서버에서만 누적되는 사진 판정 감점입니다. */
 	UPROPERTY(Transient, VisibleInstanceOnly, BlueprintReadOnly, Category="Relic|Delivery")
 	int32 AccumulatedPhotoPenalty = 0;
+
+	/** 서버에서만 관리하는 유효한 유물 증거 사진의 누적 횟수입니다. */
+	UPROPERTY(Transient, VisibleInstanceOnly, BlueprintReadOnly, Category="Relic|Delivery")
+	int32 SuccessfulEvidenceCaptureCount = 0;
 };

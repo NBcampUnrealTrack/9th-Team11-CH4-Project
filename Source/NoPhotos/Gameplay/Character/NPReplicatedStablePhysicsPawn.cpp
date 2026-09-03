@@ -16,6 +16,7 @@
 #include "Gameplay/Relic/Components/NPRelicOwnershipComponent.h"
 #include "Gameplay/Relic/Components/NPAimableRelicComponent.h"
 #include "Gameplay/Photo/NPPhotoWorldFeedbackComponent.h"
+#include "Gameplay/Photo/NPPhotoCapturePenaltyComponent.h"
 #include "Core/NPPlayerState.h"
 #include "Gameplay/Character/Component/NPStablePhysicsMovementComponent.h"
 #include "NoPhotos.h"
@@ -35,6 +36,9 @@ ANPReplicatedStablePhysicsPawn::ANPReplicatedStablePhysicsPawn()
 	PhotoWorldFeedback = CreateDefaultSubobject<
 		UNPPhotoWorldFeedbackComponent>(TEXT("PhotoWorldFeedback"));
 	PhotoWorldFeedback->SetupAttachment(GetRootComponent());
+
+	PhotoCapturePenalty = CreateDefaultSubobject<
+		UNPPhotoCapturePenaltyComponent>(TEXT("PhotoCapturePenalty"));
 
 	AbilitySystem = CreateDefaultSubobject<UNPAbilitySystemComponent>(
 		TEXT("AbilitySystem"));
