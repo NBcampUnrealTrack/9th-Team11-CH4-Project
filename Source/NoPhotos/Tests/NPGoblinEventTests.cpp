@@ -2,8 +2,10 @@
 
 #include "Gameplay/MapEvents/Goblin/NPGoblinMapEvent.h"
 #include "Gameplay/Goblin/NPGoblinPatrolRoute.h"
+#include "Gameplay/Relic/NPPulleyPictureRelic.h"
 #include "Components/SplineComponent.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/PlayerState.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/ScopeExit.h"
@@ -98,6 +100,99 @@ bool FNPGoblinEventLifecycleTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("Timeout exit never schedules another goblin"), World->GetTimerManager().IsTimerActive(Event->SpawnTimer));
 	Event->ScheduleSpawn(0.1f);
 	TestFalse(TEXT("Inactive event rejects new timers"), World->GetTimerManager().IsTimerActive(Event->SpawnTimer));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FNPGoblinRelicDropCountsTest,
+	"NoPhotos.MapEvents.Goblin.RelicDropCounts",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FNPGoblinRelicDropCountsTest::RunTest(const FString& Parameters)
+{
+	const UWorld::InitializationValues WorldValues = UWorld::InitializationValues()
+		.AllowAudioPlayback(false).CreatePhysicsScene(true)
+		.CreateNavigation(false).CreateAISystem(false).ShouldSimulatePhysics(false);
+	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false, NAME_None, nullptr,
+		true, ERHIFeatureLevel::Num, &WorldValues);
+	if (!TestNotNull(TEXT("Reward test world"), World))
+	{
+		return false;
+	}
+	ON_SCOPE_EXIT { World->DestroyWorld(false); };
+	APlayerState* Photographer = World->SpawnActor<APlayerState>();
+	if (!TestNotNull(TEXT("Photographer"), Photographer))
+	{
+		return false;
+	}
+	// Use reflected BP defaults and a native relic instead of the project's reward table.
+	const auto SpawnGoblin = [World](int32 PhotoCount, int32 DefeatCount)
+	{
+		ANPGoblinCharacter* Goblin = World->SpawnActor<ANPGoblinCharacter>();
+		if (Goblin)
+		{
+			UClass* Class = Goblin->GetClass();
+			FindFProperty<FBoolProperty>(Class, TEXT("bUseDoorPresentation"))->SetPropertyValue_InContainer(Goblin, false);
+			FindFProperty<FObjectProperty>(Class, TEXT("RelicDropTable"))->SetObjectPropertyValue_InContainer(Goblin, nullptr);
+			FindFProperty<FClassProperty>(Class, TEXT("PhotographedRelicClass"))
+				->SetObjectPropertyValue_InContainer(Goblin, ANPPulleyPictureRelic::StaticClass());
+			FindFProperty<FIntProperty>(Class, TEXT("PhotoRelicDropCount"))->SetPropertyValue_InContainer(Goblin, PhotoCount);
+			FindFProperty<FIntProperty>(Class, TEXT("DefeatRelicDropCount"))->SetPropertyValue_InContainer(Goblin, DefeatCount);
+		}
+		return Goblin;
+	};
+	const auto CountRelics = [World](const ANPGoblinCharacter* Goblin)
+	{
+		int32 Count = 0;
+		for (TActorIterator<ANPBaseRelic> It(World); It; ++It)
+		{
+			if (IsValid(*It) && It->GetOwner() == Goblin)
+			{
+				++Count;
+			}
+		}
+		return Count;
+	};
+
+	ANPGoblinCharacter* Goblin = SpawnGoblin(2, 4);
+	if (!TestNotNull(TEXT("Configured goblin"), Goblin)) { return false; }
+	Goblin->OnPhotographed_Implementation(Photographer, 1.0f, 1);
+	TestEqual(TEXT("First photo drops configured two relics"), CountRelics(Goblin), 2);
+	Goblin->OnPhotographed_Implementation(Photographer, 1.0f, 2);
+	TestEqual(TEXT("Second photo drops two more"), CountRelics(Goblin), 4);
+	Goblin->OnPhotographed_Implementation(Photographer, 1.0f, 3);
+	TestEqual(TEXT("Lethal photo adds two photo and four defeat relics"), CountRelics(Goblin), 10);
+	Goblin->OnPhotographed_Implementation(Photographer, 1.0f, 4);
+	TestEqual(TEXT("Already defeated goblin cannot pay again"), CountRelics(Goblin), 10);
+	TestNotNull(TEXT("Legacy getter still exposes the latest relic"), Goblin->GetSpawnedPhotoRelic());
+
+	ANPGoblinCharacter* DefeatOnly = SpawnGoblin(0, 3);
+	if (!TestNotNull(TEXT("Defeat-only goblin"), DefeatOnly)) { return false; }
+	DefeatOnly->OnPhotographed_Implementation(Photographer, 1.0f, 5);
+	DefeatOnly->OnPhotographed_Implementation(Photographer, 1.0f, 6);
+	TestEqual(TEXT("Zero photo count disables ordinary drops"), CountRelics(DefeatOnly), 0);
+	DefeatOnly->OnPhotographed_Implementation(Photographer, 1.0f, 7);
+	TestEqual(TEXT("Defeat reward works independently"), CountRelics(DefeatOnly), 3);
+
+	ANPGoblinCharacter* PhotoOnly = SpawnGoblin(1, 0);
+	if (!TestNotNull(TEXT("Photo-only goblin"), PhotoOnly)) { return false; }
+	for (int32 Capture = 0; Capture < 3; ++Capture)
+	{
+		PhotoOnly->OnPhotographed_Implementation(Photographer, 1.0f, Capture);
+	}
+	TestEqual(TEXT("Zero defeat count preserves photo rewards on the lethal hit"), CountRelics(PhotoOnly), 3);
+
+	ANPGoblinCharacter* Timeout = SpawnGoblin(2, 4);
+	if (!TestNotNull(TEXT("Timeout goblin"), Timeout)) { return false; }
+	Timeout->BeginDespawnPresentation();
+	TestEqual(TEXT("Event timeout/despawn is not a defeat reward"), CountRelics(Timeout), 0);
+
+	ANPGoblinCharacter* Disabled = SpawnGoblin(-1, -2);
+	if (!TestNotNull(TEXT("Disabled rewards goblin"), Disabled)) { return false; }
+	for (int32 Capture = 0; Capture < 3; ++Capture)
+	{
+		Disabled->OnPhotographed_Implementation(Photographer, 1.0f, 8 + Capture);
+	}
+	TestEqual(TEXT("Negative settings clamp to zero"), CountRelics(Disabled), 0);
 	return true;
 }
 
