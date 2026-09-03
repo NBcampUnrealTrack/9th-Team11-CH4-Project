@@ -60,13 +60,6 @@ void ANPBreakableRelic::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (BrokenGeometryAsset
-		&& GeometryCollectionComponent->GetRestCollection()
-			!= BrokenGeometryAsset.Get())
-	{
-		GeometryCollectionComponent->SetRestCollection(BrokenGeometryAsset);
-	}
-
 	if (GeometryCollectionComponent->GetRestCollection())
 	{
 		if (HasAuthority())
