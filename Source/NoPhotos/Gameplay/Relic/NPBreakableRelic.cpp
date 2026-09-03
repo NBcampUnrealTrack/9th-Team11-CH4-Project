@@ -142,7 +142,7 @@ void ANPBreakableRelic::HandleFullyDecayed()
 {
 	if (HasAuthority())
 	{
-		Destroy();
+		SetLifeSpan(0.01f);
 	}
 }
 
@@ -165,6 +165,19 @@ void ANPBreakableRelic::HandleDurabilityDamaged(
 			0.0f,
 			1.0f)
 		: 0.0f;
+	MulticastRelicDamaged(
+		Damage,
+		CurrentHealth,
+		MaxHealth,
+		RemainingHealthRatio);
+}
+
+void ANPBreakableRelic::MulticastRelicDamaged_Implementation(
+	const int32 Damage,
+	const int32 CurrentHealth,
+	const int32 MaxHealth,
+	const float RemainingHealthRatio)
+{
 	OnRelicDamaged(
 		Damage,
 		CurrentHealth,

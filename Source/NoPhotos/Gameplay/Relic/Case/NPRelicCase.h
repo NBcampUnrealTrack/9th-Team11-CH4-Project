@@ -73,6 +73,10 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Relic Case")
 	void OnCaseDamaged(float RemainingHealthRatio);
 
+	/** 서버에서 확정된 피해 연출을 현재 클라이언트에 전달합니다. */
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastCaseDamaged(float RemainingHealthRatio);
+
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastBreakCase(FVector_NetQuantize10 InBreakLocation);
 

@@ -60,6 +60,14 @@ protected:
 		int32 MaxHealth,
 		float RemainingHealthRatio);
 
+	/** 서버에서 확정된 피해 연출을 현재 클라이언트에 전달합니다. */
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastRelicDamaged(
+		int32 Damage,
+		int32 CurrentHealth,
+		int32 MaxHealth,
+		float RemainingHealthRatio);
+
 	/** 서버에서 확정된 파괴를 현재 접속 중인 모든 클라이언트에 전달합니다. */
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastBreakRelic(FVector_NetQuantize10 InBreakLocation);

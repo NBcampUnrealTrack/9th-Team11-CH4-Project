@@ -278,6 +278,12 @@ void ANPRelicCase::HandleDurabilityDamaged(
 			0.0f,
 			1.0f)
 		: 0.0f;
+	MulticastCaseDamaged(RemainingHealthRatio);
+}
+
+void ANPRelicCase::MulticastCaseDamaged_Implementation(
+	const float RemainingHealthRatio)
+{
 	OnCaseDamaged(RemainingHealthRatio);
 }
 
