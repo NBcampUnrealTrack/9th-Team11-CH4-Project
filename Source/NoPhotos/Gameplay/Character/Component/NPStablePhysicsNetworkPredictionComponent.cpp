@@ -1,6 +1,7 @@
 #include "Gameplay/Character/Component/NPStablePhysicsNetworkPredictionComponent.h"
 
 #include "Components/SkeletalMeshComponent.h"
+#include "DrawDebugHelpers.h"
 #include "Engine/HitResult.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
@@ -324,8 +325,7 @@ void UNPStablePhysicsNetworkPredictionComponent::ApplyCorrection(
 	const bool bNearUnheldDynamicBody =
 		IsNearUnheldDynamicBody(CurrentRootPosition);
 
-	if (!bNearUnheldDynamicBody
-		&& PositionErrorSize > HardSnapDistance
+	if (PositionErrorSize > HardSnapDistance
 		&& IsRecoveryTargetClear(ExpectedServerPosition))
 	{
 		RecoverFullBody(ExpectedServerPosition, TargetRootState);
@@ -553,16 +553,35 @@ bool UNPStablePhysicsNetworkPredictionComponent::IsRecoveryTargetClear(
 	FCollisionObjectQueryParams ObjectQueryParams;
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldStatic);
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_PhysicsBody);
 	FCollisionQueryParams QueryParams(
 		SCENE_QUERY_STAT(StablePhysicsRecoveryTarget),
 		false,
 		GetOwner());
-	return !GetWorld()->OverlapAnyTestByObjectType(
-		TargetPosition,
+	const FVector CheckPosition =
+		TargetPosition + FVector::UpVector * RecoveryTargetCheckHeightOffset;
+	const bool bTargetBlocked = GetWorld()->OverlapAnyTestByObjectType(
+		CheckPosition,
 		FQuat::Identity,
 		ObjectQueryParams,
 		FCollisionShape::MakeSphere(CorrectionSweepRadius),
 		QueryParams);
+
+	if (bDrawRecoveryTargetDebug)
+	{
+		DrawDebugSphere(
+			GetWorld(),
+			CheckPosition,
+			CorrectionSweepRadius,
+			16,
+			bTargetBlocked ? FColor::Red : FColor::Green,
+			false,
+			0.1f,
+			0,
+			2.0f);
+	}
+
+	return !bTargetBlocked;
 }
 
 bool UNPStablePhysicsNetworkPredictionComponent::ShouldRecoverFromBlockedCorrection(

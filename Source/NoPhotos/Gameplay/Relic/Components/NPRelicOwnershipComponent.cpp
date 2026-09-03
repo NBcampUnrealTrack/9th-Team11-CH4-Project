@@ -2,6 +2,7 @@
 
 #include "Core/NPPlayerState.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/PlayerController.h"
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 
 UNPRelicOwnershipComponent::UNPRelicOwnershipComponent()
@@ -26,6 +27,7 @@ void UNPRelicOwnershipComponent::RegisterGrabber(
 	}
 
 	ActiveGrabbers.FindOrAdd(GrabComponent) = PlayerState;
+	UpdateReplicationOwner();
 }
 
 void UNPRelicOwnershipComponent::UnregisterGrabber(
@@ -37,6 +39,7 @@ void UNPRelicOwnershipComponent::UnregisterGrabber(
 	}
 
 	ActiveGrabbers.Remove(GrabComponent);
+	UpdateReplicationOwner();
 }
 
 void UNPRelicOwnershipComponent::GetCurrentOwners(
@@ -92,5 +95,28 @@ void UNPRelicOwnershipComponent::ClearOwnership()
 	if (HasServerAuthority())
 	{
 		ActiveGrabbers.Reset();
+		UpdateReplicationOwner();
 	}
+}
+
+void UNPRelicOwnershipComponent::UpdateReplicationOwner()
+{
+	AActor* Relic = GetOwner();
+	if (!Relic)
+	{
+		return;
+	}
+
+	TArray<ANPPlayerState*> Owners;
+	GetCurrentOwners(Owners);
+	APlayerController* NewReplicationOwner = Owners.Num() == 1
+		? Owners[0]->GetPlayerController()
+		: nullptr;
+	if (Relic->GetOwner() == NewReplicationOwner)
+	{
+		return;
+	}
+
+	Relic->SetOwner(NewReplicationOwner);
+	Relic->ForceNetUpdate();
 }

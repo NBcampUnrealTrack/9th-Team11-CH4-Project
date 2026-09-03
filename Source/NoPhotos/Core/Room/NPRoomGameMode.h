@@ -19,6 +19,8 @@ public:
 	virtual void PostLogin(APlayerController* NewPlayer) override;
 	virtual void Logout(AController* Exiting) override;
 	virtual void HandleSeamlessTravelPlayer(AController*& Controller) override;
+	virtual AActor* ChoosePlayerStart_Implementation(AController* Player) override;
+	virtual APawn* SpawnDefaultPawnAtTransform_Implementation(AController* NewPlayer, const FTransform& SpawnTransform) override;
 
 	bool ActivateRoom(APlayerController* HostPlayer);
 	void TryStartGame(APlayerController* RequestingPlayer);
