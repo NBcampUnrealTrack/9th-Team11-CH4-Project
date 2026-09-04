@@ -11,6 +11,7 @@ class UNPPhotoCaptureComponent;
 class UNPPhotoFlashWidget;
 class UNPPhotoTransferComponent;
 class UNPNoticeEventWidget;
+class UNPMainWorldLoadingWidget;
 class UNPUserWidget;
 class UUserWidget;
 class UNPChatComponent;
@@ -50,6 +51,20 @@ public:
 	void ShowGameScreenUI();
 	UFUNCTION(Client, Reliable)
 	void ClientShowGameScreenUI();
+
+	/** 메인 월드의 방 스트리밍이 끝날 때까지 로컬 입력과 로딩 화면을 유지합니다. */
+	UFUNCTION(Client, Reliable)
+	void ClientBeginMainWorldPreparation();
+
+	/** 서버가 전 플레이어 준비를 확인한 뒤 로딩 화면을 닫고 조작을 허용합니다. */
+	UFUNCTION(Client, Reliable)
+	void ClientFinishMainWorldPreparation();
+
+	UFUNCTION(Client, Reliable)
+	void ClientNotifyMainWorldLoadFailed();
+
+	UFUNCTION(Server, Reliable)
+	void ServerReportMainWorldReady();
 	UFUNCTION(BlueprintCallable, Category = "UI")
 	void ShowSelectPictureUI();
 	UFUNCTION(Client, Reliable)
@@ -115,10 +130,26 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UNPUserWidget> ResultWidgetClass;
 
+	/** 맵 로딩 이후 방 Level Instance와 다른 플레이어 준비를 기다리는 UMG입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Loading")
+	TSubclassOf<UNPMainWorldLoadingWidget> MainWorldLoadingWidgetClass;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Room")
 	TSoftObjectPtr<UWorld> MainMenuLevel;
 
 private:
+	UFUNCTION()
+	void HandleLocalRoomGenerationCompleted();
+
+	UFUNCTION()
+	void HandleLocalRoomGenerationFailed();
+
+	void BindRoomGenerationState();
+	void SetMainWorldInputLocked(bool bLocked);
+	void ShowMainWorldLoadingOverlay();
+	void HideMainWorldLoadingOverlay();
+	void ShowMainWorldLoadingFailure();
+
 	void HandleAimStarted();
 	void HandleAimReleased();
 	void HandleFireStarted();
@@ -140,6 +171,11 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNPNoticeEventWidget> NoticeEventWidget;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNPMainWorldLoadingWidget> MainWorldLoadingWidget;
+
+	bool bReportedMainWorldReady = false;
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestRestartRoom();

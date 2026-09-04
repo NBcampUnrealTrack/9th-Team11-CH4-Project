@@ -17,6 +17,7 @@ void ANPMainGameState::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(ANPMainGameState, RemainingGameTime);
 	DOREPLIFETIME(ANPMainGameState, bMainGameActive);
 	DOREPLIFETIME(ANPMainGameState, bMainGameEnded);
+	DOREPLIFETIME(ANPMainGameState, MainWorldState);
 	DOREPLIFETIME(
 		ANPMainGameState,
 		PictureSelectionCompletedPlayers);
@@ -43,6 +44,18 @@ bool ANPMainGameState::IsMainGameActive() const
 bool ANPMainGameState::IsMainGameEnded() const
 {
 	return bMainGameEnded;
+}
+
+void ANPMainGameState::SetMainWorldState(const ENPMainWorldState NewState)
+{
+	if (!HasAuthority() || MainWorldState == NewState)
+	{
+		return;
+	}
+
+	MainWorldState = NewState;
+	ForceNetUpdate();
+	OnMainGameStateChanged.Broadcast();
 }
 
 bool ANPMainGameState::IsPlayerPictureSelectionComplete(const APlayerState* PlayerState) const
@@ -244,6 +257,7 @@ void ANPMainGameState::StartMainGame(const int32 DurationSeconds)
 	RemainingGameTime = FMath::Max(1, DurationSeconds);
 	bMainGameActive = true;
 	bMainGameEnded = false;
+	MainWorldState = ENPMainWorldState::Playing;
 
 	//새게임 시작시 이전게임 완료상태 초기화
 	PictureSelectionCompletedPlayers.Empty();
@@ -283,6 +297,7 @@ void ANPMainGameState::FinishMainGame()
 	RemainingGameTime = 0;
 	bMainGameActive = false;
 	bMainGameEnded = true;
+	MainWorldState = ENPMainWorldState::Ended;
 
 	//사진선택 시작 전 완료목록 비우기
 	PictureSelectionCompletedPlayers.Empty();

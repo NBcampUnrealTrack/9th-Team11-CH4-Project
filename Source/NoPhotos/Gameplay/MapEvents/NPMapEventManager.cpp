@@ -52,10 +52,6 @@ void UNPMapEventManagerComponent::BeginPlay()
 	}
 
 	CreateEventInstances();
-	if (bStartAutomatically)
-	{
-		StartEventScheduling();
-	}
 }
 
 void UNPMapEventManagerComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)

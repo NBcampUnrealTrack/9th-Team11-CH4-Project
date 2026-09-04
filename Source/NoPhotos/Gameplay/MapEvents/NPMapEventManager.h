@@ -69,6 +69,8 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Map Event")
 	void StopEventScheduling();
 
+	bool ShouldStartAutomatically() const { return bStartAutomatically; }
+
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Map Event")
 	bool TriggerRandomEvent(ENPMapEventType EventType);
 
