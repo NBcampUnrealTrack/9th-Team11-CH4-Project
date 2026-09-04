@@ -3,6 +3,9 @@
 #include "Core/Main/NPMainPlayerController.h"
 #include "Core/NPPlayerState.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
+#include "Gameplay/MapEvents/NPMapEvent.h"
+#include "Gameplay/MapEvents/NPMapEventManager.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
 #include "Net/UnrealNetwork.h"
@@ -283,6 +286,23 @@ void ANPMainGameState::FinishMainGame()
 	RemainingGameTime = 0;
 	bMainGameActive = false;
 	bMainGameEnded = true;
+
+	TInlineComponentArray<UNPMapEventManagerComponent*> EventManagers(this);
+	for (UNPMapEventManagerComponent* EventManager : EventManagers)
+	{
+		if (IsValid(EventManager))
+		{
+			EventManager->ShutdownEventsForGameEnd();
+		}
+	}
+	// 매니저 카탈로그 외에 레벨에 직접 배치하거나 수동 생성한 이벤트도 종료합니다.
+	for (TActorIterator<ANPMapEvent> It(GetWorld()); It; ++It)
+	{
+		if (IsValid(*It) && It->IsEventActive())
+		{
+			It->FinishEvent();
+		}
+	}
 
 	//사진선택 시작 전 완료목록 비우기
 	PictureSelectionCompletedPlayers.Empty();

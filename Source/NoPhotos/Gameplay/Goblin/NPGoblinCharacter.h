@@ -115,6 +115,7 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Goblin|Photo")
 	FNPOnGoblinPhotographed OnGoblinPhotographed;
 
+	/** 가장 최근 촬영/처치 보상에서 마지막으로 생성된 유물입니다. */
 	UFUNCTION(BlueprintPure, Category = "Goblin|Photo|Reward")
 	ANPBaseRelic* GetSpawnedPhotoRelic() const { return SpawnedPhotoRelic; }
 
@@ -180,6 +181,14 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Photo|Health", meta = (ClampMin = "1", UIMin = "1"))
 	int32 PhotoDamagePerCapture = 1;
+
+	/** 유효한 촬영 한 번마다 드랍할 유물 개수입니다. 마지막 촬영에도 적용하며 0이면 드랍하지 않습니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Photo|Reward", meta = (ClampMin = "0", UIMin = "0", ClampMax = "100", UIMax = "100"))
+	int32 PhotoRelicDropCount = 1;
+
+	/** 사진 HP가 0이 될 때 추가로 드랍할 개수입니다. 이벤트 시간 종료로 퇴장할 때는 지급하지 않습니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Photo|Reward", meta = (ClampMin = "0", UIMin = "0", ClampMax = "100", UIMax = "100"))
+	int32 DefeatRelicDropCount = 0;
 
 	/** 지정하면 유효한 RelicClass를 가진 행 중 하나를 무작위로 골라 보상으로 생성합니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Photo|Reward")
@@ -329,7 +338,7 @@ private:
 	TObjectPtr<ANPGoblinPatrolRoute> PatrolRoute;
 	bool bRequiresPatrolRoute = false;
 
-	/** 가장 최근 촬영에서 생성된 유물입니다. */
+	/** 가장 최근 촬영/처치 보상에서 마지막으로 생성된 유물입니다. */
 	UPROPERTY(Transient)
 	TObjectPtr<ANPBaseRelic> SpawnedPhotoRelic;
 

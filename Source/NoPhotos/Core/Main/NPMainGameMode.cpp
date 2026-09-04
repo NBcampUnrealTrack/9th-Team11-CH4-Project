@@ -10,7 +10,9 @@
 #include "Gameplay/Photo/NPPhotoEvidenceService.h"
 #include "Gameplay/Photo/NPPhotoLog.h"
 #include "Gameplay/Photo/NPPhotoRepository.h"
+#include "Gameplay/Photo/NPPhotoCapturePenaltyComponent.h"
 #include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
+#include "Gameplay/Relic/NPBaseRelic.h"
 #include "Gameplay/Relic/NPRelicDeliveryService.h"
 #include "NPMainGameLog.h"
 #include "NPMainGameState.h"
@@ -71,9 +73,31 @@ FNPPhotoEvidenceResult ANPMainGameMode::HandlePhotoCaptureRequest(const FNPPhoto
 		return Result;
 	}
 
-	if (Result.bSuccess && RelicDeliveryService)
+	ANPBaseRelic* EvidenceRelic = Result.bSuccess
+		? Cast<ANPBaseRelic>(Result.Relic.Get())
+		: nullptr;
+	int32 AppliedPhotoPenalty = 0;
+	if (Result.bSuccess && RelicDeliveryService && IsValid(EvidenceRelic))
 	{
+		const int32 PreviousPenalty =
+			EvidenceRelic->GetAccumulatedPhotoPenalty();
 		RelicDeliveryService->RegisterPhotoEvidence(Result);
+		AppliedPhotoPenalty = FMath::Max(
+			0,
+			EvidenceRelic->GetAccumulatedPhotoPenalty() - PreviousPenalty);
+	}
+	if (Result.bSuccess && IsValid(Result.Thief))
+	{
+		ANPReplicatedStablePhysicsPawn* ThiefPawn =
+			Cast<ANPReplicatedStablePhysicsPawn>(Result.Thief->GetPawn());
+		if (UNPPhotoCapturePenaltyComponent* PenaltyComponent = ThiefPawn
+			? ThiefPawn->FindComponentByClass<UNPPhotoCapturePenaltyComponent>()
+			: nullptr)
+		{
+			PenaltyComponent->ApplyCapturedWithRelicPenalty(
+				EvidenceRelic,
+				AppliedPhotoPenalty);
+		}
 	}
 	if (Result.bSuccess)
 	{

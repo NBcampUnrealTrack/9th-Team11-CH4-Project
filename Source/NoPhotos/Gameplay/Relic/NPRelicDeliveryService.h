@@ -29,7 +29,8 @@ private:
 	UPROPERTY(Transient)
 	TWeakObjectPtr<ANPMainGameMode> OwningGameMode;
 
-	/** 유효한 증거 사진 한 장마다 Relic 반환 가치에서 차감할 점수입니다. */
-	UPROPERTY(EditDefaultsOnly, Category="Relic|Delivery", meta=(ClampMin="0"))
-	int32 PhotoPenaltyPerCapture = 10;
+	/** 유효한 증거 사진 한 장마다 Relic 기본 가격에서 누적 차감할 비율입니다. */
+	UPROPERTY(EditDefaultsOnly, Category="Relic|Delivery",
+		meta=(ClampMin="0.0", ClampMax="1.0"))
+	float PhotoPenaltyRatePerCapture = 0.1f;
 };

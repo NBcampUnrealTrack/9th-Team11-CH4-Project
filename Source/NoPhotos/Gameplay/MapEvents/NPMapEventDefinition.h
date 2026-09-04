@@ -22,6 +22,7 @@ public:
 	ENPMapEventType GetEventType() const { return EventType; }
 	ENPMapEventScale GetEventScale() const { return EventScale; }
 	float GetDuration() const { return FMath::Max(0.0f, Duration); }
+	float GetDelay() const { return FMath::Max(0.0f, Delay); }
 
 private:
 	/** 이 정의를 실행할 실제 이벤트 액터 클래스입니다. */
@@ -47,4 +48,8 @@ private:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Map Event|Timing", meta = (AllowPrivateAccess = "true", ClampMin = "0.0", UIMin = "0.0", Units = "s"))
 	float Duration = 8.0f;
+
+	/** 자동 스케줄에서 이 이벤트 종료 후 다음 이벤트 시작까지의 대기 시간(초)입니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Map Event|Timing", meta = (AllowPrivateAccess = "true", ClampMin = "0.0", UIMin = "0.0", Units = "s"))
+	float Delay = 0.0f;
 };

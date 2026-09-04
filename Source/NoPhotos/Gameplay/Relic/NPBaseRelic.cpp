@@ -58,6 +58,13 @@ void ANPBaseRelic::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(ANPBaseRelic, AccumulatedPhotoPenalty);
 }
 
+FVector ANPBaseRelic::GetRelicWorldLocation() const
+{
+	return IsValid(RelicMesh)
+		? RelicMesh->GetComponentLocation()
+		: GetActorLocation();
+}
+
 int32 ANPBaseRelic::GetBasePrice() const
 {
 	const FNPRelicTableRow* Data = GetRelicTableData();
@@ -109,23 +116,37 @@ void ANPBaseRelic::OnRep_IsDisplayed()
 	RelicMesh->SetSimulatePhysics(!bIsDisplayed && !bIsReturned && bCanSimulate);
 }
 
-bool ANPBaseRelic::AddPhotoPenalty(int32 PenaltyAmount)
+bool ANPBaseRelic::AddPhotoPenaltyCapture(
+	const float PenaltyRatePerCapture)
 {
-	if (!HasAuthority() || bIsReturned || PenaltyAmount <= 0)
+	const int32 BasePrice = GetBasePrice();
+	if (!HasAuthority() || bIsReturned || BasePrice <= 0
+		|| !FMath::IsFinite(PenaltyRatePerCapture)
+		|| PenaltyRatePerCapture <= 0.0f
+		|| AccumulatedPhotoPenalty >= BasePrice)
 	{
 		return false;
 	}
 
 	const int32 PreviousPenalty = AccumulatedPhotoPenalty;
+	++SuccessfulEvidenceCaptureCount;
+
+	// 매회 반올림한 값을 더하지 않고 누적 비율을 한 번 반올림하여
+	// 소수점 오차가 쌓이거나 10회 전에 100%를 초과하지 않게 합니다.
+	const double AccumulatedPenalty =
+		static_cast<double>(BasePrice)
+		* static_cast<double>(PenaltyRatePerCapture)
+		* static_cast<double>(SuccessfulEvidenceCaptureCount);
 	AccumulatedPhotoPenalty = FMath::Clamp(
-		AccumulatedPhotoPenalty + PenaltyAmount,
+		FMath::RoundToInt(AccumulatedPenalty),
 		0,
-		GetBasePrice());
+		BasePrice);
 	if (AccumulatedPhotoPenalty == PreviousPenalty)
 	{
 		return false;
 	}
 
+	// 서버의 Listen UI도 즉시 갱신하고, 이후 복제로 각 클라이언트 UI를 갱신합니다.
 	OnRep_AccumulatedPhotoPenalty();
 	ForceNetUpdate();
 	return true;
