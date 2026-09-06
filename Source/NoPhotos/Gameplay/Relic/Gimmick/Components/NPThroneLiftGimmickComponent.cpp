@@ -16,6 +16,7 @@ UNPThroneLiftGimmickComponent::UNPThroneLiftGimmickComponent()
 	PrimaryComponentTick.bCanEverTick = true;
 	SetIsReplicatedByDefault(true);
 	RequiredLevers.SetNum(4);
+	Relics.SetNum(2);
 	LiftCameraShakeClass = UNPThroneLiftCameraShake::StaticClass();
 }
 
@@ -220,20 +221,32 @@ void UNPThroneLiftGimmickComponent::OnRep_LiftState()
 void UNPThroneLiftGimmickComponent::AttachRelic()
 {
 	AActor* Owner = GetOwner();
-	if (!Relic || !Owner)
+	if (!Owner)
 	{
 		return;
 	}
 
-	Relic->AttachToActor(Owner, FAttachmentTransformRules::KeepWorldTransform);
+	for (ANPBaseRelic* Relic : Relics)
+	{
+		if (IsValid(Relic))
+		{
+			Relic->AttachToActor(
+				Owner,
+				FAttachmentTransformRules::KeepWorldTransform);
+		}
+	}
 }
 
 void UNPThroneLiftGimmickComponent::DetachRelic()
 {
 	AActor* Owner = GetOwner();
-	if (Relic && Relic->GetAttachParentActor() == Owner)
+	for (ANPBaseRelic* Relic : Relics)
 	{
-		Relic->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		if (IsValid(Relic) && Relic->GetAttachParentActor() == Owner)
+		{
+			Relic->DetachFromActor(
+				FDetachmentTransformRules::KeepWorldTransform);
+		}
 	}
 }
 

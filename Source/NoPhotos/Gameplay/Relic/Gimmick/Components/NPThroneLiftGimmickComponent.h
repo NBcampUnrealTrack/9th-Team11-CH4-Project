@@ -37,8 +37,8 @@ protected:
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, EditFixedSize, Category="Throne Lift|Levers")
 	TArray<TObjectPtr<ANPWallLever>> RequiredLevers;
 
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Throne Lift|Relic")
-	TObjectPtr<ANPBaseRelic> Relic;
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, EditFixedSize, Category="Throne Lift|Relics")
+	TArray<TObjectPtr<ANPBaseRelic>> Relics;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throne Lift")
 	float LoweredRootZ = 103.0f;
@@ -47,7 +47,7 @@ protected:
 	float RaisedRootZ = 300.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throne Lift", meta=(ClampMin="0.01", Units="s"))
-	float LiftDuration = 1.0f;
+	float LiftDuration = 3.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throne Lift|Camera Shake")
 	TSubclassOf<UCameraShakeBase> LiftCameraShakeClass;
