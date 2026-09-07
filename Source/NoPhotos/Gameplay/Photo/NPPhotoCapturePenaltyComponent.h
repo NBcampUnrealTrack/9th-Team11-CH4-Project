@@ -6,9 +6,8 @@
 
 class ANPBaseRelic;
 class FLifetimeProperty;
-class UMaterialInterface;
 
-/** 유물 증거 사진에 찍힌 캐릭터의 강제 Drop, 감속 및 외형 피드백을 관리합니다. */
+/** 유물 증거 사진에 찍힌 캐릭터의 강제 Drop과 일시적인 조작 불가 상태를 관리합니다. */
 UCLASS(ClassGroup=(Photo), meta=(BlueprintSpawnableComponent))
 class NOPHOTOS_API UNPPhotoCapturePenaltyComponent : public UActorComponent
 {
@@ -26,28 +25,19 @@ public:
 		int32 AppliedPhotoPenalty);
 
 	UFUNCTION(BlueprintPure, Category="Photo Penalty")
-	bool IsPhotoSlowActive() const { return bPhotoSlowActive; }
+	bool IsPhotoStunActive() const { return bPhotoStunActive; }
 
 	UFUNCTION(BlueprintPure, Category="Photo Penalty")
-	float GetPhotoSlowEndServerTime() const { return PhotoSlowEndServerTime; }
+	float GetPhotoStunEndServerTime() const { return PhotoStunEndServerTime; }
 
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	/** 0.8은 원래 이동 속도의 80%를 의미합니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Photo Penalty|Movement",
-		meta=(ClampMin="0.0", ClampMax="1.0"))
-	float MoveSpeedMultiplier = 0.8f;
-
-	/** 마지막 증거 사진 성공 시점부터 유지되는 감속 시간입니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Photo Penalty|Movement",
+	/** 마지막 증거 사진 성공 시점부터 조작을 차단하는 시간입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Photo Penalty|Stun",
 		meta=(ClampMin="0.01", Units="s"))
-	float SlowDuration = 2.5f;
-
-	/** 감속 중 원래 캐릭터 재질 위에 표시할 흰색 Overlay Material입니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Photo Penalty|Visual")
-	TObjectPtr<UMaterialInterface> SlowOverlayMaterial;
+	float StunDuration = 1.0f;
 
 	/** 머리 위 가격 감소 알림이 유지되는 시간입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Photo Penalty|Visual",
@@ -56,16 +46,16 @@ protected:
 
 private:
 	UFUNCTION()
-	void OnRep_PhotoSlowActive();
+	void OnRep_PhotoStunActive();
 
-	void ApplySlowStateLocally();
-	void FinishSlowPenalty();
+	void ApplyStunStateLocally();
+	void FinishStunPenalty();
 
-	UPROPERTY(ReplicatedUsing=OnRep_PhotoSlowActive)
-	bool bPhotoSlowActive = false;
+	UPROPERTY(ReplicatedUsing=OnRep_PhotoStunActive)
+	bool bPhotoStunActive = false;
 
 	UPROPERTY(Replicated)
-	float PhotoSlowEndServerTime = 0.0f;
+	float PhotoStunEndServerTime = 0.0f;
 
-	FTimerHandle SlowTimer;
+	FTimerHandle StunTimer;
 };

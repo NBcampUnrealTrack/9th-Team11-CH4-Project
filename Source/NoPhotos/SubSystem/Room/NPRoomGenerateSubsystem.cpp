@@ -1,5 +1,7 @@
 #include "NPRoomGenerateSubsystem.h"
 
+#include "Core/Asset/NPAssetLoadSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "Engine/Level.h"
 #include "Engine/LevelStreamingDynamic.h"
 #include "Engine/World.h"
@@ -10,6 +12,19 @@ DEFINE_LOG_CATEGORY_STATIC(LogNPRoomGenerate, Log, All);
 
 void UNPRoomGenerateSubsystem::Deinitialize()
 {
+	if (AssetLoadRequestId.IsValid())
+	{
+		if (UGameInstance* GameInstance = GetWorld()
+			? GetWorld()->GetGameInstance()
+			: nullptr)
+		{
+			if (UNPAssetLoadSubsystem* AssetLoader =
+				GameInstance->GetSubsystem<UNPAssetLoadSubsystem>())
+			{
+				AssetLoader->CancelSoftPathRequest(AssetLoadRequestId);
+			}
+		}
+	}
 	for (const FNPRoomInstanceInfo& RoomInfo : GeneratedRooms)
 	{
 		if (ULevelStreamingDynamic* StreamingLevel = RoomInfo.StreamingLevel;
@@ -22,9 +37,13 @@ void UNPRoomGenerateSubsystem::Deinitialize()
 	}
 
 	GeneratedRooms.Reset();
+	SelectedRooms.Reset();
+	SelectedRoomTransforms.Reset();
+	AssetLoadRequestId = {};
 	ExpectedRoomCount = 0;
 	bGenerationStarted = false;
 	bGenerationComplete = false;
+	bGenerationFailed = false;
 	Super::Deinitialize();
 }
 
@@ -33,13 +52,17 @@ bool UNPRoomGenerateSubsystem::GenerateRooms(
 	const TArray<FTransform>& SlotTransforms,
 	const int32 LayoutSeed)
 {
-	if (bGenerationStarted || LayoutSeed == 0 || Rooms.IsEmpty() ||
-		SlotTransforms.IsEmpty())
+	if (bGenerationStarted)
 	{
 		return false;
 	}
 
 	bGenerationStarted = true;
+	if (LayoutSeed == 0 || Rooms.IsEmpty() || SlotTransforms.IsEmpty())
+	{
+		FailGeneration();
+		return false;
+	}
 
 	TArray<int32> RoomOrder;
 	RoomOrder.Reserve(Rooms.Num());
@@ -54,8 +77,9 @@ bool UNPRoomGenerateSubsystem::GenerateRooms(
 		RoomOrder.Swap(Index, RandomStream.RandRange(0, Index));
 	}
 
-	ExpectedRoomCount = FMath::Min(RoomOrder.Num(), SlotTransforms.Num());
-	for (int32 SlotIndex = 0; SlotIndex < ExpectedRoomCount; ++SlotIndex)
+	const int32 MaximumRoomCount = FMath::Min(RoomOrder.Num(), SlotTransforms.Num());
+	TArray<FSoftObjectPath> RoomPaths;
+	for (int32 SlotIndex = 0; SlotIndex < MaximumRoomCount; ++SlotIndex)
 	{
 		const TSoftObjectPtr<UWorld>& Room = Rooms[RoomOrder[SlotIndex]];
 		if (Room.IsNull())
@@ -63,21 +87,80 @@ bool UNPRoomGenerateSubsystem::GenerateRooms(
 			continue;
 		}
 
+		SelectedRooms.Add(Room);
+		SelectedRoomTransforms.Add(SlotTransforms[SlotIndex]);
+		RoomPaths.AddUnique(Room.ToSoftObjectPath());
+	}
+
+	ExpectedRoomCount = SelectedRooms.Num();
+	UE_LOG(LogNPRoomGenerate, Log,
+		TEXT("Preloading selected room assets. Rooms=%d UniquePaths=%d"),
+		ExpectedRoomCount,
+		RoomPaths.Num());
+	UGameInstance* GameInstance = GetWorld()
+		? GetWorld()->GetGameInstance()
+		: nullptr;
+	UNPAssetLoadSubsystem* AssetLoader = GameInstance
+		? GameInstance->GetSubsystem<UNPAssetLoadSubsystem>()
+		: nullptr;
+	if (!AssetLoader || ExpectedRoomCount == 0)
+	{
+		FailGeneration();
+		return false;
+	}
+
+	AssetLoadRequestId = AssetLoader->LoadSoftPathsAsync(
+		this,
+		RoomPaths,
+		FNPOnAssetLoadComplete::CreateUObject(
+			this,
+			&UNPRoomGenerateSubsystem::HandleRoomAssetsLoaded));
+	return AssetLoadRequestId.IsValid();
+}
+
+void UNPRoomGenerateSubsystem::HandleRoomAssetsLoaded(
+	const FNPAssetLoadResult& Result)
+{
+	AssetLoadRequestId = {};
+	if (!Result.IsSuccess())
+	{
+		UE_LOG(LogNPRoomGenerate, Error,
+			TEXT("Room asset preload failed. Failure=%d"),
+			static_cast<int32>(Result.Failure));
+		FailGeneration();
+		return;
+	}
+
+	UE_LOG(LogNPRoomGenerate, Log,
+		TEXT("Selected room assets preloaded. Objects=%d"),
+		Result.LoadedObjects.Num());
+	CreateSelectedRoomInstances();
+}
+
+void UNPRoomGenerateSubsystem::CreateSelectedRoomInstances()
+{
+	for (int32 RoomIndex = 0; RoomIndex < SelectedRooms.Num(); ++RoomIndex)
+	{
+		const TSoftObjectPtr<UWorld>& Room = SelectedRooms[RoomIndex];
+
 		bool bLoadSucceeded = false;
-		//TODO 레벨인스턴스 불러오는 기능을 편의 기능 클래스로 레핑하면 좋을듯 함.
 		const FString InstanceName = FString::Printf(
 			TEXT("NP_RoomSlot_%d"),
-			SlotIndex);
+			RoomIndex);
 		ULevelStreamingDynamic* LoadedRoom =
 			ULevelStreamingDynamic::LoadLevelInstanceBySoftObjectPtr(
 				GetWorld(),
 				Room,
-				SlotTransforms[SlotIndex],
+				SelectedRoomTransforms[RoomIndex],
 				bLoadSucceeded,
 				InstanceName);
 		if (!bLoadSucceeded || !IsValid(LoadedRoom))
 		{
-			continue;
+			UE_LOG(LogNPRoomGenerate, Error,
+				TEXT("Room level instance creation failed. Room=%s"),
+				*Room.ToSoftObjectPath().ToString());
+			FailGeneration();
+			return;
 		}
 
 		LoadedRoom->OnLevelShown.AddDynamic(
@@ -85,14 +168,29 @@ bool UNPRoomGenerateSubsystem::GenerateRooms(
 			&UNPRoomGenerateSubsystem::HandleLevelShown);
 
 		FNPRoomInstanceInfo& RoomInfo = GeneratedRooms.AddDefaulted_GetRef();
-		RoomInfo.SlotIndex = SlotIndex;
+		RoomInfo.SlotIndex = RoomIndex;
 		RoomInfo.RoomLevel = Room;
-		RoomInfo.RoomTransform = SlotTransforms[SlotIndex];
+		RoomInfo.RoomTransform = SelectedRoomTransforms[RoomIndex];
 		RoomInfo.StreamingLevel = LoadedRoom;
+		UE_LOG(LogNPRoomGenerate, Log,
+			TEXT("Room level instance requested. Slot=%d Room=%s"),
+			RoomIndex,
+			*Room.ToSoftObjectPath().ToString());
 	}
 
 	HandleLevelShown();
-	return GeneratedRooms.Num() == ExpectedRoomCount;
+}
+
+void UNPRoomGenerateSubsystem::FailGeneration()
+{
+	if (bGenerationFailed)
+	{
+		return;
+	}
+
+	bGenerationComplete = false;
+	bGenerationFailed = true;
+	OnRoomGenerationFailed.Broadcast();
 }
 
 void UNPRoomGenerateSubsystem::HandleLevelShown()
@@ -112,12 +210,17 @@ void UNPRoomGenerateSubsystem::HandleLevelShown()
 		}
 	}
 
-	if (!CollectRoomRelicCollectors())
-	{
-		return;
-	}
+	// Level visibility is the world-readiness boundary. A room may intentionally
+	// omit a relic collector, so collector discovery must not deadlock loading.
+	CollectRoomRelicCollectors();
 
 	bGenerationComplete = true;
+	bGenerationFailed = false;
+	SelectedRooms.Reset();
+	SelectedRoomTransforms.Reset();
+	UE_LOG(LogNPRoomGenerate, Log,
+		TEXT("Room generation completed. VisibleRooms=%d"),
+		GeneratedRooms.Num());
 	OnRoomGenerationCompleted.Broadcast();
 }
 
@@ -149,7 +252,10 @@ bool UNPRoomGenerateSubsystem::CollectRoomRelicCollectors()
 
 		if (!RoomInfo.RelicCollector.IsValid())
 		{
-			bCollectedAllRooms = false;
+			UE_LOG(LogNPRoomGenerate, Warning,
+				TEXT("Room has no relic collector; world loading will continue. Slot=%d Room=%s"),
+				RoomInfo.SlotIndex,
+				*RoomInfo.RoomLevel.ToSoftObjectPath().ToString());
 		}
 	}
 

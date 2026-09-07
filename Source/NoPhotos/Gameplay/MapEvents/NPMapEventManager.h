@@ -160,6 +160,8 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Map Event")
 	void StopEventScheduling();
 
+	bool ShouldStartAutomatically() const { return bStartAutomatically; }
+
 	/** 게임 종료용입니다. 모든 자동/수동 이벤트를 끝내고 이 매니저의 이후 실행을 차단합니다. */
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Map Event")
 	void ShutdownEventsForGameEnd();

@@ -17,6 +17,7 @@
 #include "Gameplay/Relic/Components/NPAimableRelicComponent.h"
 #include "Gameplay/Photo/NPPhotoWorldFeedbackComponent.h"
 #include "Gameplay/Photo/NPPhotoCapturePenaltyComponent.h"
+#include "Gameplay/Photo/NPPhotoStunVisualComponent.h"
 #include "UI/GameScreen/NPScoreFeedbackWidgetComponent.h"
 #include "Core/NPPlayerState.h"
 #include "Gameplay/Character/Component/NPStablePhysicsMovementComponent.h"
@@ -40,6 +41,10 @@ ANPReplicatedStablePhysicsPawn::ANPReplicatedStablePhysicsPawn()
 
 	PhotoCapturePenalty = CreateDefaultSubobject<
 		UNPPhotoCapturePenaltyComponent>(TEXT("PhotoCapturePenalty"));
+	PhotoStunVisual = CreateDefaultSubobject<UNPPhotoStunVisualComponent>(
+		TEXT("PhotoStunVisual"));
+	PhotoStunVisual->SetupAttachment(PhysicsMesh);
+	PhotoStunVisual->SetRelativeLocation(FVector(0.0f, 0.0f, 190.0f));
 
 	// 기존 Blueprint의 네이티브 컴포넌트 설정을 보존하기 위해
 	// 서브오브젝트 이름은 클래스 이름 변경 전 값을 유지합니다.
@@ -360,8 +365,12 @@ void ANPReplicatedStablePhysicsPawn::ApplyMoveInput(const FVector& WorldMoveInpu
 	}
 
 	const float InputViewYaw = GetTargetViewRotation().Yaw;
-	const FVector ClampedMoveInput = WorldMoveInput.ContainsNaN() || !FMath::IsFinite(InputViewYaw)
-		? FVector::ZeroVector : WorldMoveInput.GetClampedToMaxSize(1.0f);
+	FVector ClampedMoveInput = FVector::ZeroVector;
+	if (!IsPhotoStunned() && !WorldMoveInput.ContainsNaN()
+		&& FMath::IsFinite(InputViewYaw))
+	{
+		ClampedMoveInput = WorldMoveInput.GetClampedToMaxSize(1.0f);
+	}
 	if (IsValid(ControlReversal))
 	{
 		ControlReversal->ApplyRawMovementInput(ClampedMoveInput, InputViewYaw);
@@ -392,6 +401,11 @@ void ANPReplicatedStablePhysicsPawn::ApplyMoveInput(const FVector& WorldMoveInpu
 
 void ANPReplicatedStablePhysicsPawn::ApplyJumpRequest()
 {
+	if (IsPhotoStunned())
+	{
+		return;
+	}
+
 	if (HasAuthority())
 	{
 		Super::ApplyJumpRequest();
@@ -405,6 +419,11 @@ void ANPReplicatedStablePhysicsPawn::ApplyJumpRequest()
 
 void ANPReplicatedStablePhysicsPawn::ApplyRightHandState(bool bActive)
 {
+	if (bActive && IsPhotoStunned())
+	{
+		return;
+	}
+
 #if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
 	if (!bActive && IsLocallyControlled() && bDebugGrabLocked)
 	{
@@ -482,6 +501,16 @@ void ANPReplicatedStablePhysicsPawn::ServerRequestAimableRelicFire_Implementatio
 	FVector_NetQuantize10 CameraLocation,
 	FVector_NetQuantizeNormal CameraForward)
 {
+	if (IsPhotoStunned())
+	{
+		UE_LOG(
+			LogNoPhotos,
+			Warning,
+			TEXT("[AimableRelic] Server request rejected: Pawn is photo stunned. Pawn=%s"),
+			*GetNameSafe(this));
+		return;
+	}
+
 	ANPBaseRelic* HeldRelic = Cast<ANPBaseRelic>(
 		ReplicatedGrabState.GrabbedActor);
 	UNPAimableRelicComponent* AimableRelic = HeldRelic
@@ -553,7 +582,19 @@ void ANPReplicatedStablePhysicsPawn::ServerRequestAimableRelicFire_Implementatio
 void ANPReplicatedStablePhysicsPawn::ServerSetRightHandActive_Implementation(
 	bool bActive)
 {
+	if (bActive && IsPhotoStunned())
+	{
+		SetServerRightHandState(false);
+		return;
+	}
+
 	SetServerRightHandState(bActive);
+}
+
+bool ANPReplicatedStablePhysicsPawn::IsPhotoStunned() const
+{
+	return IsValid(PhotoCapturePenalty)
+		&& PhotoCapturePenalty->IsPhotoStunActive();
 }
 
 void ANPReplicatedStablePhysicsPawn::OnRep_RightHandActive()

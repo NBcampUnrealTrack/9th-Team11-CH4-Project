@@ -23,12 +23,16 @@
 #include "Gameplay/Relic/Components/NPAimableRelicComponent.h"
 #include "NoPhotos.h"
 #include "SubSystem/NPUIManagerSubsystem.h"
+#include "SubSystem/Room/NPRoomGenerateSubsystem.h"
 #include "UI/GameScreen/Event/NPNoticeEventWidget.h"
+#include "UI/Loading/NPMainWorldLoadingWidget.h"
 #include "UI/NPUserWidget.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Widgets/Input/SVirtualJoystick.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
+#include "HAL/PlatformTime.h"
+#include "TimerManager.h"
 
 ANPMainPlayerController::ANPMainPlayerController()
 {
@@ -158,6 +162,10 @@ void ANPMainPlayerController::BeginPlay()
 
 	if (IsLocalController())
 	{
+		SetMainWorldInputLocked(true);
+		ShowMainWorldLoadingOverlay();
+		BindRoomGenerationState();
+
 		if (PhotoFlashWidgetClass)
 		{
 			PhotoFlashWidget = CreateWidget<UNPPhotoFlashWidget>(this, PhotoFlashWidgetClass);
@@ -185,6 +193,181 @@ void ANPMainPlayerController::BeginPlay()
 		{
 			UE_LOG(LogNoPhotos, Error, TEXT("Could not spawn mobile controls widget."));
 		}
+	}
+}
+
+void ANPMainPlayerController::ClientBeginMainWorldPreparation_Implementation()
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	bReportedMainWorldReady = false;
+	SetMainWorldInputLocked(true);
+	ShowMainWorldLoadingOverlay();
+	BindRoomGenerationState();
+}
+
+void ANPMainPlayerController::BindRoomGenerationState()
+{
+	UNPRoomGenerateSubsystem* RoomGenerator = GetWorld()
+		? GetWorld()->GetSubsystem<UNPRoomGenerateSubsystem>()
+		: nullptr;
+	if (!RoomGenerator)
+	{
+		return;
+	}
+
+	RoomGenerator->OnRoomGenerationCompleted.AddUniqueDynamic(
+		this,
+		&ThisClass::HandleLocalRoomGenerationCompleted);
+	RoomGenerator->OnRoomGenerationFailed.AddUniqueDynamic(
+		this,
+		&ThisClass::HandleLocalRoomGenerationFailed);
+
+	if (RoomGenerator->IsGenerationComplete())
+	{
+		HandleLocalRoomGenerationCompleted();
+	}
+	else if (RoomGenerator->HasGenerationFailed())
+	{
+		HandleLocalRoomGenerationFailed();
+	}
+}
+
+void ANPMainPlayerController::HandleLocalRoomGenerationCompleted()
+{
+	if (!IsLocalController() || bReportedMainWorldReady)
+	{
+		return;
+	}
+
+	const double CurrentRealTime = FPlatformTime::Seconds();
+	double ElapsedDisplayTime = 0.0;
+	if (MainWorldLoadingShownAtRealTime >= 0.0)
+	{
+		ElapsedDisplayTime = CurrentRealTime - MainWorldLoadingShownAtRealTime;
+	}
+	const float RemainingDisplayTime = FMath::Max(
+		0.0f,
+		MinimumMainWorldLoadingDisplaySeconds - static_cast<float>(ElapsedDisplayTime));
+	if (RemainingDisplayTime > 0.0f)
+	{
+		GetWorldTimerManager().SetTimer(
+			MinimumMainWorldLoadingTimer,
+			this,
+			&ThisClass::CompleteLocalMainWorldReadiness,
+			RemainingDisplayTime,
+			false);
+		return;
+	}
+
+	CompleteLocalMainWorldReadiness();
+}
+
+void ANPMainPlayerController::CompleteLocalMainWorldReadiness()
+{
+	if (!IsLocalController() || bReportedMainWorldReady)
+	{
+		return;
+	}
+
+	bReportedMainWorldReady = true;
+	ServerReportMainWorldReady();
+}
+
+void ANPMainPlayerController::HandleLocalRoomGenerationFailed()
+{
+	if (IsLocalController())
+	{
+		GetWorldTimerManager().ClearTimer(MinimumMainWorldLoadingTimer);
+		UE_LOG(LogNoPhotos, Error,
+			TEXT("[MainWorldLoading] Local room generation failed. Controller=%s"),
+			*GetNameSafe(this));
+	}
+}
+
+void ANPMainPlayerController::ServerReportMainWorldReady_Implementation()
+{
+	if (ANPMainGameMode* MainGameMode = GetWorld()
+		? GetWorld()->GetAuthGameMode<ANPMainGameMode>()
+		: nullptr)
+	{
+		MainGameMode->RegisterPlayerWorldReady(this);
+	}
+}
+
+void ANPMainPlayerController::ClientFinishMainWorldPreparation_Implementation()
+{
+	GetWorldTimerManager().ClearTimer(MinimumMainWorldLoadingTimer);
+	SetMainWorldInputLocked(false);
+	HideMainWorldLoadingOverlay();
+	ShowGameScreenUI();
+}
+
+void ANPMainPlayerController::ClientNotifyMainWorldLoadFailed_Implementation()
+{
+	SetMainWorldInputLocked(true);
+	ShowMainWorldLoadingFailure();
+	UE_LOG(LogNoPhotos, Error,
+		TEXT("[MainWorldLoading] Server reported main world load failure."));
+}
+
+void ANPMainPlayerController::SetMainWorldInputLocked(const bool bLocked)
+{
+	SetIgnoreMoveInput(bLocked);
+	SetIgnoreLookInput(bLocked);
+}
+
+void ANPMainPlayerController::ShowMainWorldLoadingOverlay()
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	if (!IsValid(MainWorldLoadingWidget))
+	{
+		TSubclassOf<UNPMainWorldLoadingWidget> WidgetClass =
+			MainWorldLoadingWidgetClass;
+		if (!WidgetClass)
+		{
+			WidgetClass = UNPMainWorldLoadingWidget::StaticClass();
+		}
+		MainWorldLoadingWidget =
+			CreateWidget<UNPMainWorldLoadingWidget>(this, WidgetClass);
+		if (IsValid(MainWorldLoadingWidget))
+		{
+			MainWorldLoadingWidget->AddToPlayerScreen(10000);
+			MainWorldLoadingShownAtRealTime = FPlatformTime::Seconds();
+		}
+	}
+
+	if (IsValid(MainWorldLoadingWidget))
+	{
+		MainWorldLoadingWidget->ShowLoading();
+	}
+}
+
+void ANPMainPlayerController::HideMainWorldLoadingOverlay()
+{
+	if (!IsValid(MainWorldLoadingWidget))
+	{
+		return;
+	}
+
+	MainWorldLoadingWidget->RemoveFromParent();
+	MainWorldLoadingWidget = nullptr;
+	MainWorldLoadingShownAtRealTime = -1.0;
+}
+
+void ANPMainPlayerController::ShowMainWorldLoadingFailure()
+{
+	ShowMainWorldLoadingOverlay();
+	if (IsValid(MainWorldLoadingWidget))
+	{
+		MainWorldLoadingWidget->ShowFailure();
 	}
 }
 
@@ -308,6 +491,13 @@ bool ANPMainPlayerController::InputKey(const FInputKeyEventArgs& Params)
 
 void ANPMainPlayerController::HandleAimStarted()
 {
+	if (const ANPReplicatedStablePhysicsPawn* StablePawn =
+		GetPawn<ANPReplicatedStablePhysicsPawn>();
+		IsValid(StablePawn) && StablePawn->IsPhotoStunned())
+	{
+		return;
+	}
+
 	if (!PhotoCaptureComponent)
 	{
 		UE_LOG(LogNPPhoto, Error, TEXT("[Input] PhotoCaptureComponent is null."));
@@ -344,6 +534,13 @@ void ANPMainPlayerController::HandleAimReleased()
 
 void ANPMainPlayerController::HandleFireStarted()
 {
+	if (const ANPReplicatedStablePhysicsPawn* StablePawn =
+		GetPawn<ANPReplicatedStablePhysicsPawn>();
+		IsValid(StablePawn) && StablePawn->IsPhotoStunned())
+	{
+		return;
+	}
+
 	if (!PhotoCaptureComponent)
 	{
 		UE_LOG(LogNPPhoto, Error, TEXT("[Input] PhotoCaptureComponent is null."));
