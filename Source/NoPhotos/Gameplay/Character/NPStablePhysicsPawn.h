@@ -15,6 +15,7 @@ class USkeletalMeshComponent;
 class USoundAttenuation;
 class USoundBase;
 class USpringArmComponent;
+class UWorld;
 class UNPStablePhysicsDebugComponent;
 class UNPStablePhysicsGrabComponent;
 class UNPStablePhysicsMovementComponent;
@@ -249,6 +250,7 @@ protected:
 	FName RightHandBoneName = TEXT("hand_r");
 
 private:
+	void HandleSeamlessTravelTransition(UWorld* TransitioningWorld);
 	void WaitForTemporaryRagdollSettle();
 	void FinishTemporaryRagdollRecovery();
 	void FinishTemporaryRagdollInputDelay();
@@ -279,6 +281,7 @@ private:
 	bool bTemporaryRagdollActive = false;
 	bool bTemporaryRagdollRecoveryActive = false;
 	bool bRelicSwingActive = false;
+	FDelegateHandle SeamlessTravelTransitionHandle;
 	FTimerHandle TemporaryRagdollTimer;
 	FTimerHandle TemporaryRagdollRecoveryTimer;
 	FTimerHandle TemporaryRagdollInputDelayTimer;
