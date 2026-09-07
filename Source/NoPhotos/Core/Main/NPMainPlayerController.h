@@ -143,6 +143,9 @@ protected:
 	TSoftObjectPtr<UWorld> MainMenuLevel;
 
 private:
+	bool ShouldBypassRoomPreparationForEditorTest() const;
+	void BeginLocalMainWorldPreparation();
+
 	UFUNCTION()
 	void HandleLocalRoomGenerationCompleted();
 
