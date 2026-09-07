@@ -100,6 +100,22 @@ void ANPStablePhysicsPawn::BeginPlay()
 	PhysicsDebug->AddTickPrerequisiteComponent(RightHandGrab);
 }
 
+void ANPStablePhysicsPawn::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (PhysicalAnimation)
+	{
+		PhysicalAnimation->SetComponentTickEnabled(false);
+		PhysicalAnimation->Deactivate();
+		PhysicalAnimation->SetSkeletalMeshComponent(nullptr);
+	}
+
+	GetWorldTimerManager().ClearTimer(TemporaryRagdollTimer);
+	GetWorldTimerManager().ClearTimer(TemporaryRagdollRecoveryTimer);
+	GetWorldTimerManager().ClearTimer(TemporaryRagdollInputDelayTimer);
+
+	Super::EndPlay(EndPlayReason);
+}
+
 void ANPStablePhysicsPawn::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
