@@ -95,22 +95,24 @@ bool ANPJumpPad::LaunchPawn(APawn* Pawn) const
 		return false;
 	}
 
-	const FVector LaunchVelocityChange = GetActorUpVector() * LaunchStrength;
 	if (ANPStablePhysicsPawn* StablePhysicsPawn = Cast<ANPStablePhysicsPawn>(Pawn))
 	{
-		StablePhysicsPawn->AddExternalVelocityChange(LaunchVelocityChange);
+		StablePhysicsPawn->SetExternalVerticalVelocity(LaunchStrength);
 		return true;
 	}
 
+	const FVector LaunchVelocity = FVector::UpVector * LaunchStrength;
 	if (ACharacter* Character = Cast<ACharacter>(Pawn))
 	{
-		Character->LaunchCharacter(LaunchVelocityChange, false, true);
+		Character->LaunchCharacter(LaunchVelocity, false, true);
 		return true;
 	}
 
 	if (UPrimitiveComponent* RootPrimitive = Cast<UPrimitiveComponent>(Pawn->GetRootComponent()))
 	{
-		RootPrimitive->AddImpulse(LaunchVelocityChange, NAME_None, true);
+		FVector RootVelocity = RootPrimitive->GetPhysicsLinearVelocity();
+		RootVelocity.Z = LaunchStrength;
+		RootPrimitive->SetPhysicsLinearVelocity(RootVelocity);
 		return true;
 	}
 

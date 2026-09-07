@@ -65,6 +65,7 @@ public:
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 	virtual void AddExternalVelocityChange(
 		const FVector& VelocityChange) override;
+	virtual void SetExternalVerticalVelocity(float VerticalVelocity) override;
 	virtual void StartTemporaryRagdoll() override;
 
 	UFUNCTION(BlueprintPure, Category="Network|Grab")
@@ -131,6 +132,9 @@ private:
 	UFUNCTION(Client, Reliable)
 	void ClientApplyExternalVelocityChange(
 		FVector_NetQuantize10 VelocityChange);
+
+	UFUNCTION(Client, Reliable)
+	void ClientSetExternalVerticalVelocity(float VerticalVelocity);
 
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastStartTemporaryRagdoll();
