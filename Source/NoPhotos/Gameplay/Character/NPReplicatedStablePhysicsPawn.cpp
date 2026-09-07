@@ -125,6 +125,12 @@ void ANPReplicatedStablePhysicsPawn::MulticastPlayPhotographedFeedback_Implement
 
 void ANPReplicatedStablePhysicsPawn::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	UE_LOG(LogNoPhotos, Display,
+		TEXT("[RepPawnEndPlay] Enter Pawn=%s NetMode=%d LocalRole=%d Reason=%s"),
+		*GetPathName(), static_cast<int32>(GetNetMode()),
+		static_cast<int32>(GetLocalRole()),
+		*UEnum::GetValueAsString(EndPlayReason));
+
 	if (HasAuthority() && IsValid(RegisteredGrabbedRelic))
 	{
 		if (UNPRelicOwnershipComponent* Ownership =
@@ -143,6 +149,9 @@ void ANPReplicatedStablePhysicsPawn::EndPlay(const EEndPlayReason::Type EndPlayR
 	}
 
 	Super::EndPlay(EndPlayReason);
+
+	UE_LOG(LogNoPhotos, Display,
+		TEXT("[RepPawnEndPlay] Complete Pawn=%s"), *GetPathName());
 }
 
 void ANPReplicatedStablePhysicsPawn::GetLifetimeReplicatedProps(
