@@ -134,6 +134,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Loading")
 	TSubclassOf<UNPMainWorldLoadingWidget> MainWorldLoadingWidgetClass;
 
+	/** 방 로딩이 빨리 끝나더라도 메인 월드 로딩 화면을 유지할 최소 시간입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Loading",
+		meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
+	float MinimumMainWorldLoadingDisplaySeconds = 1.0f;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Room")
 	TSoftObjectPtr<UWorld> MainMenuLevel;
 
@@ -143,6 +148,7 @@ private:
 
 	UFUNCTION()
 	void HandleLocalRoomGenerationFailed();
+	void CompleteLocalMainWorldReadiness();
 
 	void BindRoomGenerationState();
 	void SetMainWorldInputLocked(bool bLocked);
@@ -176,6 +182,8 @@ private:
 	TObjectPtr<UNPMainWorldLoadingWidget> MainWorldLoadingWidget;
 
 	bool bReportedMainWorldReady = false;
+	double MainWorldLoadingShownAtRealTime = -1.0;
+	FTimerHandle MinimumMainWorldLoadingTimer;
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestRestartRoom();

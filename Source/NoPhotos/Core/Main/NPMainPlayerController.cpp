@@ -31,6 +31,8 @@
 #include "Widgets/Input/SVirtualJoystick.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
+#include "HAL/PlatformTime.h"
+#include "TimerManager.h"
 
 ANPMainPlayerController::ANPMainPlayerController()
 {
@@ -241,6 +243,36 @@ void ANPMainPlayerController::HandleLocalRoomGenerationCompleted()
 		return;
 	}
 
+	const double CurrentRealTime = FPlatformTime::Seconds();
+	double ElapsedDisplayTime = 0.0;
+	if (MainWorldLoadingShownAtRealTime >= 0.0)
+	{
+		ElapsedDisplayTime = CurrentRealTime - MainWorldLoadingShownAtRealTime;
+	}
+	const float RemainingDisplayTime = FMath::Max(
+		0.0f,
+		MinimumMainWorldLoadingDisplaySeconds - static_cast<float>(ElapsedDisplayTime));
+	if (RemainingDisplayTime > 0.0f)
+	{
+		GetWorldTimerManager().SetTimer(
+			MinimumMainWorldLoadingTimer,
+			this,
+			&ThisClass::CompleteLocalMainWorldReadiness,
+			RemainingDisplayTime,
+			false);
+		return;
+	}
+
+	CompleteLocalMainWorldReadiness();
+}
+
+void ANPMainPlayerController::CompleteLocalMainWorldReadiness()
+{
+	if (!IsLocalController() || bReportedMainWorldReady)
+	{
+		return;
+	}
+
 	bReportedMainWorldReady = true;
 	ServerReportMainWorldReady();
 }
@@ -249,6 +281,7 @@ void ANPMainPlayerController::HandleLocalRoomGenerationFailed()
 {
 	if (IsLocalController())
 	{
+		GetWorldTimerManager().ClearTimer(MinimumMainWorldLoadingTimer);
 		UE_LOG(LogNoPhotos, Error,
 			TEXT("[MainWorldLoading] Local room generation failed. Controller=%s"),
 			*GetNameSafe(this));
@@ -267,6 +300,7 @@ void ANPMainPlayerController::ServerReportMainWorldReady_Implementation()
 
 void ANPMainPlayerController::ClientFinishMainWorldPreparation_Implementation()
 {
+	GetWorldTimerManager().ClearTimer(MinimumMainWorldLoadingTimer);
 	SetMainWorldInputLocked(false);
 	HideMainWorldLoadingOverlay();
 	ShowGameScreenUI();
@@ -306,6 +340,7 @@ void ANPMainPlayerController::ShowMainWorldLoadingOverlay()
 		if (IsValid(MainWorldLoadingWidget))
 		{
 			MainWorldLoadingWidget->AddToPlayerScreen(10000);
+			MainWorldLoadingShownAtRealTime = FPlatformTime::Seconds();
 		}
 	}
 
@@ -324,6 +359,7 @@ void ANPMainPlayerController::HideMainWorldLoadingOverlay()
 
 	MainWorldLoadingWidget->RemoveFromParent();
 	MainWorldLoadingWidget = nullptr;
+	MainWorldLoadingShownAtRealTime = -1.0;
 }
 
 void ANPMainPlayerController::ShowMainWorldLoadingFailure()
@@ -455,6 +491,13 @@ bool ANPMainPlayerController::InputKey(const FInputKeyEventArgs& Params)
 
 void ANPMainPlayerController::HandleAimStarted()
 {
+	if (const ANPReplicatedStablePhysicsPawn* StablePawn =
+		GetPawn<ANPReplicatedStablePhysicsPawn>();
+		IsValid(StablePawn) && StablePawn->IsPhotoStunned())
+	{
+		return;
+	}
+
 	if (!PhotoCaptureComponent)
 	{
 		UE_LOG(LogNPPhoto, Error, TEXT("[Input] PhotoCaptureComponent is null."));
@@ -491,6 +534,13 @@ void ANPMainPlayerController::HandleAimReleased()
 
 void ANPMainPlayerController::HandleFireStarted()
 {
+	if (const ANPReplicatedStablePhysicsPawn* StablePawn =
+		GetPawn<ANPReplicatedStablePhysicsPawn>();
+		IsValid(StablePawn) && StablePawn->IsPhotoStunned())
+	{
+		return;
+	}
+
 	if (!PhotoCaptureComponent)
 	{
 		UE_LOG(LogNPPhoto, Error, TEXT("[Input] PhotoCaptureComponent is null."));
