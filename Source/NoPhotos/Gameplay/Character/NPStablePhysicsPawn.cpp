@@ -3,6 +3,7 @@
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Engine/World.h"
 #include "EnhancedInputComponent.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -82,6 +83,11 @@ void ANPStablePhysicsPawn::BeginPlay()
 {
 	Super::BeginPlay();
 
+	SeamlessTravelTransitionHandle =
+		FWorldDelegates::OnSeamlessTravelTransition.AddUObject(
+			this,
+			&ANPStablePhysicsPawn::HandleSeamlessTravelTransition);
+
 	ApplyCharacterProfile();
 	PhysicsMovement->Initialize(PhysicsMesh, CharacterForwardYawOffset);
 	RightHandGrab->Initialize(PhysicsMesh, RightHandBoneName);
@@ -102,6 +108,13 @@ void ANPStablePhysicsPawn::BeginPlay()
 
 void ANPStablePhysicsPawn::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (SeamlessTravelTransitionHandle.IsValid())
+	{
+		FWorldDelegates::OnSeamlessTravelTransition.Remove(
+			SeamlessTravelTransitionHandle);
+		SeamlessTravelTransitionHandle.Reset();
+	}
+
 	if (PhysicalAnimation)
 	{
 		PhysicalAnimation->SetComponentTickEnabled(false);
@@ -114,6 +127,19 @@ void ANPStablePhysicsPawn::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	GetWorldTimerManager().ClearTimer(TemporaryRagdollInputDelayTimer);
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void ANPStablePhysicsPawn::HandleSeamlessTravelTransition(
+	UWorld* TransitioningWorld)
+{
+	if (TransitioningWorld != GetWorld() || !PhysicalAnimation)
+	{
+		return;
+	}
+
+	PhysicalAnimation->SetComponentTickEnabled(false);
+	PhysicalAnimation->Deactivate();
+	PhysicalAnimation->SetSkeletalMeshComponent(nullptr);
 }
 
 void ANPStablePhysicsPawn::Tick(float DeltaSeconds)
