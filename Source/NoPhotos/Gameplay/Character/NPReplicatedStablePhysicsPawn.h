@@ -18,6 +18,7 @@ class UNPVisionRestrictionComponent;
 class UNPStablePhysicsNetworkPredictionComponent;
 class UNPPhotoWorldFeedbackComponent;
 class UNPPhotoCapturePenaltyComponent;
+class UNPPhotoStunVisualComponent;
 class UNPScoreFeedbackWidgetComponent;
 class ANPBaseRelic;
 
@@ -54,6 +55,10 @@ class NOPHOTOS_API ANPReplicatedStablePhysicsPawn
 
 public:
 	ANPReplicatedStablePhysicsPawn();
+
+	/** 증거 사진 패널티로 현재 조작이 차단되었는지 반환합니다. */
+	UFUNCTION(BlueprintPure, Category="Photo|Penalty")
+	bool IsPhotoStunned() const;
 
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -223,9 +228,14 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Photo|World Feedback", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UNPPhotoWorldFeedbackComponent> PhotoWorldFeedback;
 
-	/** 유물 증거 사진에 찍혔을 때 Drop, 감속과 Overlay 연출을 처리합니다. */
+	/** 유물 증거 사진에 찍혔을 때 Drop과 일시적인 조작 차단을 처리합니다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Photo|Penalty", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UNPPhotoCapturePenaltyComponent> PhotoCapturePenalty;
+
+	/** 스턴 중 머리 위에서 회전하는 표시물 3개입니다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Photo|Penalty",
+		meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UNPPhotoStunVisualComponent> PhotoStunVisual;
 
 	/** 로컬 소유자를 포함해 실제 유물 가격 감점액을 머리 위에 표시합니다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Photo|Penalty", meta=(AllowPrivateAccess="true"))

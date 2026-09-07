@@ -1,20 +1,14 @@
 #include "Gameplay/Photo/NPPhotoCapturePenaltyComponent.h"
 
-#include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
-#include "Gameplay/Character/Component/NPStablePhysicsMovementComponent.h"
 #include "Gameplay/Interaction/Components/GrabbableComponent.h"
 #include "Gameplay/Photo/NPRelicHolderInterface.h"
+#include "Gameplay/Photo/NPPhotoStunVisualComponent.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
 #include "UI/GameScreen/NPScoreFeedbackWidgetComponent.h"
-
-namespace
-{
-const FName PhotoCapturedSpeedSource(TEXT("PhotoCaptured"));
-}
 
 UNPPhotoCapturePenaltyComponent::UNPPhotoCapturePenaltyComponent()
 {
@@ -27,14 +21,14 @@ void UNPPhotoCapturePenaltyComponent::GetLifetimeReplicatedProps(
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	DOREPLIFETIME(UNPPhotoCapturePenaltyComponent, bPhotoSlowActive);
-	DOREPLIFETIME(UNPPhotoCapturePenaltyComponent, PhotoSlowEndServerTime);
+	DOREPLIFETIME(UNPPhotoCapturePenaltyComponent, bPhotoStunActive);
+	DOREPLIFETIME(UNPPhotoCapturePenaltyComponent, PhotoStunEndServerTime);
 }
 
 void UNPPhotoCapturePenaltyComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	ApplySlowStateLocally();
+	ApplyStunStateLocally();
 }
 
 void UNPPhotoCapturePenaltyComponent::EndPlay(
@@ -42,11 +36,11 @@ void UNPPhotoCapturePenaltyComponent::EndPlay(
 {
 	if (UWorld* World = GetWorld())
 	{
-		World->GetTimerManager().ClearTimer(SlowTimer);
+		World->GetTimerManager().ClearTimer(StunTimer);
 	}
 
-	bPhotoSlowActive = false;
-	ApplySlowStateLocally();
+	bPhotoStunActive = false;
+	ApplyStunStateLocally();
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -79,16 +73,16 @@ bool UNPPhotoCapturePenaltyComponent::ApplyCapturedWithRelicPenalty(
 	// 유물 자체를 떨어뜨리는 규칙이므로 함께 잡은 다른 플레이어의 Grab도 해제합니다.
 	Grabbable->ForceReleaseAllGrabs();
 
-	const float SafeSlowDuration = FMath::Max(0.01f, SlowDuration);
-	bPhotoSlowActive = true;
-	PhotoSlowEndServerTime = World->GetTimeSeconds() + SafeSlowDuration;
-	ApplySlowStateLocally();
+	const float SafeStunDuration = FMath::Max(0.01f, StunDuration);
+	bPhotoStunActive = true;
+	PhotoStunEndServerTime = World->GetTimeSeconds() + SafeStunDuration;
+	ApplyStunStateLocally();
 
 	World->GetTimerManager().SetTimer(
-		SlowTimer,
+		StunTimer,
 		this,
-		&ThisClass::FinishSlowPenalty,
-		SafeSlowDuration,
+		&ThisClass::FinishStunPenalty,
+		SafeStunDuration,
 		false);
 	if (AppliedPhotoPenalty > 0)
 	{
@@ -105,12 +99,12 @@ bool UNPPhotoCapturePenaltyComponent::ApplyCapturedWithRelicPenalty(
 	return true;
 }
 
-void UNPPhotoCapturePenaltyComponent::OnRep_PhotoSlowActive()
+void UNPPhotoCapturePenaltyComponent::OnRep_PhotoStunActive()
 {
-	ApplySlowStateLocally();
+	ApplyStunStateLocally();
 }
 
-void UNPPhotoCapturePenaltyComponent::ApplySlowStateLocally()
+void UNPPhotoCapturePenaltyComponent::ApplyStunStateLocally()
 {
 	ANPReplicatedStablePhysicsPawn* Pawn =
 		Cast<ANPReplicatedStablePhysicsPawn>(GetOwner());
@@ -119,30 +113,19 @@ void UNPPhotoCapturePenaltyComponent::ApplySlowStateLocally()
 		return;
 	}
 
-	if (UNPStablePhysicsMovementComponent* Movement =
-		Pawn->GetStablePhysicsMovementComponent())
+	if (bPhotoStunActive)
 	{
-		if (bPhotoSlowActive)
-		{
-			Movement->SetMoveSpeedMultiplier(
-				PhotoCapturedSpeedSource,
-				FMath::Clamp(MoveSpeedMultiplier, 0.0f, 1.0f));
-		}
-		else
-		{
-			Movement->ClearMoveSpeedMultiplier(PhotoCapturedSpeedSource);
-		}
+		Pawn->StopMovementInput();
 	}
 
-	if (USkeletalMeshComponent* PhysicsMesh =
-		Pawn->FindComponentByClass<USkeletalMeshComponent>())
+	if (UNPPhotoStunVisualComponent* StunVisual =
+		Pawn->FindComponentByClass<UNPPhotoStunVisualComponent>())
 	{
-		PhysicsMesh->SetOverlayMaterial(
-			bPhotoSlowActive ? SlowOverlayMaterial.Get() : nullptr);
+		StunVisual->SetStunVisualActive(bPhotoStunActive);
 	}
 }
 
-void UNPPhotoCapturePenaltyComponent::FinishSlowPenalty()
+void UNPPhotoCapturePenaltyComponent::FinishStunPenalty()
 {
 	ANPReplicatedStablePhysicsPawn* Pawn =
 		Cast<ANPReplicatedStablePhysicsPawn>(GetOwner());
@@ -151,8 +134,8 @@ void UNPPhotoCapturePenaltyComponent::FinishSlowPenalty()
 		return;
 	}
 
-	bPhotoSlowActive = false;
-	PhotoSlowEndServerTime = 0.0f;
-	ApplySlowStateLocally();
+	bPhotoStunActive = false;
+	PhotoStunEndServerTime = 0.0f;
+	ApplyStunStateLocally();
 	Pawn->ForceNetUpdate();
 }

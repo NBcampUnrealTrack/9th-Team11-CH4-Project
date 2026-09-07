@@ -122,10 +122,6 @@ void UNPMapEventManagerComponent::BeginPlay()
 
 	ScheduleOriginServerWorldTime = GetServerWorldTimeSeconds();
 	CreateEventInstances();
-	if (bStartAutomatically)
-	{
-		StartEventScheduling();
-	}
 }
 
 void UNPMapEventManagerComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
