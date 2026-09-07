@@ -53,6 +53,7 @@ protected:
 	TSubclassOf<UNPPhotoEvidenceService> PhotoEvidenceServiceClass;
 
 private:
+	bool ShouldBypassRoomPreparationForEditorTest() const;
 	void BeginWorldPreparation();
 	void TryStartPreparedMainGame();
 	void FailWorldPreparation();

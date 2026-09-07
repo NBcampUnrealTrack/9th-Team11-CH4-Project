@@ -9,6 +9,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/GameInstance.h"
+#include "EngineUtils.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerState.h"
@@ -21,6 +22,7 @@
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 #include "Gameplay/Relic/Components/NPAimableRelicComponent.h"
+#include "Gameplay/Map/Room/NPRoomGenerationHelper.h"
 #include "NoPhotos.h"
 #include "SubSystem/NPUIManagerSubsystem.h"
 #include "SubSystem/Room/NPRoomGenerateSubsystem.h"
@@ -162,9 +164,7 @@ void ANPMainPlayerController::BeginPlay()
 
 	if (IsLocalController())
 	{
-		SetMainWorldInputLocked(true);
-		ShowMainWorldLoadingOverlay();
-		BindRoomGenerationState();
+		BeginLocalMainWorldPreparation();
 
 		if (PhotoFlashWidgetClass)
 		{
@@ -204,9 +204,51 @@ void ANPMainPlayerController::ClientBeginMainWorldPreparation_Implementation()
 	}
 
 	bReportedMainWorldReady = false;
+	BeginLocalMainWorldPreparation();
+}
+
+void ANPMainPlayerController::BeginLocalMainWorldPreparation()
+{
+	if (ShouldBypassRoomPreparationForEditorTest())
+	{
+		GetWorldTimerManager().ClearTimer(MinimumMainWorldLoadingTimer);
+		SetMainWorldInputLocked(false);
+		HideMainWorldLoadingOverlay();
+		CompleteLocalMainWorldReadiness();
+		UE_LOG(
+			LogNoPhotos,
+			Log,
+			TEXT("[MainWorldLoading] Editor level-instance test bypass enabled. Controller=%s"),
+			*GetNameSafe(this));
+		return;
+	}
+
 	SetMainWorldInputLocked(true);
 	ShowMainWorldLoadingOverlay();
 	BindRoomGenerationState();
+}
+
+bool ANPMainPlayerController::ShouldBypassRoomPreparationForEditorTest() const
+{
+#if WITH_EDITOR
+	UWorld* World = GetWorld();
+	if (!World || World->WorldType != EWorldType::PIE)
+	{
+		return false;
+	}
+
+	TActorIterator<ANPRoomGenerationHelper> RoomGenerationHelperIterator(World);
+	const bool bHasRoomGenerationHelper =
+		static_cast<bool>(RoomGenerationHelperIterator);
+	if (bHasRoomGenerationHelper)
+	{
+		return false;
+	}
+
+	return true;
+#else
+	return false;
+#endif
 }
 
 void ANPMainPlayerController::BindRoomGenerationState()

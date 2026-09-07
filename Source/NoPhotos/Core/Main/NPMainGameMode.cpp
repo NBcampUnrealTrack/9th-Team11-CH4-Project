@@ -15,6 +15,7 @@
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Gameplay/Relic/NPRelicDeliveryService.h"
 #include "Gameplay/MapEvents/NPMapEventManager.h"
+#include "Gameplay/Map/Room/NPRoomGenerationHelper.h"
 #include "NPMainGameLog.h"
 #include "NPMainGameState.h"
 #include "SubSystem/Room/NPRoomGenerateSubsystem.h"
@@ -256,6 +257,15 @@ void ANPMainGameMode::HandleSeamlessTravelPlayer(AController*& Controller)
 
 void ANPMainGameMode::BeginWorldPreparation()
 {
+	if (ShouldBypassRoomPreparationForEditorTest())
+	{
+		NPMainGameLog::Info(
+			this,
+			TEXT("에디터 개별 레벨 테스트: RoomGenerationHelper가 없어 방 로딩 대기를 건너뜁니다."));
+		HandleServerRoomGenerationCompleted();
+		return;
+	}
+
 	GetWorldTimerManager().SetTimer(
 		WorldPreparationTimeoutTimer,
 		this,
@@ -292,6 +302,29 @@ void ANPMainGameMode::BeginWorldPreparation()
 	{
 		HandleServerRoomGenerationFailed();
 	}
+}
+
+bool ANPMainGameMode::ShouldBypassRoomPreparationForEditorTest() const
+{
+#if WITH_EDITOR
+	UWorld* World = GetWorld();
+	if (!World || World->WorldType != EWorldType::PIE)
+	{
+		return false;
+	}
+
+	TActorIterator<ANPRoomGenerationHelper> RoomGenerationHelperIterator(World);
+	const bool bHasRoomGenerationHelper =
+		static_cast<bool>(RoomGenerationHelperIterator);
+	if (bHasRoomGenerationHelper)
+	{
+		return false;
+	}
+
+	return true;
+#else
+	return false;
+#endif
 }
 
 void ANPMainGameMode::HandleServerRoomGenerationCompleted()
