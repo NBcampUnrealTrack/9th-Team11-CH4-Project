@@ -125,6 +125,7 @@ void UNPJoinPlayerList::RefreshPlayerList()
         }
 
         JoinPlayerWidget->SetupResult(PlayerName);
+        JoinPlayerWidget->SetRenderTransformAngle(FMath::FRandRange(-4.0f, 4.0f));
 
         UHorizontalBoxSlot* PlayerSlot = PlayerList->AddChildToHorizontalBox(JoinPlayerWidget);
         if (IsValid(PlayerSlot))

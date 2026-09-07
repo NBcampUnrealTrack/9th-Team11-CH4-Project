@@ -1,6 +1,7 @@
 #include "NPMapEvent.h"
 
 #include "Engine/World.h"
+#include "Core/Main/NPMainGameState.h"
 #include "GameFramework/GameStateBase.h"
 #include "Net/UnrealNetwork.h"
 #include "NPMapEventDefinition.h"
@@ -133,7 +134,9 @@ void ANPMapEvent::FinishEvent()
 
 bool ANPMapEvent::CanStartEvent() const
 {
+	const ANPMainGameState* MainState = GetWorld() ? GetWorld()->GetGameState<ANPMainGameState>() : nullptr;
 	return HasAuthority()
+		&& (!MainState || !MainState->IsMainGameEnded())
 		&& !bIsActive
 		&& RuntimeSelectionWeight > 0.0f;
 }

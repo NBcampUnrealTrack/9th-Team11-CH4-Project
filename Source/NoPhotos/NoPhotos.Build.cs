@@ -12,6 +12,7 @@ public class NoPhotos : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+			"EngineCameras",
 			"GameplayAbilities",
 			"GameplayTags",
 			"GameplayTasks",

@@ -28,10 +28,6 @@ ANPBreakableRelic::ANPBreakableRelic(
 	GeometryCollectionComponent->SetGenerateOverlapEvents(false);
 	GeometryCollectionComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	GeometryCollectionComponent->SetSimulatePhysics(false);
-	// 루트 위치만 보정하고 파편은 각 환경에서 별도로 시뮬레이션합니다.
-	GeometryCollectionComponent->SetEnableReplication(true);
-	GeometryCollectionComponent->SetReplicationAbandonAfterLevel(100);
-	GeometryCollectionComponent->SetReplicationMaxPositionAndVelocityCorrectionLevel(0);
 	GeometryCollectionComponent->ObjectType =
 		EObjectStateTypeEnum::Chaos_Object_Dynamic;
 	GeometryCollectionComponent->SetCollisionResponseToChannel(
@@ -68,7 +64,6 @@ void ANPBreakableRelic::BeginPlay()
 				this,
 				&ANPBreakableRelic::HandleFullyDecayed);
 		}
-		GeometryCollectionComponent->ForceBrokenForCustomRenderer(false);
 		GeometryCollectionComponent->SetEnableDamageFromCollision(false);
 		GeometryCollectionComponent->SetNotifyBreaks(true);
 	}
@@ -257,7 +252,6 @@ void ANPBreakableRelic::ApplyBrokenState()
 		AngularVelocity);
 	GeometryCollectionComponent->RemoveAllAnchors();
 	GeometryCollectionComponent->WakeAllRigidBodies();
-	GeometryCollectionComponent->ForceBrokenForCustomRenderer(true);
 
 	BreakRootCluster();
 }
