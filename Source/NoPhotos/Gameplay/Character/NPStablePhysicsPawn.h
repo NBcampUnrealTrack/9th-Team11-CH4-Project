@@ -111,6 +111,7 @@ protected:
 	void ApplyExternalVelocityChangeLocal(const FVector& VelocityChange);
 
 	virtual void BeginPlay() override;
+	void EndPlay(EEndPlayReason::Type EndPlayReason);
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
