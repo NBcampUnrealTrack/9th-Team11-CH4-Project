@@ -108,6 +108,13 @@ bool FNPSantaGiftScheduleTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Last gift ends at configured progress"), Progress, 0.8f);
 	TestFalse(TEXT("No extra gift after requested count"), Schedule.GetDropProgress(3, Progress));
 	TestFalse(TEXT("Negative slot rejected"), Schedule.GetDropProgress(-1, Progress));
+	Schedule.RandomDropRadius = 500.0f;
+	TestTrue(TEXT("Random offset stays horizontal"), FMath::IsNearlyZero(Schedule.GetRandomDropOffset(0.25f, 0.5f).Z));
+	TestTrue(TEXT("Random offset stays inside configured radius"), Schedule.GetRandomDropOffset(0.25f, 1.0f).Size2D() <= 500.0f);
+	TestTrue(TEXT("Area sample reaches configured boundary"), FMath::IsNearlyEqual(Schedule.GetRandomDropOffset(0.0f, 1.0f).Size2D(), 500.0f));
+	Schedule.RandomDropRadius = 0.0f;
+	TestTrue(TEXT("Zero radius preserves the original straight drop"), Schedule.GetRandomDropOffset(0.3f, 0.8f).IsNearlyZero());
+	Schedule.RandomDropRadius = 500.0f;
 	Schedule.Count = 1;
 	TestTrue(TEXT("Single gift does not divide by zero"), Schedule.GetDropProgress(0, Progress));
 	TestEqual(TEXT("Single gift uses start progress"), Progress, 0.2f);
@@ -124,6 +131,11 @@ bool FNPSantaGiftScheduleTest::RunTest(const FString& Parameters)
 	Schedule.EndProgress = 0.8f;
 	Schedule.Count = 129;
 	TestFalse(TEXT("Runtime count limit enforced"), Schedule.IsValid());
+	Schedule.Count = 3;
+	Schedule.RandomDropRadius = -1.0f;
+	TestFalse(TEXT("Negative random drop radius rejected"), Schedule.IsValid());
+	Schedule.RandomDropRadius = std::numeric_limits<float>::infinity();
+	TestFalse(TEXT("Infinite random drop radius rejected"), Schedule.IsValid());
 	return true;
 }
 

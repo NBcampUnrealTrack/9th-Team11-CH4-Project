@@ -19,11 +19,28 @@ struct NOPHOTOS_API FNPSantaGiftDropSchedule
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Gift Drops", meta=(ClampMin="0.0", ClampMax="0.99"))
 	float EndProgress = 0.9f;
 
+	/** 각 투하 지점을 중심으로 선물이 흩어지는 수평 원형 반경입니다. 0이면 경로 바로 아래에 투하합니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Gift Drops", meta=(ClampMin="0.0", Units="cm"))
+	float RandomDropRadius = 500.0f;
+
 	bool IsValid() const
 	{
 		return Count >= 0 && Count <= 128 && FMath::IsFinite(StartProgress) && FMath::IsFinite(EndProgress)
+			&& FMath::IsFinite(RandomDropRadius) && RandomDropRadius >= 0.0f
 			&& StartProgress >= 0.0f && EndProgress < 1.0f && StartProgress <= EndProgress
 			&& (Count <= 1 || StartProgress < EndProgress);
+	}
+
+	/** 서버에서 전달한 두 난수(0~1)로 원 내부에 균일한 수평 오프셋을 계산합니다. */
+	FVector GetRandomDropOffset(float AngleSample, float RadiusSample) const
+	{
+		if (!FMath::IsFinite(RandomDropRadius) || RandomDropRadius <= 0.0f)
+		{
+			return FVector::ZeroVector;
+		}
+		const float Angle = FMath::Clamp(AngleSample, 0.0f, 1.0f) * UE_TWO_PI;
+		const float Radius = FMath::Sqrt(FMath::Clamp(RadiusSample, 0.0f, 1.0f)) * RandomDropRadius;
+		return FVector(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, 0.0f);
 	}
 
 	bool GetDropProgress(int32 Index, float& OutProgress) const
