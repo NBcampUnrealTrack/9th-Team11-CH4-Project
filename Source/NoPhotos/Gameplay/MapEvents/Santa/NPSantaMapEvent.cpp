@@ -238,7 +238,7 @@ void ANPSantaMapEvent::StartGiftDrops(const UNPSantaEventDefinition* Definition)
 	if (!ActiveGiftDrops.IsValid() || !ActiveGiftClass || ActiveGiftClass->HasAnyClassFlags(CLASS_Abstract)
 		|| !FMath::IsFinite(ActiveDropHeightOffset) || ActiveDropHeightOffset < 0.0f)
 	{
-		UE_LOG(LogNPSantaEvent, Warning, TEXT("선물 투하 설정 오류: Event=%s. GiftClass, Count(1~128), 진행 구간(0 이상 1 미만), 높이 오프셋을 확인하세요. 비행만 진행합니다."), *GetName());
+		UE_LOG(LogNPSantaEvent, Warning, TEXT("선물 투하 설정 오류: Event=%s. GiftClass, Count(1~128), 진행 구간(0 이상 1 미만), 랜덤 반경, 높이 오프셋을 확인하세요. 비행만 진행합니다."), *GetName());
 		return;
 	}
 	for (const TSubclassOf<ANPBaseRelic>& RelicClass : Definition->GetRelicClasses())
@@ -293,7 +293,9 @@ void ANPSantaMapEvent::DropGift()
 	}
 	// Santa Tick 호출 순서에 의존하지 않고 같은 비행 계획/현재 서버 시각에서 투하 위치를 계산합니다.
 	FTransform DropTransform = SpawnedSanta->GetFlightPlan().GetTransform(CurrentProgress);
-	DropTransform.AddToTranslation(FVector::DownVector * ActiveDropHeightOffset);
+	// 서버에서만 난수를 뽑아 생성 위치를 결정합니다. 선물 액터의 이동 복제로 모든 클라이언트에 같은 결과가 전달됩니다.
+	const FVector RandomOffset = ActiveGiftDrops.GetRandomDropOffset(FMath::FRand(), FMath::FRand());
+	DropTransform.AddToTranslation(RandomOffset + FVector::DownVector * ActiveDropHeightOffset);
 	FActorSpawnParameters Params;
 	Params.OverrideLevel = GetWorld()->PersistentLevel;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -307,8 +309,9 @@ void ANPSantaMapEvent::DropGift()
 		UGameplayStatics::FinishSpawningActor(Gift, DropTransform);
 		if (IsValid(Gift))
 		{
-			UE_LOG(LogNPSantaEvent, Log, TEXT("산타 선물 투하: Event=%s Gift=%s Slot=%d/%d Progress=%.3f Location=%s"),
-				*GetName(), *GetNameSafe(Gift), NextGiftIndex + 1, ActiveGiftDrops.Count, CurrentProgress, *DropTransform.GetLocation().ToString());
+			UE_LOG(LogNPSantaEvent, Log, TEXT("산타 선물 투하: Event=%s Gift=%s Slot=%d/%d Progress=%.3f Location=%s RandomOffset=%s"),
+				*GetName(), *GetNameSafe(Gift), NextGiftIndex + 1, ActiveGiftDrops.Count, CurrentProgress,
+				*DropTransform.GetLocation().ToString(), *RandomOffset.ToString());
 		}
 	}
 	else

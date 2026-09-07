@@ -77,6 +77,7 @@ BP/DA/레벨 에셋은 이 변경에서 수정하지 않습니다. 새 C++ 클�
 | Flight Schedule → Respawn Delay Min | 3초 | 비행 종료 후 최소 대기 |
 | Flight Schedule → Respawn Delay Max | 7초 | 비행 종료 후 최대 대기 |
 | Gift Drops → Count | 5개 | 이벤트 전체가 아니라 **매 비행마다** 투하하는 개수 |
+| Gift Drops → Random Drop Radius | 500cm | 각 투하 지점을 중심으로 흩어지는 수평 원형 반경. 0이면 경로 바로 아래 |
 
 예: 0초 등장 → 8초 퇴장 → 랜덤 4초 대기 → 12초에 새 경로/방향으로 등장 → 20초 퇴장 → 랜덤 대기… → 60초에 모두 중단합니다. 등장 시점 간 간격은 `Flight Duration + 이번에 뽑은 대기 시간`이며 동시에 여러 산타가 비행하지 않습니다.
 
