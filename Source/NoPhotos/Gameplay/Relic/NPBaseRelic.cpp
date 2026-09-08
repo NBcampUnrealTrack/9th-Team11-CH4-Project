@@ -56,6 +56,7 @@ void ANPBaseRelic::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(ANPBaseRelic, bIsUnlocked);
 	DOREPLIFETIME(ANPBaseRelic, bIsReturned);
 	DOREPLIFETIME(ANPBaseRelic, AccumulatedPhotoPenalty);
+	DOREPLIFETIME(ANPBaseRelic, AccumulatedPriceBonus);
 }
 
 FVector ANPBaseRelic::GetRelicWorldLocation() const
@@ -73,7 +74,10 @@ int32 ANPBaseRelic::GetBasePrice() const
 
 int32 ANPBaseRelic::GetCurrentPrice() const
 {
-	return FMath::Max(0, GetBasePrice() - AccumulatedPhotoPenalty);
+	const double CurrentPrice = FMath::Clamp(
+		GetBasePrice() + AccumulatedPriceBonus - AccumulatedPhotoPenalty,
+		0.0, static_cast<double>(MAX_int32));
+	return static_cast<int32>(FMath::RoundToInt64(CurrentPrice));
 }
 
 const FNPRelicTableRow* ANPBaseRelic::GetRelicTableData() const
@@ -152,6 +156,27 @@ bool ANPBaseRelic::AddPhotoPenaltyCapture(
 	return true;
 }
 
+void ANPBaseRelic::AddPriceBonus(const double BonusRate)
+{
+	if (!HasAuthority() || bIsReturned || !FMath::IsFinite(BonusRate) || BonusRate <= 0.0)
+	{
+		return;
+	}
+
+	const double NewBonus = FMath::Min(
+		AccumulatedPriceBonus + GetBasePrice() * BonusRate,
+		static_cast<double>(MAX_int32));
+	if (NewBonus == AccumulatedPriceBonus)
+	{
+		return;
+	}
+
+	FlushNetDormancy();
+	AccumulatedPriceBonus = NewBonus;
+	OnRep_AccumulatedPriceBonus();
+	ForceNetUpdate();
+}
+
 bool ANPBaseRelic::TryMarkReturned()
 {
 	if (!HasAuthority() || bIsReturned)
@@ -201,6 +226,11 @@ void ANPBaseRelic::OnRep_IsReturned()
 }
 
 void ANPBaseRelic::OnRep_AccumulatedPhotoPenalty()
+{
+	OnRelicValueChanged.Broadcast(this);
+}
+
+void ANPBaseRelic::OnRep_AccumulatedPriceBonus()
 {
 	OnRelicValueChanged.Broadcast(this);
 }

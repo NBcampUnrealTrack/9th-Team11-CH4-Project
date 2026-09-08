@@ -78,6 +78,8 @@ public:
 	void SetUnlocked(bool bUnlocked);
 	/** 성공 촬영 횟수를 증가시키고 기본 가격에 대한 누적 비율로 감점을 다시 계산합니다. */
 	bool AddPhotoPenaltyCapture(float PenaltyRatePerCapture);
+	/** 기본 가격의 지정 비율을 현재 가격에 누적합니다. 서버에서만 적용합니다. */
+	void AddPriceBonus(double BonusRate);
 	bool TryMarkReturned();
 
 	/** 서버에서 전시 상태를 해제하고 물리를 활성화한 뒤 질량과 무관한 속도 충격을 적용합니다. */
@@ -97,6 +99,9 @@ protected:
 
 	UFUNCTION()
 	void OnRep_AccumulatedPhotoPenalty();
+
+	UFUNCTION()
+	void OnRep_AccumulatedPriceBonus();
 
 	void ReleaseFromDisplay();
 	void HandleGrabStarted(UPrimitiveComponent* GrabbedComponent);
@@ -129,6 +134,10 @@ protected:
 	/** 사진 판정으로 누적된 감점입니다. 현재 가격 UI 갱신을 위해 클라이언트에 복제합니다. */
 	UPROPERTY(ReplicatedUsing=OnRep_AccumulatedPhotoPenalty, VisibleInstanceOnly, BlueprintReadOnly, Category="Relic|Delivery")
 	int32 AccumulatedPhotoPenalty = 0;
+
+	/** 소수 금액은 누적하고 최종 가격에서 반올림합니다. */
+	UPROPERTY(ReplicatedUsing=OnRep_AccumulatedPriceBonus)
+	double AccumulatedPriceBonus = 0.0;
 
 	/** 서버에서만 관리하는 유효한 유물 증거 사진의 누적 횟수입니다. */
 	UPROPERTY(Transient, VisibleInstanceOnly, BlueprintReadOnly, Category="Relic|Delivery")
