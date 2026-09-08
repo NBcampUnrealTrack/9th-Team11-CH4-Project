@@ -1,48 +1,48 @@
 #include "Gameplay/Photo/NPPhotoCapturePenaltyComponent.h"
 
-#include "Engine/World.h"
+#include "Core/GameplayTag/NPGameplayTags.h"
+#include "Gameplay/AbilitySystem/NPAbilitySystemComponent.h"
+#include "Gameplay/AbilitySystem/Effects/NPPhotoStunGameplayEffect.h"
 #include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 #include "Gameplay/Interaction/Components/GrabbableComponent.h"
 #include "Gameplay/Photo/NPRelicHolderInterface.h"
 #include "Gameplay/Photo/NPPhotoStunVisualComponent.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
-#include "Net/UnrealNetwork.h"
 #include "NoPhotos.h"
 #include "Gameplay/Photo/NPPhotoLog.h"
-#include "TimerManager.h"
 #include "UI/GameScreen/NPScoreFeedbackWidgetComponent.h"
 
 UNPPhotoCapturePenaltyComponent::UNPPhotoCapturePenaltyComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
-	SetIsReplicatedByDefault(true);
-}
-
-void UNPPhotoCapturePenaltyComponent::GetLifetimeReplicatedProps(
-	TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-	DOREPLIFETIME(UNPPhotoCapturePenaltyComponent, bPhotoStunActive);
-	DOREPLIFETIME(UNPPhotoCapturePenaltyComponent, PhotoStunEndServerTime);
 }
 
 void UNPPhotoCapturePenaltyComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	ApplyStunStateLocally();
+	if (UNPAbilitySystemComponent* AbilitySystem = ResolveAbilitySystem())
+	{
+		StunTagChangedHandle = AbilitySystem->RegisterGameplayTagEvent(
+			NPGameplayTags::State_CrowdControl_Stunned,
+			EGameplayTagEventType::NewOrRemoved).AddUObject(
+				this,
+				&ThisClass::HandleStunTagChanged);
+	}
+	ApplyStunStateLocally(IsPhotoStunActive());
 }
 
 void UNPPhotoCapturePenaltyComponent::EndPlay(
 	const EEndPlayReason::Type EndPlayReason)
 {
-	if (UWorld* World = GetWorld())
+	if (UNPAbilitySystemComponent* AbilitySystem = ResolveAbilitySystem();
+		AbilitySystem && StunTagChangedHandle.IsValid())
 	{
-		World->GetTimerManager().ClearTimer(StunTimer);
+		AbilitySystem->RegisterGameplayTagEvent(
+			NPGameplayTags::State_CrowdControl_Stunned,
+			EGameplayTagEventType::NewOrRemoved).Remove(StunTagChangedHandle);
 	}
-
-	bPhotoStunActive = false;
-	ApplyStunStateLocally();
+	StunTagChangedHandle.Reset();
+	ApplyStunStateLocally(false);
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -111,27 +111,56 @@ bool UNPPhotoCapturePenaltyComponent::ApplyCapturedWithRelicPenalty(
 		return false;
 	}
 
+	UNPAbilitySystemComponent* AbilitySystem = ResolveAbilitySystem();
+	if (!AbilitySystem)
+	{
+		UE_LOG(
+			LogNPPhoto,
+			Error,
+			TEXT("[PhotoStun][Apply] Rejected: ASC is missing. Pawn=%s"),
+			*GetNameSafe(Pawn));
+		return false;
+	}
+
+	const float SafeStunDuration = FMath::Max(0.01f, StunDuration);
+	FGameplayEffectContextHandle EffectContext = AbilitySystem->MakeEffectContext();
+	EffectContext.AddSourceObject(this);
+	FGameplayEffectSpecHandle EffectSpec = AbilitySystem->MakeOutgoingSpec(
+		UNPPhotoStunGameplayEffect::StaticClass(),
+		1.0f,
+		EffectContext);
+	if (!EffectSpec.IsValid())
+	{
+		UE_LOG(
+			LogNPPhoto,
+			Error,
+			TEXT("[PhotoStun][Apply] Failed to create GameplayEffect spec. Pawn=%s"),
+			*GetNameSafe(Pawn));
+		return false;
+	}
+	EffectSpec.Data->SetDuration(SafeStunDuration, true);
+	const FActiveGameplayEffectHandle EffectHandle =
+		AbilitySystem->ApplyGameplayEffectSpecToSelf(*EffectSpec.Data.Get());
+	if (!EffectHandle.IsValid())
+	{
+		UE_LOG(
+			LogNPPhoto,
+			Error,
+			TEXT("[PhotoStun][Apply] GameplayEffect application failed. Pawn=%s"),
+			*GetNameSafe(Pawn));
+		return false;
+	}
+
 	// 유물 자체를 떨어뜨리는 규칙이므로 함께 잡은 다른 플레이어의 Grab도 해제합니다.
 	Grabbable->ForceReleaseAllGrabs();
 
-	const float SafeStunDuration = FMath::Max(0.01f, StunDuration);
-	bPhotoStunActive = true;
-	PhotoStunEndServerTime = World->GetTimeSeconds() + SafeStunDuration;
 	UE_LOG(
 		LogNPPhoto,
 		Warning,
-		TEXT("[PhotoStun][Apply] Activated. Pawn=%s Duration=%.2f EndTime=%.3f"),
+		TEXT("[PhotoStun][Apply] GameplayEffect activated. Pawn=%s Duration=%.2f Handle=%s"),
 		*GetNameSafe(Pawn),
 		SafeStunDuration,
-		PhotoStunEndServerTime);
-	ApplyStunStateLocally();
-
-	World->GetTimerManager().SetTimer(
-		StunTimer,
-		this,
-		&ThisClass::FinishStunPenalty,
-		SafeStunDuration,
-		false);
+		*EffectHandle.ToString());
 	if (AppliedPhotoPenalty > 0)
 	{
 		if (UNPScoreFeedbackWidgetComponent* ScoreFeedback =
@@ -143,26 +172,24 @@ bool UNPPhotoCapturePenaltyComponent::ApplyCapturedWithRelicPenalty(
 				PriceReductionMessageDuration);
 		}
 	}
-	Pawn->ForceNetUpdate();
 	return true;
 }
 
-void UNPPhotoCapturePenaltyComponent::OnRep_PhotoStunActive()
+bool UNPPhotoCapturePenaltyComponent::IsPhotoStunActive() const
 {
-	const APawn* Pawn = Cast<APawn>(GetOwner());
-	UE_LOG(
-		LogNPPhoto,
-		Warning,
-		TEXT("[PhotoStun][Rep] Pawn=%s Active=%s EndTime=%.3f LocalRole=%s LocallyControlled=%s"),
-		*GetNameSafe(Pawn),
-		bPhotoStunActive ? TEXT("true") : TEXT("false"),
-		PhotoStunEndServerTime,
-		Pawn ? *UEnum::GetValueAsString(Pawn->GetLocalRole()) : TEXT("None"),
-		Pawn && Pawn->IsLocallyControlled() ? TEXT("true") : TEXT("false"));
-	ApplyStunStateLocally();
+	const UNPAbilitySystemComponent* AbilitySystem = ResolveAbilitySystem();
+	return AbilitySystem && AbilitySystem->HasMatchingGameplayTag(
+		NPGameplayTags::State_CrowdControl_Stunned);
 }
 
-void UNPPhotoCapturePenaltyComponent::ApplyStunStateLocally()
+void UNPPhotoCapturePenaltyComponent::HandleStunTagChanged(
+	const FGameplayTag,
+	const int32 NewCount)
+{
+	ApplyStunStateLocally(NewCount > 0);
+}
+
+void UNPPhotoCapturePenaltyComponent::ApplyStunStateLocally(const bool bStunned)
 {
 	ANPReplicatedStablePhysicsPawn* Pawn =
 		Cast<ANPReplicatedStablePhysicsPawn>(GetOwner());
@@ -171,9 +198,18 @@ void UNPPhotoCapturePenaltyComponent::ApplyStunStateLocally()
 		return;
 	}
 
-	if (bPhotoStunActive)
+	if (bStunned)
 	{
 		Pawn->StopMovementInput();
+	}
+
+	if (bStunned)
+	{
+		if (UNPAbilitySystemComponent* AbilitySystem = ResolveAbilitySystem())
+		{
+			AbilitySystem->CancelRelicAimAbility();
+			AbilitySystem->CancelPhotoAimAbility();
+		}
 	}
 
 	UNPPhotoStunVisualComponent* StunVisual =
@@ -183,25 +219,20 @@ void UNPPhotoCapturePenaltyComponent::ApplyStunStateLocally()
 		Warning,
 		TEXT("[PhotoStun][VisualLookup] Pawn=%s Active=%s Visual=%s"),
 		*GetNameSafe(Pawn),
-		bPhotoStunActive ? TEXT("true") : TEXT("false"),
+		bStunned ? TEXT("true") : TEXT("false"),
 		*GetNameSafe(StunVisual));
 	if (StunVisual)
 	{
-		StunVisual->SetStunVisualActive(bPhotoStunActive);
+		StunVisual->SetStunVisualActive(bStunned);
 	}
 }
 
-void UNPPhotoCapturePenaltyComponent::FinishStunPenalty()
+UNPAbilitySystemComponent*
+UNPPhotoCapturePenaltyComponent::ResolveAbilitySystem() const
 {
-	ANPReplicatedStablePhysicsPawn* Pawn =
+	const ANPReplicatedStablePhysicsPawn* Pawn =
 		Cast<ANPReplicatedStablePhysicsPawn>(GetOwner());
-	if (!IsValid(Pawn) || !Pawn->HasAuthority())
-	{
-		return;
-	}
-
-	bPhotoStunActive = false;
-	PhotoStunEndServerTime = 0.0f;
-	ApplyStunStateLocally();
-	Pawn->ForceNetUpdate();
+	return Pawn
+		? Cast<UNPAbilitySystemComponent>(Pawn->GetAbilitySystemComponent())
+		: nullptr;
 }

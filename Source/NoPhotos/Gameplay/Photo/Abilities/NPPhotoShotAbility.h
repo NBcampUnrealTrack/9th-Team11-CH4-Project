@@ -1,18 +1,16 @@
 #pragma once
 
 #include "Abilities/GameplayAbility.h"
-#include "NPRelicAimAbility.generated.h"
+#include "NPPhotoShotAbility.generated.h"
 
-class ANPStablePhysicsPawn;
-class UGrabbableComponent;
-
+/** 실제 Scene Capture 작업을 PhotoCaptureComponent에 위임하는 단발 Ability입니다. */
 UCLASS()
-class NOPHOTOS_API UNPRelicAimAbility : public UGameplayAbility
+class NOPHOTOS_API UNPPhotoShotAbility : public UGameplayAbility
 {
 	GENERATED_BODY()
 
 public:
-	UNPRelicAimAbility();
+	UNPPhotoShotAbility();
 
 protected:
 	virtual bool CanActivateAbility(
@@ -21,21 +19,10 @@ protected:
 		const FGameplayTagContainer* SourceTags = nullptr,
 		const FGameplayTagContainer* TargetTags = nullptr,
 		FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
+
 	virtual void ActivateAbility(
 		FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo,
 		FGameplayAbilityActivationInfo ActivationInfo,
 		const FGameplayEventData* TriggerEventData) override;
-	virtual void EndAbility(
-		FGameplayAbilitySpecHandle Handle,
-		const FGameplayAbilityActorInfo* ActorInfo,
-		FGameplayAbilityActivationInfo ActivationInfo,
-		bool bReplicateEndAbility,
-		bool bWasCancelled) override;
-
-private:
-	void HandleGrabCountChanged(int32 ActiveGrabCount);
-
-	TWeakObjectPtr<ANPStablePhysicsPawn> AimPawn;
-	TWeakObjectPtr<UGrabbableComponent> AimGrabbable;
 };

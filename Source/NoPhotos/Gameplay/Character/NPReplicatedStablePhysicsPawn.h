@@ -10,14 +10,12 @@
 
 class UPrimitiveComponent;
 class UChildActorComponent;
-class UNiagaraComponent;
 class UAbilitySystemComponent;
 class AController;
 class FLifetimeProperty;
 class UNPAbilitySystemComponent;
 class UNPInvisibilityComponent;
 class UNPControlReversalComponent;
-class UNPControlReversalVisualComponent;
 class UNPStatusVisualComponent;
 class UNPVisionRestrictionComponent;
 class UNPStablePhysicsNetworkPredictionComponent;
@@ -238,17 +236,8 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Control Reversal", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UNPControlReversalComponent> ControlReversal;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Control Reversal", meta=(AllowPrivateAccess="true"))
-	TObjectPtr<UNPControlReversalVisualComponent> ControlReversalVisual;
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Status Visual", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UNPStatusVisualComponent> StatusVisual;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Lava", meta=(AllowPrivateAccess="true"))
-	TObjectPtr<UNiagaraComponent> LavaFireLeft;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Lava", meta=(AllowPrivateAccess="true"))
-	TObjectPtr<UNiagaraComponent> LavaFireRight;
 
 	UPROPERTY(EditDefaultsOnly, Category="Input")
 	TObjectPtr<UInputAction> RelicUseAction;

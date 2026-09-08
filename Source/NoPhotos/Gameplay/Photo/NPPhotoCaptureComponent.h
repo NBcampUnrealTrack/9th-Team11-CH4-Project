@@ -32,6 +32,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Photo")
 	bool TakePhoto();
 
+	/** Ability가 쿨다운을 소비하기 전에 로컬 카메라 상태를 검사합니다. */
+	bool CanTakePhotoLocally() const;
+
 	UFUNCTION(BlueprintCallable, Category="Photo")
 	void TogglePhotoMode();
 
@@ -82,9 +85,6 @@ private:
 		FVector_NetQuantizeNormal CameraForward,
 		uint16 CaptureSequence);
 
-	UFUNCTION(Server, Reliable)
-	void ServerSetPhotoModeActive(bool bActive);
-
 	UFUNCTION(Client, Reliable)
 	void ClientReceivePhotoResult(const FNPPhotoEvidenceResult& Result);
 
@@ -102,11 +102,9 @@ private:
 
 	TMap<uint16, TArray<uint8>> PendingJpegPhotos;
 
-	double LastLocalCaptureTime = -TNumericLimits<double>::Max();
 	double LastServerCaptureTime = -TNumericLimits<double>::Max();
 	uint16 NextCaptureSequence = 0;
 	bool bPhotoAttemptInProgress = false;
 	bool bPhotoModeActive = false;
-	bool bServerPhotoModeActive = false;
 	TWeakObjectPtr<ANPStablePhysicsPawn> PhotoModePawn;
 };

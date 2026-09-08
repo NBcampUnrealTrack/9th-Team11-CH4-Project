@@ -16,6 +16,10 @@ UNPRelicAimAbility::UNPRelicAimAbility()
 	Tags.AddTag(NPGameplayTags::Ability_Relic);
 	Tags.AddTag(NPGameplayTags::Ability_Relic_Aim);
 	SetAssetTags(Tags);
+	ActivationOwnedTags.AddTag(NPGameplayTags::State_Relic_Aiming);
+	ActivationBlockedTags.AddTag(
+		NPGameplayTags::State_CrowdControl_Stunned);
+	ActivationBlockedTags.AddTag(NPGameplayTags::State_Photo_Aiming);
 }
 
 bool UNPRelicAimAbility::CanActivateAbility(
@@ -75,12 +79,6 @@ void UNPRelicAimAbility::ActivateAbility(
 	AimGrabbable->OnActiveGrabCountChanged.AddUObject(
 		this,
 		&UNPRelicAimAbility::HandleGrabCountChanged);
-	if (ActorInfo->AbilitySystemComponent.IsValid())
-	{
-		ActorInfo->AbilitySystemComponent->AddLooseGameplayTag(
-			NPGameplayTags::State_Relic_Aiming);
-		bAimingTagAdded = true;
-	}
 	Pawn->SetRelicAimViewActive(true);
 }
 
@@ -102,14 +100,6 @@ void UNPRelicAimAbility::EndAbility(
 		AimPawn->SetRelicAimViewActive(false);
 	}
 	AimPawn.Reset();
-
-	if (bAimingTagAdded && ActorInfo
-		&& ActorInfo->AbilitySystemComponent.IsValid())
-	{
-		ActorInfo->AbilitySystemComponent->RemoveLooseGameplayTag(
-			NPGameplayTags::State_Relic_Aiming);
-	}
-	bAimingTagAdded = false;
 
 	Super::EndAbility(
 		Handle,
