@@ -11,7 +11,7 @@ class ANPRelicCase;
 class ANPStablePhysicsPawn;
 class UAbilitySystemComponent;
 
-/** 등 뒤 유령, 서버 GAS 이동 반전, 이벤트 동안의 진열장 임시 해제를 관리합니다. */
+/** 추격 유령, 서버 GAS 이동 반전, 이벤트 동안의 진열장 임시 해제를 관리합니다. */
 UCLASS(Blueprintable)
 class NOPHOTOS_API ANPPossessionMapEvent : public ANPMapEvent
 {
@@ -19,7 +19,6 @@ class NOPHOTOS_API ANPPossessionMapEvent : public ANPMapEvent
 
 public:
 	ANPPossessionMapEvent();
-	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	/** 서버 Roaming 유령이 플레이어와 접촉했을 때 해당 플레이어에게만 빙의를 적용합니다. */
 	void HandleRoamingGhostContact(ANPGhostFollowerActor* Ghost, ANPStablePhysicsPawn* PlayerPawn);
@@ -29,7 +28,7 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void ApplyEventState_Implementation(bool bNewActive) override;
 
-	/** NPGhostFollowerActor 자식 BP에 외형을 지정한 후 연결합니다. */
+	/** RoamingGhostClass가 비어 있을 때 사용할 추격 유령 BP입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Possession Event")
 	TSubclassOf<ANPGhostFollowerActor> GhostClass;
 
@@ -53,7 +52,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Possession Event|Roaming Ghost", meta=(ClampMin="0.1", Units="s"))
 	float ChaseTargetDuration = 10.0f;
 
-	/** 플레이어와 접촉한 순간부터 등 뒤 유령과 입력 반전을 유지할 시간입니다. */
+	/** 플레이어와 접촉한 순간부터 입력 반전을 유지할 시간입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Possession Event|Roaming Ghost", meta=(ClampMin="0.1", Units="s"))
 	float PossessionDuration = 5.0f;
 
@@ -61,15 +60,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Possession Event|Roaming Ghost", meta=(ClampMin="0.0", Units="s"))
 	float PostPossessionContactDelay = 1.5f;
 
-	/** 서버 대상 목록과 로컬 표시 갱신 주기. 중도 접속/리스폰/복제 지연도 함께 처리합니다. */
+	/** 서버 대상 목록과 효과 갱신 주기입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Possession Event", meta=(ClampMin="0.05", Units="s"))
 	float PlayerRefreshInterval = 0.2f;
 
 private:
 	void UpdateTrackingState();
 	void RefreshPlayersAndGhosts();
-	void RefreshLocalGhosts();
-	void ClearLocalGhosts(bool bImmediately = false);
 	void RefreshAppliedEffects();
 	void RemoveAppliedEffects();
 	void RefreshRelicCases();
@@ -79,14 +76,10 @@ private:
 	ANPStablePhysicsPawn* SelectRandomChaseTarget() const;
 	void DestroyRoamingGhost();
 
-	UFUNCTION()
-	void OnRep_AffectedPlayers();
-
-	/** 클라이언트에는 타인의 PlayerController가 없으므로 서버가 선정한 Pawn 목록을 복제합니다. */
-	UPROPERTY(ReplicatedUsing=OnRep_AffectedPlayers)
+	/** 서버가 이 이벤트의 효과를 적용할 대상입니다. 연출은 캐릭터의 GAS 태그를 사용합니다. */
+	UPROPERTY(Transient)
 	TArray<TObjectPtr<ANPStablePhysicsPawn>> AffectedPlayers;
 
-	TMap<TWeakObjectPtr<ANPStablePhysicsPawn>, TWeakObjectPtr<ANPGhostFollowerActor>> LocalGhosts;
 	TMap<TWeakObjectPtr<UAbilitySystemComponent>, FActiveGameplayEffectHandle> AppliedEffects;
 	TSet<TWeakObjectPtr<ANPRelicCase>> TemporarilyUnlockedCases;
 	FTimerHandle PlayerRefreshTimer;
@@ -98,7 +91,5 @@ private:
 	TWeakObjectPtr<ANPStablePhysicsPawn> CurrentChaseTarget;
 	TWeakObjectPtr<ANPStablePhysicsPawn> PreviousChaseTarget;
 
-	bool bWarnedMissingGhostClass = false;
-	bool bWarnedSpawnFailure = false;
 	bool bWarnedUnsupportedPawn = false;
 };

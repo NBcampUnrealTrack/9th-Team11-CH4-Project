@@ -11,7 +11,6 @@
 #include "Gameplay/MapEvents/NPMapEventManager.h"
 #include "Gameplay/MapEvents/NPMapEventSpawnPoint.h"
 #include "Kismet/GameplayStatics.h"
-#include "Net/UnrealNetwork.h"
 #include "NPGhostFollowerActor.h"
 #include "TimerManager.h"
 
@@ -23,16 +22,9 @@ ANPPossessionMapEvent::ANPPossessionMapEvent()
 	RoamingGhostSpawnGroup = FGameplayTag::RequestGameplayTag(FName(TEXT("Possession")), false);
 }
 
-void ANPPossessionMapEvent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(ANPPossessionMapEvent, AffectedPlayers);
-}
-
 void ANPPossessionMapEvent::BeginPlay()
 {
 	Super::BeginPlay();
-	// 초기 복제의 RepNotify가 BeginPlay보다 먼저 실행된 경우도 복원합니다.
 	UpdateTrackingState();
 }
 
@@ -98,7 +90,6 @@ void ANPPossessionMapEvent::BeginNextChaseCycle()
 		AffectedPlayers.Reset();
 		ForceNetUpdate();
 		RefreshAppliedEffects();
-		RefreshLocalGhosts();
 	}
 
 	const float ContactDelay = bRestartingAfterPossession && FMath::IsFinite(PostPossessionContactDelay)
@@ -272,7 +263,6 @@ void ANPPossessionMapEvent::HandleRoamingGhostContact(
 
 	Ghost->ConsumeRoamingGhost();
 	RefreshAppliedEffects();
-	RefreshLocalGhosts();
 	GetWorldTimerManager().ClearTimer(ChaseCycleTimer);
 	const float SafePossessionDuration = FMath::IsFinite(PossessionDuration)
 		? FMath::Max(0.1f, PossessionDuration) : 5.0f;
@@ -288,12 +278,15 @@ void ANPPossessionMapEvent::HandleRoamingGhostContact(
 
 void ANPPossessionMapEvent::UpdateTrackingState()
 {
+	if (!HasAuthority())
+	{
+		return;
+	}
 	GetWorldTimerManager().ClearTimer(PlayerRefreshTimer);
 	if (!IsEventActive())
 	{
 		RemoveTemporaryCaseUnlocks();
 		RemoveAppliedEffects();
-		ClearLocalGhosts();
 		if (HasAuthority() && !AffectedPlayers.IsEmpty())
 		{
 			AffectedPlayers.Reset();
@@ -301,8 +294,6 @@ void ANPPossessionMapEvent::UpdateTrackingState()
 		}
 		return;
 	}
-	bWarnedMissingGhostClass = false;
-	bWarnedSpawnFailure = false;
 	bWarnedUnsupportedPawn = false;
 	RefreshPlayersAndGhosts();
 	if (!IsEventActive() || IsActorBeingDestroyed())
@@ -320,13 +311,6 @@ void ANPPossessionMapEvent::RefreshPlayersAndGhosts()
 	if (!World || !IsEventActive())
 	{
 		return;
-	}
-	if (!AffectedPlayers.IsEmpty()
-		&& (!GhostClass || GhostClass->HasAnyClassFlags(CLASS_Abstract))
-		&& !bWarnedMissingGhostClass)
-	{
-		UE_LOG(LogNPPossessionEvent, Warning, TEXT("빙의 유령 클래스 없음: Event=%s. 이벤트 BP의 GhostClass에 NPGhostFollowerActor 자식 BP를 지정하세요."), *GetName());
-		bWarnedMissingGhostClass = true;
 	}
 	if (HasAuthority())
 	{
@@ -367,7 +351,6 @@ void ANPPossessionMapEvent::RefreshPlayersAndGhosts()
 		}
 		RefreshAppliedEffects();
 	}
-	RefreshLocalGhosts();
 }
 
 void ANPPossessionMapEvent::RefreshRelicCases()
@@ -516,126 +499,6 @@ void ANPPossessionMapEvent::RemoveAppliedEffects()
 	}
 }
 
-void ANPPossessionMapEvent::OnRep_AffectedPlayers()
-{
-	if (HasActorBegunPlay())
-	{
-		RefreshLocalGhosts();
-	}
-}
-
-void ANPPossessionMapEvent::RefreshLocalGhosts()
-{
-	if (!IsEventActive() || GetNetMode() == NM_DedicatedServer)
-	{
-		ClearLocalGhosts();
-		return;
-	}
-	TSet<TWeakObjectPtr<ANPStablePhysicsPawn>> DesiredPlayers;
-	for (ANPStablePhysicsPawn* Pawn : AffectedPlayers)
-	{
-		// 타깃 NetGUID가 아직 해결되지 않았거나 Pawn이 초기화 중이면 다음 갱신에서 재시도합니다.
-		if (IsValid(Pawn) && !Pawn->IsActorBeingDestroyed() && Pawn->HasActorBegunPlay())
-		{
-			DesiredPlayers.Add(Pawn);
-		}
-	}
-	TArray<TWeakObjectPtr<ANPGhostFollowerActor>> GhostsToRemove;
-	for (auto It = LocalGhosts.CreateIterator(); It; ++It)
-	{
-		if (!DesiredPlayers.Contains(It.Key()) || !It.Value().IsValid())
-		{
-			GhostsToRemove.Add(It.Value());
-			It.RemoveCurrent();
-		}
-	}
-	for (const TWeakObjectPtr<ANPGhostFollowerActor>& GhostPtr : GhostsToRemove)
-	{
-		if (ANPGhostFollowerActor* Ghost = GhostPtr.Get())
-		{
-			Ghost->RequestFadeOut();
-		}
-	}
-	if (!IsEventActive() || IsActorBeingDestroyed())
-	{
-		return;
-	}
-	if (!GhostClass || GhostClass->HasAnyClassFlags(CLASS_Abstract))
-	{
-		ClearLocalGhosts();
-		return;
-	}
-	for (const TWeakObjectPtr<ANPStablePhysicsPawn>& TargetKey : DesiredPlayers)
-	{
-		if (LocalGhosts.Contains(TargetKey))
-		{
-			continue;
-		}
-		ANPStablePhysicsPawn* Target = TargetKey.Get();
-		if (!IsValid(Target))
-		{
-			continue;
-		}
-		FActorSpawnParameters Params;
-		Params.Owner = this;
-		Params.OverrideLevel = GetWorld()->PersistentLevel;
-		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		Params.bDeferConstruction = true;
-		const FTransform SpawnTransform(Target->GetVisualFacingRotation(), Target->GetActorLocation());
-		ANPGhostFollowerActor* Ghost = GetWorld()->SpawnActor<ANPGhostFollowerActor>(GhostClass, SpawnTransform, Params);
-		if (IsValid(Ghost) && Ghost->InitializeFollower(Target))
-		{
-			UGameplayStatics::FinishSpawningActor(Ghost, Ghost->GetActorTransform());
-			// BP Construction 이후에도 서버의 화면용 Follower가 클라이언트로 복제되지 않게 보장합니다.
-			if (IsValid(Ghost))
-			{
-				Ghost->SetReplicates(false);
-				Ghost->SetReplicateMovement(false);
-			}
-			if (IsValid(Ghost) && IsEventActive() && !IsActorBeingDestroyed())
-			{
-				LocalGhosts.Add(TargetKey, Ghost);
-				continue;
-			}
-		}
-		if (IsValid(Ghost))
-		{
-			Ghost->Destroy();
-		}
-		if (!IsEventActive() || IsActorBeingDestroyed())
-		{
-			return;
-		}
-		if (!bWarnedSpawnFailure)
-		{
-			UE_LOG(LogNPPossessionEvent, Warning, TEXT("빙의 유령 생성 실패: Event=%s Class=%s. 유령 BP의 Construction/BeginPlay 설정을 확인하세요."),
-				*GetName(), *GetNameSafe(GhostClass.Get()));
-			bWarnedSpawnFailure = true;
-		}
-	}
-}
-
-void ANPPossessionMapEvent::ClearLocalGhosts(bool bImmediately)
-{
-	// 유령 BP의 종료 콜백이 이벤트 상태를 바꾸더라도 순회 중인 컨테이너는 유지합니다.
-	const auto GhostsToDestroy = MoveTemp(LocalGhosts);
-	LocalGhosts.Reset();
-	for (const auto& Entry : GhostsToDestroy)
-	{
-		if (ANPGhostFollowerActor* Ghost = Entry.Value.Get())
-		{
-			if (bImmediately)
-			{
-				Ghost->Destroy();
-			}
-			else
-			{
-				Ghost->RequestFadeOut();
-			}
-		}
-	}
-}
-
 void ANPPossessionMapEvent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	GetWorldTimerManager().ClearTimer(PlayerRefreshTimer);
@@ -643,8 +506,6 @@ void ANPPossessionMapEvent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	RemoveTemporaryCaseUnlocks();
 	RemoveAppliedEffects();
 	DestroyRoamingGhost();
-	// 게임 중 이벤트 액터 파괴는 페이드, 레벨/PIE 종료는 지연 없이 정리합니다.
-	ClearLocalGhosts(EndPlayReason != EEndPlayReason::Destroyed);
 	AffectedPlayers.Reset();
 	CurrentChaseTarget.Reset();
 	PreviousChaseTarget.Reset();
