@@ -44,7 +44,9 @@ bool UNPRelicUseAbility::CanActivateAbility(
 		? Relic->FindComponentByClass<UGrabbableComponent>()
 		: nullptr;
 	return SwingableRelic
+		&& SwingableRelic->CanStartSwing()
 		&& GrabbableRelic
+		&& SwingableRelic->CanStartSwing()
 		&& GrabbableRelic->GetActiveGrabCount() == 1
 		&& Cast<ANPStablePhysicsPawn>(ActorInfo->AvatarActor.Get());
 }
@@ -126,6 +128,11 @@ void UNPRelicUseAbility::EndAbility(
 	bool bReplicateEndAbility,
 	bool bWasCancelled)
 {
+	if (bSwingStarted && SwingableRelicComponent.IsValid())
+	{
+		SwingableRelicComponent->StartSwingCooldown();
+	}
+
 	if (SwingableRelicComponent.IsValid())
 	{
 		SwingableRelicComponent->StopHitDetection();

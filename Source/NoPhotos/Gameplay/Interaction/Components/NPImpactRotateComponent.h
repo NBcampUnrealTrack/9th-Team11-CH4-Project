@@ -7,7 +7,7 @@
 class UPrimitiveComponent;
 class AActor;
 
-/** 충격의 방향과 세기에 따라 소유 액터를 좌우로 회전시키는 기믹 컴포넌트입니다. */
+/** 충격의 좌우 방향과 세기에 따라 소유 액터의 Z축만 회전시키는 기믹 컴포넌트입니다. */
 UCLASS(ClassGroup=(Interaction), meta=(BlueprintSpawnableComponent))
 class NOPHOTOS_API UNPImpactRotateComponent : public UActorComponent
 {
@@ -50,7 +50,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Impact Rotation|Strength", meta=(ClampMin="0.0", Units="deg"))
 	float MaximumRotationPerImpact = 45.0f;
 
-	/** 초기 방향을 기준으로 누적할 수 있는 최대 좌우 회전 범위입니다. */
+	/** 초기 방향을 기준으로 누적할 수 있는 최대 Z축 회전 범위입니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Impact Rotation|Movement", meta=(ClampMin="0.0", Units="deg"))
 	float MaximumYawOffset = 120.0f;
 
@@ -58,7 +58,7 @@ protected:
 	float RotationInterpSpeed = 10.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Impact Rotation|Return")
-	bool bReturnToInitialRotation = true;
+	bool bReturnToInitialRotation = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Impact Rotation|Return", meta=(ClampMin="0.0", Units="s"))
 	float ReturnDelay = 0.4f;
@@ -69,7 +69,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Impact Rotation", meta=(ClampMin="0.0", Units="s"))
 	float ImpactCooldown = 0.05f;
 
-	/** 메시의 앞뒤 방향 때문에 회전 방향이 반대로 느껴질 때 사용합니다. */
+	/** 메시의 방향 때문에 좌우 회전 방향이 반대로 느껴질 때 사용합니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Impact Rotation")
 	bool bInvertRotationDirection = false;
 

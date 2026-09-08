@@ -15,6 +15,10 @@ struct NOPHOTOS_API FNPRelicSwingSettings
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Swing", meta=(ClampMin="0.01", Units="s"))
 	float Duration = 0.5f;
 
+	/** 한 번 휘두르기가 끝난 뒤 다음 사용 입력을 받을 때까지의 대기시간입니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Swing", meta=(ClampMin="0.0", Units="s"))
+	float CooldownAfterSwing = 0.25f;
+
 	/** 부호에 따라 회전 방향이 결정됩니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Swing")
 	float Torque = -1500000.0f;
@@ -75,6 +79,8 @@ public:
 	{
 		return SwingSettings;
 	}
+	bool CanStartSwing() const;
+	void StartSwingCooldown();
 
 	void StartHitDetection(
 		AActor* InAttackInstigator,
@@ -106,6 +112,7 @@ private:
 	TMap<TWeakObjectPtr<AActor>, double> LastHitTimes;
 	bool bHitDetectionActive = false;
 	bool bPreviousNotifyRigidBodyCollision = false;
+	double NextSwingAllowedTime = 0.0;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic Ability", meta=(AllowPrivateAccess="true"))
 	FNPRelicSwingSettings SwingSettings;

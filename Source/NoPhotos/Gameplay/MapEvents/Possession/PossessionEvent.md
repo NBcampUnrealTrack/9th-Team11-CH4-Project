@@ -1,36 +1,66 @@
-# 빙의 이벤트: 등 뒤 유령, WASD 이동 반전, 진열장 잠금 해제
+# 빙의 이벤트: 순찰 유령, GAS 선회 연출, WASD 이동 반전
 
-이벤트 동안 플레이어마다 등 뒤 유령을 표시하고 **전후(W↔S)와 좌우(A↔D) 이동을 모두 반전**하며, **맵의 모든 NPRelicCase 진열장을 임시 개방**합니다. 마우스 시점, 점프, 사용 키는 유지합니다. 피해/공격/AI, 사진 판정, UI는 변경하지 않습니다.
+순찰 유령과 접촉한 플레이어에게 GAS 효과를 적용합니다. 효과가 유지되는 동안 유령 네 개가 캐릭터 주변을 선회하고 **전후(W↔S)와 좌우(A↔D) 이동을 모두 반전**합니다. 이벤트 동안 맵의 모든 NPRelicCase 진열장도 임시 개방합니다.
 
 기존 유령 이벤트 설정이 완료되어 있다면 사용자 빌드 및 에디터 재시작 후 이벤트 BP의 **Possession Event → Reverse Horizontal Input**(기본 켜짐)만 확인하세요. 입력 매핑 변경, GE BP 생성, 태그 수동 등록, 캐릭터 BP에 컴포넌트 추가는 필요하지 않습니다.
 
 기존 BP 설정을 보존하기 위해 옵션 이름은 유지합니다. 여기서 Horizontal은 수평면 전체로, 이제 W/S와 A/D 모두를 제어합니다.
 
+## 순찰 고스트 (현재 단계)
+
+- 이벤트 시작 시 서버가 `Roaming Ghost Count`만큼 고스트를 생성합니다. 기본값은 3마리이며 BP Class Defaults에서 조절할 수 있습니다.
+- 각 고스트는 `Roaming Ghost Route Group`과 같은 그룹의 `NPGhostPatrolRoute` 중 아직 사용되지 않은 루트를 개별적으로 선택합니다. 한 루트에는 순찰 고스트 한 마리만 배정됩니다.
+- 고스트는 겹침을 줄이기 위해 선택한 Spline의 임의 위치와 임의 방향으로 생성되며, 끝에 닿으면 방향을 바꿔 계속 왕복합니다.
+- 위치와 회전은 서버에서 계산하고 Replicate Movement로 클라이언트에 전달합니다. 벽 회피/NavMesh 이동은 사용하지 않습니다.
+- 순찰 중 가장 가까운 플레이어가 `Roaming Player Detection Radius` 안에 들어오면 루트를 벗어나 플레이어를 추격합니다.
+- 추격 대상이 `Roaming Chase Release Radius` 밖으로 멀어지면 추격을 해제하고 Spline에서 가장 가까운 지점으로 복귀한 뒤 왕복 순찰을 계속합니다.
+- 감지 거리보다 해제 거리를 크게 사용하므로 경계에서 순찰과 추격이 반복 전환되는 현상을 줄입니다.
+- 고스트가 플레이어와 `Roaming Contact Radius` 이내로 접촉하면 기존 빙의 처리를 실행합니다.
+- 빙의 시간이 끝나면 플레이어 위치가 아니라 순찰 루트의 임의 위치에서 새 고스트가 다시 시작합니다.
+- 고스트 한 마리가 플레이어와 접촉해 빙의 중일 때도 나머지 고스트는 계속 순찰합니다. 플레이어별 빙의 시간이 끝나면 비어 있던 한 자리를 다시 생성합니다.
+- 이미 빙의된 플레이어와 다른 순찰 고스트가 접촉해도 그 고스트는 소비되지 않습니다.
+
+### 순찰 루트 배치
+
+1. 고스트 이벤트가 로드되는 레벨에 **NPGhostPatrolRoute**를 배치합니다.
+2. Spline 점을 이동해 원하는 경로를 만듭니다. 기본은 열린 Spline이며 최소 두 점이 필요합니다.
+3. Route의 **Route Group**과 `BP_PossessionEvent`의 **Roaming Ghost Route Group**을 둘 다 `Possession`으로 맞춥니다.
+4. `BP_GhostFollower`의 **Roaming Patrol Speed**로 왕복 속도를 조절합니다. 기본값은 200cm/s입니다.
+5. `BP_PossessionEvent`의 **Roaming Ghost Count**로 동시 고스트 수를 설정합니다. 기본값은 3입니다.
+6. 같은 그룹의 Route를 고스트 수와 동일하게 배치합니다. 루트 3개와 고스트 3마리라면 각 루트에 한 마리씩 배정됩니다. 루트가 고스트 수보다 적으면 중복 배치하지 않고 사용 가능한 루트 수만큼만 생성합니다.
+
+`BP_GhostFollower → Ghost Follower → Roaming`에서 추격 값을 설정합니다.
+
+| 설정 | 기본값 | 의미 |
+| --- | --- | --- |
+| Roaming Player Detection Radius | 600cm | 순찰 중 플레이어를 발견하는 거리 |
+| Roaming Chase Release Radius | 900cm | 추격을 포기하고 루트로 돌아가는 거리 |
+| Roaming Chase Decision Interval | 0.2초 | 감지/해제를 다시 검사하는 주기 |
+| Roaming Chase Speed | 350cm/s | 플레이어 추격 속도 |
+| Roaming Route Return Speed | 250cm/s | 가장 가까운 루트 지점으로 복귀하는 속도 |
+| Roaming Route Return Acceptance Radius | 25cm | 순찰 재개로 판정할 루트 접근 거리 |
+
+루트가 없거나 점이 부족하면 고스트를 생성하지 않고 `Patrol Spawn Retry Interval`마다 다시 찾습니다. Output Log의 `빙의 유령 순찰 생성 대기` 메시지로 확인할 수 있습니다.
+
 ## 구조
 
-- `NPPossessionMapEvent`: 기존 `NPMapEvent` 수명과 DA Duration을 사용합니다. 서버가 PlayerController에서 현재 조종 중인 `NPStablePhysicsPawn` 계열 플레이어를 찾아 목록을 복제합니다. 별도 볼륨/Collector/경로는 없습니다.
-- `NPGhostFollowerActor`: 각 클라이언트와 Listen Server 화면에만 생성하는 비복제 외형입니다. 유령 AI나 서버 유령 액터는 만들지 않습니다. 모든 화면에서 자신과 다른 플레이어의 유령을 표시합니다(대상 캐릭터가 클라이언트에 복제되어 있을 때).
-- `NPPossessionGameplayEffect`: 서버가 대상 ASC에 적용하는 무기한 네이티브 GE입니다. `State.ControlsMirrored` 태그를 부여하고 이벤트가 자신의 효과 핸들만 제거합니다.
+- `NPPossessionMapEvent`: 서버가 각 루트에 순찰 유령을 한 마리씩 배정하고 플레이어별 빙의 시간, GE 핸들, 복제된 빙의 대상 목록을 관리합니다. 각 클라이언트는 이 목록으로 대상 캐릭터 뒤의 로컬 Follower를 생성합니다. SpawnVolume과 Collector는 사용하지 않습니다.
+- `NPGhostFollowerActor`: 순찰·추격 중 서버에서 이동하고 Replicate Movement로 위치를 전달합니다. 접촉하면 소비되고 빈 루트에 새 유령이 생성됩니다.
+- `NPPossessionGameplayEffect`: `State.ControlsMirrored`와 `GameplayCue.Status.ControlReversal`을 부여합니다. 효과 제거 시 태그와 Cue가 함께 정리됩니다.
+- `GCN_ControlReversal`: GAS Cue가 활성인 동안 캐릭터 주변에 유령 메시 네 개를 선회합니다. 기존 화면별 등 뒤 Follower도 함께 유지되며, 두 연출은 각각 Cue와 `NPPossessionMapEvent`가 관리합니다.
 - `NPControlReversalComponent`: `NPReplicatedStablePhysicsPawn`에 기본 생성됩니다. ASC 태그를 관찰하고 원본 이동 입력의 수평면 성분(X/Y)을 모두 반전해 이동 물리와 그랩 이동 의도에 함께 전달합니다. 수직 성분과 입력 크기는 유지합니다. 일반 `NPStablePhysicsPawn`에는 ASC/이 컴포넌트가 없어 유령만 표시되며 경고가 나옵니다.
-- 유령 위치는 캐릭터의 `GetVisualForwardDirection()`으로 계산한 수평 정면을 사용합니다. 기존 캐릭터의 메시 축 보정을 재사용하므로 캐릭터 코드를 추가 수정할 필요가 없습니다.
-
-```text
-유령 위치 = 캐릭터 루트 위치 - 수평 정면 × FollowDistance + 월드 위쪽 × HeightOffset
-```
-
-실제 외형은 목표 위치/회전을 부드럽게 따라갑니다. 순간이동처럼 거리가 벌어지면 즉시 재배치합니다. 물리 캐릭터의 PostPhysics 갱신 뒤에 추적하도록 Tick 의존성을 설정합니다.
 
 ## 에디터 설정 — 사용자가 진행
 
 빌드와 BP/DA/레벨 에셋 생성·수정은 사용자가 진행합니다.
 
-### 1. 유령 외형 BP
+### 1. 순찰 유령 BP와 GAS Cue
 
 1. 부모 **NPGhostFollowerActor**로 `BP_GhostFollower`를 만듭니다.
 2. 상속된 **GhostMesh**에 유령 Static Mesh를 지정합니다. 애니메이션이 필요한 Skeletal Mesh라면 **AnimatedGhostMesh**를 사용하세요. 두 메시를 모두 채울 필요는 없습니다.
 3. 모델이 반대 방향을 보면 **VisualRoot** 또는 메시의 상대 회전을 조절합니다. 유령 액터의 정면은 +X입니다. 피벗/크기도 VisualRoot 또는 개별 메시에서 보정합니다.
-4. 모든 외형의 **Simulate Physics를 끄고 Collision은 NoCollision**을 유지합니다. 유령의 **Replicates와 Replicate Movement는 모두 끕니다.**
-5. `Initial Life Span`은 0으로 유지하고 Tick을 켜둡니다. 별도 BP 이동 Tick/Timeline이나 Attach 처리는 추가하지 않아도 됩니다.
+4. 모든 외형의 **Simulate Physics를 끄고 Collision은 NoCollision**을 유지합니다. 복제와 이동은 네이티브 순찰 액터가 처리합니다.
+5. `Initial Life Span`은 0으로 유지합니다. 별도 BP 이동 Tick/Timeline이나 Attach 처리는 추가하지 않아도 됩니다.
 
 프로젝트에서 다음 Static Mesh 파일이 확인되었습니다. 자동 지정하지 않았으므로 원하는 외형을 골라 사용하세요.
 
@@ -42,10 +72,6 @@ Content/NoPhotos/Resources/Exturnal/PolyUniversalPack/Meshes/People/Seasons_Peop
 
 | 유령 BP 설정 | 기본값 | 의미 |
 | --- | --- | --- |
-| Follow Distance | 150cm | 캐릭터 정면 반대 방향으로 떨어진 거리 |
-| Height Offset | 70cm | 캐릭터 루트 기준 위쪽 높이. 메시 피벗에 맞게 조절 |
-| Follow Interp Speed | 8 | 위치/회전 추적 속도. 0이면 즉시 등 뒤에 붙음 |
-| Snap Distance | 600cm | 목표 위치와 이 거리 이상 벌어지면 즉시 재배치 |
 | Ghost Max Opacity | 0.35 | 등장 완료 후 알파. 0은 투명, 1은 최대 불투명도 |
 | Ghost Fade In Duration | 0.5초 | 등장 페이드 시간. 0이면 즉시 표시 |
 | Ghost Fade Out Duration | 0.5초 | 퇴장 페이드 시간. 0이면 즉시 제거 |
@@ -59,15 +85,17 @@ C++이 BeginPlay에서 GhostMesh, AnimatedGhostMesh 및 같은 액터의 추가 
 
 유령은 벽/플레이어를 밀거나 카메라 충돌을 만들지 않으며, 벽을 통과할 수 있는 시각 연출입니다.
 
+접촉 후 디버프 외형은 `/Game/NoPhotos/Blueprints/Ability/Cue/GCN_ControlReversal`에서 설정합니다. Gameplay Cue Tag는 `GameplayCue.Status.ControlReversal`이며 GhostMesh, Orbit Radius, Orbit Height, Orbit Speed와 Ghost Scale을 조절할 수 있습니다.
+
 ### 2. 빙의 이벤트 BP
 
 1. 부모 **NPPossessionMapEvent**로 `BP_PossessionEvent`를 만듭니다.
-2. Class Defaults의 **Possession Event → Ghost Class**에 `BP_GhostFollower`를 지정합니다.
+2. Class Defaults의 **Possession Event → Roaming Ghost Class**에 `BP_GhostFollower`를 지정합니다. 비어 있으면 Ghost Class를 대체값으로 사용합니다.
 3. **Player Refresh Interval**은 기본 0.2초로 두면 됩니다. **Reverse Horizontal Input**은 켜짐이 기본이며, 끄면 이전처럼 유령만 표시합니다.
 4. 이벤트 BP의 **Replicates / Always Relevant는 켜고 Replicate Movement는 끕니다.**
 5. Apply Event State를 BP에서 재정의하지 않아도 됩니다. 재정의한다면 부모 호출을 유지하세요.
 
-Ghost Class가 비어 있거나 추상 클래스이면 `LogNPPossessionEvent` 경고가 한 번 나오며 유령은 표시하지 않습니다. 입력 반전, 진열장 개방, 이벤트 Duration은 외형 유무와 별개로 유지됩니다.
+Roaming Ghost Class와 Ghost Class가 모두 비어 있거나 추상 클래스이면 순찰 유령을 생성하지 않습니다. 입력 반전, 진열장 개방, 이벤트 Duration은 외형 유무와 별개로 유지됩니다.
 
 ### 3. 이벤트 DA / 카탈로그
 
@@ -75,7 +103,7 @@ Ghost Class가 비어 있거나 추상 클래스이면 `LogNPPossessionEvent` �
 2. Event Class에 `BP_PossessionEvent`를 지정하고, Event Id(예: `Possession`), 표시 이름(예: `빙의`), Type, Scale을 설정합니다.
 3. Duration을 예를 들어 **30초**로 설정합니다. 0이면 기존 공통 이벤트 규칙대로 수동 종료 전까지 유지됩니다.
 4. 기존 `DA_EventCatalog → Event Entries`에 해당 DA와 선택 가중치를 넣습니다.
-5. 이 이벤트에는 **Location Level Instance, SpawnVolume, Collector, NavMesh, Gameplay Tag 설정이 필요 없습니다.**
+5. SpawnVolume, Collector, NavMesh는 필요 없습니다. `Possession` 태그는 이미 등록되어 있으므로 새 Gameplay Tag를 만들 필요가 없고, 고스트 이벤트가 로드되는 레벨에는 위의 `NPGhostPatrolRoute`가 있어야 합니다.
 
 메타데이터/기간은 DA, 유령 외형 클래스는 이벤트 BP, 외형·추적 거리·높이는 유령 BP가 관리합니다.
 
@@ -115,7 +143,7 @@ Ghost Class가 비어 있거나 추상 클래스이면 `LogNPPossessionEvent` �
 
 ## 검증
 
-요청에 따라 빌드/PIE/자동화 테스트는 실행하지 않습니다. `NPPossessionEventTests.cpp`에 유령 위치, 페이드 알파, WASD 반전 수학 테스트를 작성했습니다. 빌드 후 `NoPhotos.MapEvents.Possession` 필터에서 `GhostFollowTransform`, `GhostFadeOpacity`, `HorizontalInputReversal`을 실행할 수 있습니다. 자동화 소스는 계산을 검사하며 실제 머티리얼 표시/액터 수명/GAS 수명/복제 동작은 아래 수동 확인이 필요합니다.
+요청에 따라 빌드/PIE/자동화 테스트는 실행하지 않습니다. `NPPossessionEventTests.cpp`에 유령 위치, 페이드 알파, 왕복 거리, WASD 반전 수학 테스트를 작성했습니다. 빌드 후 `NoPhotos.MapEvents.Possession` 필터에서 `GhostFollowTransform`, `GhostFadeOpacity`, `GhostPatrolPingPong`, `HorizontalInputReversal`을 실행할 수 있습니다. 자동화 소스는 계산을 검사하며 실제 머티리얼 표시/액터 수명/GAS 수명/복제 동작은 아래 수동 확인이 필요합니다.
 
 수동 확인 항목(아직 실행하지 않음):
 

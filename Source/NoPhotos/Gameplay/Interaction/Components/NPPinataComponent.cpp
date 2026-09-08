@@ -17,6 +17,7 @@ void UNPPinataComponent::GetLifetimeReplicatedProps(
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
+	DOREPLIFETIME(UNPPinataComponent, DamageStage);
 	DOREPLIFETIME(UNPPinataComponent, bIsBroken);
 	DOREPLIFETIME(UNPPinataComponent, ReplicatedImpactLocation);
 }
@@ -52,7 +53,48 @@ void UNPPinataComponent::BeginPlay()
 	}
 
 	Super::BeginPlay();
+	OnDamaged.AddUObject(this, &ThisClass::HandleDurabilityDamaged);
 	OnDepleted.AddUObject(this, &ThisClass::HandleDurabilityDepleted);
+}
+
+void UNPPinataComponent::HandleDurabilityDamaged(
+	const int32,
+	const int32 InCurrentHealth,
+	const int32 InMaxHealth)
+{
+	AActor* Owner = GetOwner();
+	if (!Owner || !Owner->HasAuthority() || bIsBroken || InMaxHealth <= 0)
+	{
+		return;
+	}
+
+	const float HealthRatio = FMath::Clamp(
+		static_cast<float>(InCurrentHealth) / static_cast<float>(InMaxHealth),
+		0.0f,
+		1.0f);
+	const int32 NewDamageStage = CalculateDamageStage(HealthRatio);
+	if (DamageStage == NewDamageStage)
+	{
+		return;
+	}
+
+	DamageStage = NewDamageStage;
+	OnRep_DamageStage();
+	Owner->ForceNetUpdate();
+}
+
+int32 UNPPinataComponent::CalculateDamageStage(const float HealthRatio) const
+{
+	int32 NewDamageStage = 0;
+	for (const float Threshold : DamageStageHealthRatios)
+	{
+		if (FMath::IsFinite(Threshold)
+			&& HealthRatio <= FMath::Clamp(Threshold, 0.0f, 1.0f))
+		{
+			++NewDamageStage;
+		}
+	}
+	return NewDamageStage;
 }
 
 void UNPPinataComponent::HandleDurabilityDepleted(
@@ -149,6 +191,11 @@ void UNPPinataComponent::OnRep_IsBroken()
 	{
 		OnPinataBroken.Broadcast(ReplicatedImpactLocation);
 	}
+}
+
+void UNPPinataComponent::OnRep_DamageStage()
+{
+	OnPinataDamageStageChanged.Broadcast(DamageStage);
 }
 
 void UNPPinataComponent::DestroyOwner()

@@ -20,6 +20,23 @@ UNPSwingableRelicComponent::UNPSwingableRelicComponent()
 		UNPKnockbackGameplayEffect::StaticClass();
 }
 
+bool UNPSwingableRelicComponent::CanStartSwing() const
+{
+	const UWorld* World = GetWorld();
+	return World && World->GetTimeSeconds() >= NextSwingAllowedTime;
+}
+
+void UNPSwingableRelicComponent::StartSwingCooldown()
+{
+	if (const UWorld* World = GetWorld())
+	{
+		NextSwingAllowedTime = FMath::Max(
+			NextSwingAllowedTime,
+			World->GetTimeSeconds()
+				+ FMath::Max(0.0f, SwingSettings.CooldownAfterSwing));
+	}
+}
+
 void UNPSwingableRelicComponent::StartHitDetection(
 	AActor* InAttackInstigator,
 	UAbilitySystemComponent* InSourceAbilitySystem,

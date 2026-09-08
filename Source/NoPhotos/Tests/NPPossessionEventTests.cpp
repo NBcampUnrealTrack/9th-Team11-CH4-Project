@@ -39,6 +39,37 @@ bool FNPGhostFadeOpacityTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FNPGhostPatrolPingPongTest,
+	"NoPhotos.MapEvents.Possession.GhostPatrolPingPong",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FNPGhostPatrolPingPongTest::RunTest(const FString& Parameters)
+{
+	float Direction = 1.0f;
+	TestEqual(TEXT("Forward patrol advances along the route"),
+		ANPGhostFollowerActor::CalculatePingPongDistance(20.0f, 30.0f, 100.0f, Direction), 50.0f);
+	TestEqual(TEXT("Forward direction remains forward before the endpoint"), Direction, 1.0f);
+
+	TestEqual(TEXT("Patrol reflects excess travel at the far endpoint"),
+		ANPGhostFollowerActor::CalculatePingPongDistance(90.0f, 30.0f, 100.0f, Direction), 80.0f);
+	TestEqual(TEXT("Far endpoint changes direction to reverse"), Direction, -1.0f);
+
+	TestEqual(TEXT("Reverse patrol continues toward the start"),
+		ANPGhostFollowerActor::CalculatePingPongDistance(80.0f, 30.0f, 100.0f, Direction), 50.0f);
+	TestEqual(TEXT("Reverse direction remains reverse before the start"), Direction, -1.0f);
+
+	Direction = 1.0f;
+	TestEqual(TEXT("Large frames preserve multiple endpoint crossings"),
+		ANPGhostFollowerActor::CalculatePingPongDistance(20.0f, 250.0f, 100.0f, Direction), 70.0f);
+	TestEqual(TEXT("Direction after multiple crossings is correct"), Direction, 1.0f);
+
+	Direction = -1.0f;
+	TestEqual(TEXT("Invalid route length safely returns the route start"),
+		ANPGhostFollowerActor::CalculatePingPongDistance(20.0f, 30.0f, 0.0f, Direction), 0.0f);
+	TestEqual(TEXT("Invalid route length restores a finite direction"), Direction, 1.0f);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FNPControlReversalInputTest,
 	"NoPhotos.MapEvents.Possession.HorizontalInputReversal",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
