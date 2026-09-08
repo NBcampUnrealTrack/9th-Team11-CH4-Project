@@ -18,6 +18,8 @@ namespace NPGameplayTags
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Photo_Shot);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Relic_Aiming);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Photo_Aiming);
+	/** 사진 촬영 Ability를 다시 사용할 수 없는 상태입니다. */
+	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Photo_Shot);
 	/** 이동과 조준을 포함한 플레이 조작이 스턴으로 차단된 상태입니다. */
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_CrowdControl_Stunned);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Effect_Knockback);

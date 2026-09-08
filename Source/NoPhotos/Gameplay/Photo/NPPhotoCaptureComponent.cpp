@@ -4,6 +4,9 @@
 #include "Engine/Engine.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
+#include "Core/GameplayTag/NPGameplayTags.h"
+#include "Gameplay/AbilitySystem/NPAbilitySystemComponent.h"
+#include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
@@ -71,7 +74,6 @@ bool UNPPhotoCaptureComponent::EnterPhotoMode()
 	PhotoModePawn = StablePawn;
 	bPhotoModeActive = true;
 	StablePawn->SetPhotoViewActive(true);
-	ServerSetPhotoModeActive(true);
 	UE_LOG(LogNPPhoto, Log, TEXT("[PhotoMode] Entered. Pawn=%s"), *GetNameSafe(StablePawn));
 	return true;
 }
@@ -86,9 +88,24 @@ void UNPPhotoCaptureComponent::ExitPhotoMode()
 	if (bPhotoModeActive)
 	{
 		bPhotoModeActive = false;
-		ServerSetPhotoModeActive(false);
 		UE_LOG(LogNPPhoto, Log, TEXT("[PhotoMode] Exited."));
 	}
+}
+
+bool UNPPhotoCaptureComponent::CanTakePhotoLocally() const
+{
+	const APlayerController* PlayerController =
+		Cast<APlayerController>(GetOwner());
+	const ANPStablePhysicsPawn* Pawn = PlayerController
+		? Cast<ANPStablePhysicsPawn>(PlayerController->GetPawn())
+		: nullptr;
+	return PlayerController
+		&& PlayerController->IsLocalController()
+		&& GetWorld()
+		&& bPhotoModeActive
+		&& Pawn
+		&& Pawn->IsPhotoViewReady()
+		&& !IsPhotographerGrabbing();
 }
 
 bool UNPPhotoCaptureComponent::TakePhoto()
@@ -119,23 +136,11 @@ bool UNPPhotoCaptureComponent::TakePhoto()
 		return false;
 	}
 
-	const double CurrentTime = World->GetTimeSeconds();
 	if (IsPhotographerGrabbing())
 	{
 		UE_LOG(LogNPPhoto, Warning, TEXT("[Capture] Rejected locally: photographer is grabbing an object."));
 		return false;
 	}
-	const double ElapsedSinceLastCapture = CurrentTime - LastLocalCaptureTime;
-	if (ElapsedSinceLastCapture < PhotoCooldown)
-	{
-		UE_LOG(
-			LogNPPhoto,
-			Warning,
-			TEXT("[Capture] Rejected locally: cooldown. Remaining=%.2f"),
-			PhotoCooldown - ElapsedSinceLastCapture);
-		return false;
-	}
-
 	if (!SceneCapture || !PhotoRenderTarget)
 	{
 		UE_LOG(LogNPPhoto, Log, TEXT("[Capture] Initializing SceneCapture and RenderTarget."));
@@ -192,7 +197,6 @@ bool UNPPhotoCaptureComponent::TakePhoto()
 			*GetNameSafe(PlayerController));
 	}
 
-	LastLocalCaptureTime = CurrentTime;
 	bPhotoAttemptInProgress = false;
 	const uint16 CaptureSequence = ++NextCaptureSequence;
 	if (ImageCodec)
@@ -278,15 +282,25 @@ void UNPPhotoCaptureComponent::ServerRequestTakePhoto_Implementation(
 	ANPMainGameMode* GameMode = GetWorld()
 		? GetWorld()->GetAuthGameMode<ANPMainGameMode>()
 		: nullptr;
-	if (!Photographer || !GameMode || !bServerPhotoModeActive)
+	ANPReplicatedStablePhysicsPawn* PhotographerPawn = Photographer
+		? Cast<ANPReplicatedStablePhysicsPawn>(Photographer->GetPawn())
+		: nullptr;
+	UNPAbilitySystemComponent* AbilitySystem = PhotographerPawn
+		? Cast<UNPAbilitySystemComponent>(
+			PhotographerPawn->GetAbilitySystemComponent())
+		: nullptr;
+	const bool bServerPhotoAiming = AbilitySystem
+		&& AbilitySystem->HasMatchingGameplayTag(
+			NPGameplayTags::State_Photo_Aiming);
+	if (!Photographer || !GameMode || !bServerPhotoAiming)
 	{
 		UE_LOG(
 			LogNPPhoto,
 			Error,
-			TEXT("[Server] Rejected: invalid photographer, GameMode, or photo mode. Photographer=%s GameMode=%s PhotoMode=%s"),
+			TEXT("[Server] Rejected: invalid photographer, GameMode, or GAS photo aim state. Photographer=%s GameMode=%s PhotoAiming=%s"),
 			*GetNameSafe(Photographer),
 			*GetNameSafe(GameMode),
-			bServerPhotoModeActive ? TEXT("true") : TEXT("false"));
+			bServerPhotoAiming ? TEXT("true") : TEXT("false"));
 		FNPPhotoEvidenceResult FailureResult;
 		FailureResult.CaptureSequence = CaptureSequence;
 		FailureResult.FailureReason = ENPPhotoEvidenceFailureReason::InvalidPhotographer;
@@ -319,7 +333,7 @@ void UNPPhotoCaptureComponent::ServerRequestTakePhoto_Implementation(
 	}
 	LastServerCaptureTime = CurrentTime;
 
-	if (ANPStablePhysicsPawn* PhotographerPawn = Cast<ANPStablePhysicsPawn>(Photographer->GetPawn()))
+	if (PhotographerPawn)
 	{
 		// Pawn은 모든 관련 클라이언트에 복제되므로 위치 기반 셔터음 멀티캐스트의 주체로 사용합니다.
 		PhotographerPawn->BroadcastPhotoShutterSound(PhotographerPawn->GetActorLocation());
@@ -339,11 +353,6 @@ void UNPPhotoCaptureComponent::ServerRequestTakePhoto_Implementation(
 	Request.CameraForward = CameraForward;
 	Request.CaptureSequence = CaptureSequence;
 	ClientReceivePhotoResult(GameMode->HandlePhotoCaptureRequest(Request));
-}
-
-void UNPPhotoCaptureComponent::ServerSetPhotoModeActive_Implementation(const bool bActive)
-{
-	bServerPhotoModeActive = bActive;
 }
 
 void UNPPhotoCaptureComponent::ClientReceivePhotoResult_Implementation(

@@ -16,6 +16,7 @@ namespace NPGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Photo_Shot, "Ability.Photo.Shot");
 	UE_DEFINE_GAMEPLAY_TAG(State_Relic_Aiming, "State.Relic.Aiming");
 	UE_DEFINE_GAMEPLAY_TAG(State_Photo_Aiming, "State.Photo.Aiming");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Photo_Shot, "Cooldown.Photo.Shot");
 	UE_DEFINE_GAMEPLAY_TAG(
 		State_CrowdControl_Stunned,
 		"State.CrowdControl.Stunned");

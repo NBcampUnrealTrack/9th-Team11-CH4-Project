@@ -579,6 +579,11 @@ void ANPReplicatedStablePhysicsPawn::ServerSetViewRotation_Implementation(
 	uint16 CompressedYaw,
 	uint16 CompressedPitch)
 {
+	if (IsPhotoStunned())
+	{
+		return;
+	}
+
 	SetReplicatedViewRotation(FRotator(
 		FRotator::DecompressAxisFromShort(CompressedPitch),
 		FRotator::DecompressAxisFromShort(CompressedYaw),
@@ -681,8 +686,9 @@ void ANPReplicatedStablePhysicsPawn::ServerSetRightHandActive_Implementation(
 
 bool ANPReplicatedStablePhysicsPawn::IsPhotoStunned() const
 {
-	return IsValid(PhotoCapturePenalty)
-		&& PhotoCapturePenalty->IsPhotoStunActive();
+	return IsValid(AbilitySystem)
+		&& AbilitySystem->HasMatchingGameplayTag(
+			NPGameplayTags::State_CrowdControl_Stunned);
 }
 
 void ANPReplicatedStablePhysicsPawn::OnRep_RightHandActive()

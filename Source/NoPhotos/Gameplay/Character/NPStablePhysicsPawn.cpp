@@ -1,5 +1,9 @@
 #include "Gameplay/Character/NPStablePhysicsPawn.h"
 
+#include "AbilitySystemBlueprintLibrary.h"
+#include "AbilitySystemComponent.h"
+#include "Core/GameplayTag/NPGameplayTags.h"
+
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -957,6 +961,14 @@ void ANPStablePhysicsPawn::Move(const FInputActionValue& Value)
 
 void ANPStablePhysicsPawn::Look(const FInputActionValue& Value)
 {
+	if (const UAbilitySystemComponent* AbilitySystem =
+		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(this);
+		AbilitySystem && AbilitySystem->HasMatchingGameplayTag(
+			NPGameplayTags::State_CrowdControl_Stunned))
+	{
+		return;
+	}
+
 	const FVector2D LookInput = Value.Get<FVector2D>();
 	AddControllerYawInput(LookInput.X);
 	AddControllerPitchInput(LookInput.Y);

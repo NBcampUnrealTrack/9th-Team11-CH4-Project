@@ -3,6 +3,7 @@
 #include "Core/GameplayTag/NPGameplayTags.h"
 #include "Core/Main/NPMainPlayerController.h"
 #include "GameFramework/Pawn.h"
+#include "Gameplay/AbilitySystem/Effects/NPPhotoCooldownGameplayEffect.h"
 #include "Gameplay/Photo/NPPhotoCaptureComponent.h"
 #include "Gameplay/Photo/NPPhotoLog.h"
 
@@ -10,6 +11,8 @@ UNPPhotoShotAbility::UNPPhotoShotAbility()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
+	CooldownGameplayEffectClass =
+		UNPPhotoCooldownGameplayEffect::StaticClass();
 
 	FGameplayTagContainer Tags;
 	Tags.AddTag(NPGameplayTags::Input_Photo_Shot);
@@ -20,6 +23,7 @@ UNPPhotoShotAbility::UNPPhotoShotAbility()
 	ActivationRequiredTags.AddTag(NPGameplayTags::State_Photo_Aiming);
 	ActivationBlockedTags.AddTag(
 		NPGameplayTags::State_CrowdControl_Stunned);
+	ActivationBlockedTags.AddTag(NPGameplayTags::Cooldown_Photo_Shot);
 }
 
 bool UNPPhotoShotAbility::CanActivateAbility(
@@ -46,7 +50,13 @@ bool UNPPhotoShotAbility::CanActivateAbility(
 	const UNPPhotoCaptureComponent* PhotoCapture = PlayerController
 		? PlayerController->GetPhotoCaptureComponent()
 		: nullptr;
-	return PhotoCapture != nullptr;
+	if (!PhotoCapture)
+	{
+		return false;
+	}
+
+	return !ActorInfo->IsLocallyControlled()
+		|| PhotoCapture->CanTakePhotoLocally();
 }
 
 void UNPPhotoShotAbility::ActivateAbility(
