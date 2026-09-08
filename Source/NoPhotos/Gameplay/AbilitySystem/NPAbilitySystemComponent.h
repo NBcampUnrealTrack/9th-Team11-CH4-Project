@@ -24,6 +24,10 @@ public:
 	/** 조준 입력 라우터가 호출합니다. */
 	void ActivateRelicAimAbility();
 	void CancelRelicAimAbility();
+	void ActivateRelicFireAbility();
+	void TogglePhotoAimAbility();
+	void CancelPhotoAimAbility();
+	void ActivatePhotoShotAbility();
 	float GetLavaBurnDuration() const { return LavaBurnDuration; }
 
 protected:
@@ -35,11 +39,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Lava",
 		meta=(DisplayName="불 연출 지속 시간", ClampMin="0.01", Units="s"))
 	float LavaBurnDuration = 0.5f;
-	void ActivateRelicFireAbility();
-	void TogglePhotoAimAbility();
-	void CancelPhotoAimAbility();
-	void ActivatePhotoShotAbility();
-
 private:
 	void ActivateRelicUseAbility();
 	void ClearHeldRelicAbilities();
