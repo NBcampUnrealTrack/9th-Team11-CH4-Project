@@ -113,32 +113,26 @@ void UNPImpactRotateComponent::HandleTargetHit(
 		return;
 	}
 
-	FVector PlanarImpulse(NormalImpulse.X, NormalImpulse.Y, 0.0f);
-	if (PlanarImpulse.IsNearlyZero())
+	FVector ImpactDirection(NormalImpulse.X, NormalImpulse.Y, 0.0f);
+	if (ImpactDirection.IsNearlyZero())
 	{
-		PlanarImpulse = FVector(-Hit.ImpactNormal.X, -Hit.ImpactNormal.Y, 0.0f);
+		ImpactDirection = FVector(
+			-Hit.ImpactNormal.X,
+			-Hit.ImpactNormal.Y,
+			0.0f);
 	}
-	if (PlanarImpulse.IsNearlyZero())
+	if (ImpactDirection.IsNearlyZero() && IsValid(OtherActor))
+	{
+		ImpactDirection = Owner->GetActorLocation() - OtherActor->GetActorLocation();
+		ImpactDirection.Z = 0.0f;
+	}
+	if (!ImpactDirection.Normalize())
 	{
 		return;
 	}
-
-	FVector ImpactOffset = Hit.ImpactPoint - Owner->GetActorLocation();
-	ImpactOffset.Z = 0.0f;
-	float SignedDirection = FMath::Sign(FVector::CrossProduct(ImpactOffset, PlanarImpulse).Z);
-	if (FMath::IsNearlyZero(SignedDirection))
-	{
-		SignedDirection = FMath::Sign(FVector::CrossProduct(
-			Owner->GetActorForwardVector(),
-			PlanarImpulse).Z);
-	}
-	if (FMath::IsNearlyZero(SignedDirection))
-	{
-		SignedDirection = 1.0f;
-	}
 	if (bInvertRotationDirection)
 	{
-		SignedDirection *= -1.0f;
+		ImpactDirection *= -1.0f;
 	}
 
 	const float ImpactAlpha = ValidMaximumImpulse > ValidMinimumImpulse
@@ -151,9 +145,13 @@ void UNPImpactRotateComponent::HandleTargetHit(
 	const float MinimumDegrees = FMath::Max(0.0f, MinimumRotationPerImpact);
 	const float MaximumDegrees = FMath::Max(MinimumDegrees, MaximumRotationPerImpact);
 	const float RotationDegrees = FMath::Lerp(MinimumDegrees, MaximumDegrees, ImpactAlpha);
+
+	// 액터의 로컬 우측 방향을 기준으로 오른쪽 힘은 +Yaw, 왼쪽 힘은 -Yaw로 적용합니다.
+	const FVector InitialRight = InitialActorRotation.RotateVector(FVector::RightVector);
+	const float RightAmount = FVector::DotProduct(ImpactDirection, InitialRight);
 	const float ValidMaximumYawOffset = FMath::Max(0.0f, MaximumYawOffset);
 	TargetYawOffset = FMath::Clamp(
-		TargetYawOffset + SignedDirection * RotationDegrees,
+		TargetYawOffset + RightAmount * RotationDegrees,
 		-ValidMaximumYawOffset,
 		ValidMaximumYawOffset);
 

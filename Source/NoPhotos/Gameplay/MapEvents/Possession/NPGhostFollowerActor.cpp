@@ -3,11 +3,13 @@
 #include "Components/SceneComponent.h"
 #include "Components/MeshComponent.h"
 #include "Components/SphereComponent.h"
+#include "Components/SplineComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/World.h"
 #include "Gameplay/Character/NPStablePhysicsPawn.h"
 #include "Gameplay/MapEvents/Possession/NPPossessionMapEvent.h"
+#include "Gameplay/MapEvents/Possession/NPGhostPatrolRoute.h"
 #include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialParameters.h"
@@ -24,7 +26,7 @@ ANPGhostFollowerActor::ANPGhostFollowerActor()
 	bReplicates = true;
 	bAlwaysRelevant = true;
 	SetReplicateMovement(true);
-	NetUpdateFrequency = 30.0f;
+	SetNetUpdateFrequency(30.0f);
 	SetActorEnableCollision(false);
 
 	FollowRoot = CreateDefaultSubobject<USceneComponent>(TEXT("FollowRoot"));
@@ -75,24 +77,35 @@ bool ANPGhostFollowerActor::InitializeFollower(ANPStablePhysicsPawn* InTarget)
 	return true;
 }
 
-bool ANPGhostFollowerActor::InitializeRoamingGhost()
+bool ANPGhostFollowerActor::InitializeRoamingGhost(
+	ANPGhostPatrolRoute* InPatrolRoute,
+	const float StartDistance,
+	const bool bStartForward)
 {
-	if (HasActorBegunPlay() || FollowTarget.IsValid())
+	if (HasActorBegunPlay() || FollowTarget.IsValid() || !IsValid(InPatrolRoute)
+		|| !InPatrolRoute->IsUsableRoute() || InPatrolRoute->GetWorld() != GetWorld())
 	{
 		UE_LOG(LogNPGhostFollower, Warning,
-			TEXT("[GhostTrace] Roaming 초기화 거부: Actor=%s BegunPlay=%d FollowTarget=%s"),
-			*GetNameSafe(this), HasActorBegunPlay() ? 1 : 0, *GetNameSafe(FollowTarget.Get()));
+			TEXT("[GhostTrace] Roaming 초기화 거부: Actor=%s BegunPlay=%d FollowTarget=%s Route=%s"),
+			*GetNameSafe(this), HasActorBegunPlay() ? 1 : 0, *GetNameSafe(FollowTarget.Get()),
+			*GetNameSafe(InPatrolRoute));
 		return false;
 	}
 	bRoamingInitializationRequested = true;
 	bRoamingGhost = true;
+	RoamingPatrolRoute = InPatrolRoute;
+	RoamingPatrolDirection = bStartForward ? 1.0f : -1.0f;
+	RoamingPatrolDistance = FMath::IsFinite(StartDistance)
+		? FMath::Clamp(StartDistance, 0.0f, InPatrolRoute->GetSpline()->GetSplineLength())
+		: 0.0f;
 	// SpawnActorDeferred 상태에서는 SetReplicates가 초기화 전 Actor 경고를 발생시킵니다.
 	// PostInitProperties가 이 값을 읽어 RemoteRole을 구성하므로 직접 설정하는 것이 올바른 경로입니다.
 	bReplicates = true;
 	SetReplicatingMovement(true);
 	UE_LOG(LogNPGhostFollower, Display,
-		TEXT("[GhostTrace] Roaming 초기화 완료: Actor=%s Requested=%d Roaming=%d Replicates=%d"),
-		*GetNameSafe(this), bRoamingInitializationRequested ? 1 : 0,
+		TEXT("[GhostTrace] Roaming 초기화 완료: Actor=%s Route=%s Direction=%s Requested=%d Roaming=%d Replicates=%d"),
+		*GetNameSafe(this), *GetNameSafe(InPatrolRoute), bStartForward ? TEXT("Forward") : TEXT("Reverse"),
+		bRoamingInitializationRequested ? 1 : 0,
 		bRoamingGhost ? 1 : 0, GetIsReplicated() ? 1 : 0);
 	return true;
 }
@@ -142,6 +155,7 @@ void ANPGhostFollowerActor::ConsumeRoamingGhost(const float DestroyDelay)
 	bRoamingGhostConsumed = true;
 	bRoamingGhost = false;
 	RoamingChaseTarget.Reset();
+	RoamingPatrolRoute.Reset();
 	MulticastConsumeRoamingGhost();
 	ForceNetUpdate();
 
@@ -417,7 +431,14 @@ void ANPGhostFollowerActor::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	if (!bGhostFadingOut && !IsActorBeingDestroyed() && bRoamingGhost && HasAuthority())
 	{
-		UpdateRoamingChase(DeltaSeconds);
+		if (RoamingChaseTarget.IsValid())
+		{
+			UpdateRoamingChase(DeltaSeconds);
+		}
+		else
+		{
+			UpdateRoamingPatrol(DeltaSeconds);
+		}
 		CheckRoamingPlayerContacts();
 	}
 	else if (!bGhostFadingOut && !IsActorBeingDestroyed() && FollowTarget.IsValid())
@@ -425,6 +446,65 @@ void ANPGhostFollowerActor::Tick(float DeltaSeconds)
 		UpdateFollow(DeltaSeconds, false);
 	}
 	UpdateFade(DeltaSeconds);
+}
+
+float ANPGhostFollowerActor::CalculatePingPongDistance(
+	const float Distance,
+	const float TravelDistance,
+	const float RouteLength,
+	float& InOutDirection)
+{
+	const float SafeLength = FMath::IsFinite(RouteLength) ? FMath::Max(0.0f, RouteLength) : 0.0f;
+	if (SafeLength <= KINDA_SMALL_NUMBER)
+	{
+		InOutDirection = 1.0f;
+		return 0.0f;
+	}
+
+	const float SafeDistance = FMath::IsFinite(Distance) ? FMath::Clamp(Distance, 0.0f, SafeLength) : 0.0f;
+	const float SafeTravel = FMath::IsFinite(TravelDistance) ? FMath::Max(0.0f, TravelDistance) : 0.0f;
+	const float Period = SafeLength * 2.0f;
+	const float Phase = InOutDirection >= 0.0f ? SafeDistance : Period - SafeDistance;
+	const float Wrapped = FMath::Fmod(Phase + SafeTravel, Period);
+	if (Wrapped <= SafeLength)
+	{
+		InOutDirection = 1.0f;
+		return Wrapped;
+	}
+
+	InOutDirection = -1.0f;
+	return Period - Wrapped;
+}
+
+void ANPGhostFollowerActor::UpdateRoamingPatrol(const float DeltaSeconds)
+{
+	ANPGhostPatrolRoute* Route = RoamingPatrolRoute.Get();
+	if (!IsValid(Route) || !Route->IsUsableRoute())
+	{
+		return;
+	}
+
+	const float SafeDeltaSeconds = FMath::IsFinite(DeltaSeconds) ? FMath::Max(0.0f, DeltaSeconds) : 0.0f;
+	const float SafeSpeed = FMath::IsFinite(RoamingPatrolSpeed) ? FMath::Max(0.0f, RoamingPatrolSpeed) : 200.0f;
+	RoamingPatrolDistance = CalculatePingPongDistance(
+		RoamingPatrolDistance,
+		SafeSpeed * SafeDeltaSeconds,
+		Route->GetSpline()->GetSplineLength(),
+		RoamingPatrolDirection);
+
+	const FVector NewLocation = Route->GetWorldLocationAtDistance(RoamingPatrolDistance);
+	SetActorLocation(NewLocation, true);
+
+	FVector Direction = Route->GetWorldDirectionAtDistance(RoamingPatrolDistance)
+		* RoamingPatrolDirection;
+	Direction.Z = 0.0f;
+	if (!Direction.ContainsNaN() && Direction.Normalize())
+	{
+		const float RotationSpeed = FMath::IsFinite(RoamingRotationInterpSpeed)
+			? FMath::Max(0.0f, RoamingRotationInterpSpeed) : 8.0f;
+		SetActorRotation(FMath::RInterpTo(
+			GetActorRotation(), Direction.Rotation(), SafeDeltaSeconds, RotationSpeed));
+	}
 }
 
 void ANPGhostFollowerActor::UpdateRoamingChase(const float DeltaSeconds)
@@ -509,6 +589,7 @@ void ANPGhostFollowerActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		*GetNameSafe(FollowTarget.Get()));
 	StopFollowing();
 	RoamingChaseTarget.Reset();
+	RoamingPatrolRoute.Reset();
 	bGhostFadeRunning = false;
 	FadeMaterials.Reset();
 	Super::EndPlay(EndPlayReason);

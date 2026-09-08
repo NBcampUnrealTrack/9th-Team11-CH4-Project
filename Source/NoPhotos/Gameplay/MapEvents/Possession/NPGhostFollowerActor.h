@@ -5,6 +5,7 @@
 #include "NPGhostFollowerActor.generated.h"
 
 class ANPStablePhysicsPawn;
+class ANPGhostPatrolRoute;
 class USceneComponent;
 class USphereComponent;
 class UStaticMeshComponent;
@@ -12,7 +13,7 @@ class USkeletalMeshComponent;
 class UMaterialInstanceDynamic;
 class UPrimitiveComponent;
 
-/** 화면별로 생성하는 충돌 없는 유령 외형. 서버 위치 복제나 캐릭터 입력에는 관여하지 않습니다. */
+/** 서버 순찰 고스트와 빙의 후 화면별 등 뒤 외형에 함께 사용하는 충돌 없는 유령 액터입니다. */
 UCLASS(Blueprintable)
 class NOPHOTOS_API ANPGhostFollowerActor : public AActor
 {
@@ -26,13 +27,14 @@ public:
 	/** 이벤트의 deferred spawn 중 호출합니다. 캐릭터 자체에는 컴포넌트를 추가하지 않습니다. */
 	bool InitializeFollower(ANPStablePhysicsPawn* InTarget);
 
-	/** 서버의 deferred spawn 중 호출합니다. 추적 대상 없이 Point에서 대기하는 복제 유령으로 초기화합니다. */
-	bool InitializeRoamingGhost();
+	/** 서버의 deferred spawn 중 호출합니다. 지정한 Spline을 왕복하는 복제 유령으로 초기화합니다. */
+	bool InitializeRoamingGhost(ANPGhostPatrolRoute* InPatrolRoute, float StartDistance,
+		bool bStartForward = true);
 
 	/** 서버 Roaming 유령이 추격할 플레이어를 지정합니다. 이동 결과는 Replicate Movement로 전달됩니다. */
 	bool SetRoamingChaseTarget(ANPStablePhysicsPawn* InTarget);
 
-	/** 지정 시간 동안 플레이어 접촉 판정만 무시합니다. 추격 이동은 계속합니다. */
+	/** 지정 시간 동안 플레이어 접촉 판정만 무시합니다. 순찰/추격 이동은 계속합니다. */
 	void SetRoamingContactDelay(float DelaySeconds);
 
 	/** 모든 클라이언트에서 즉시 숨긴 뒤 잠시 후 서버 액터를 제거합니다. */
@@ -50,6 +52,10 @@ public:
 		float Distance, float Height);
 
 	static float CalculateFadeOpacity(float StartOpacity, float TargetOpacity, float Elapsed, float Duration);
+
+	/** 이동량을 반영하고 끝점에서 방향을 뒤집습니다. 큰 프레임에서도 여러 번 왕복할 수 있습니다. */
+	static float CalculatePingPongDistance(float Distance, float TravelDistance, float RouteLength,
+		float& OutDirection);
 
 protected:
 	virtual void BeginPlay() override;
@@ -78,6 +84,10 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Roaming", meta=(ClampMin="0.0", Units="cm/s"))
 	float RoamingChaseSpeed = 350.0f;
+
+	/** 플레이어를 추격하지 않을 때 Spline을 왕복하는 속도입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Roaming", meta=(ClampMin="0.0", Units="cm/s"))
+	float RoamingPatrolSpeed = 200.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Roaming", meta=(ClampMin="0.0"))
 	float RoamingRotationInterpSpeed = 8.0f;
@@ -128,6 +138,7 @@ private:
 	void TryHandleRoamingPlayerContact(ANPStablePhysicsPawn* PlayerPawn);
 	void UpdateFollow(float DeltaSeconds, bool bSnap);
 	void UpdateRoamingChase(float DeltaSeconds);
+	void UpdateRoamingPatrol(float DeltaSeconds);
 	void InitializeFadeMaterials();
 	void ApplyGhostOpacity(float Opacity);
 	void UpdateFade(float DeltaSeconds);
@@ -145,6 +156,9 @@ private:
 
 	TWeakObjectPtr<ANPStablePhysicsPawn> FollowTarget;
 	TWeakObjectPtr<ANPStablePhysicsPawn> RoamingChaseTarget;
+	TWeakObjectPtr<ANPGhostPatrolRoute> RoamingPatrolRoute;
+	float RoamingPatrolDistance = 0.0f;
+	float RoamingPatrolDirection = 1.0f;
 	FVector LastHorizontalForward = FVector::ForwardVector;
 
 	UPROPERTY(Replicated)

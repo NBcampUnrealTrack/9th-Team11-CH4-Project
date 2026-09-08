@@ -7,6 +7,7 @@
 #include "NPPossessionMapEvent.generated.h"
 
 class ANPGhostFollowerActor;
+class ANPGhostPatrolRoute;
 class ANPRelicCase;
 class ANPStablePhysicsPawn;
 class UAbilitySystemComponent;
@@ -41,23 +42,28 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Possession Event")
 	bool bEnableGhostAndControlEffects = false;
 
-	/** 이벤트 시작 시 서버에서 Point에 생성할 추적 대기 상태의 고스트 BP입니다. */
+	/** 이벤트 시작 시 서버에서 순찰 루트에 생성할 고스트 BP입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Possession Event|Roaming Ghost")
 	TSubclassOf<ANPGhostFollowerActor> RoamingGhostClass;
 
-	/** 고스트를 생성할 MapEventSpawnPoint 그룹입니다. */
+	/** 같은 그룹인 Ghost Patrol Route 중 하나를 서버에서 선택합니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Possession Event|Roaming Ghost")
-	FGameplayTag RoamingGhostSpawnGroup;
+	FGameplayTag RoamingGhostRouteGroup;
 
-	/** 한 플레이어를 추격하거나 빙의 상태로 머무른 뒤 다음 대상을 선택하기까지의 시간입니다. */
+	/** 이벤트에 동시에 존재할 전체 고스트 수입니다. 빙의 중인 고스트도 이 수에 포함합니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Possession Event|Roaming Ghost",
+		meta=(ClampMin="1", ClampMax="50", UIMin="1", UIMax="20"))
+	int32 RoamingGhostCount = 3;
+
+	/** 스트리밍 등으로 루트를 아직 찾지 못했을 때 다시 생성할 간격입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Possession Event|Roaming Ghost", meta=(ClampMin="0.1", Units="s"))
-	float ChaseTargetDuration = 10.0f;
+	float PatrolSpawnRetryInterval = 2.0f;
 
 	/** 플레이어와 접촉한 순간부터 등 뒤 유령과 입력 반전을 유지할 시간입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Possession Event|Roaming Ghost", meta=(ClampMin="0.1", Units="s"))
 	float PossessionDuration = 5.0f;
 
-	/** 빙의가 끝나 플레이어 위치에서 다시 출발할 때 접촉을 무시할 시간입니다. */
+	/** 빙의가 끝나 루트에서 다시 출발할 때 접촉을 무시할 시간입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Possession Event|Roaming Ghost", meta=(ClampMin="0.0", Units="s"))
 	float PostPossessionContactDelay = 1.5f;
 
@@ -74,10 +80,16 @@ private:
 	void RemoveAppliedEffects();
 	void RefreshRelicCases();
 	void RemoveTemporaryCaseUnlocks();
-	void BeginNextChaseCycle();
-	void SpawnRoamingGhost(const FTransform* OverrideTransform = nullptr, float ContactDelay = 0.0f);
-	ANPStablePhysicsPawn* SelectRandomChaseTarget() const;
-	void DestroyRoamingGhost();
+	void SpawnRoamingGhostsToCount(float ContactDelay = 0.0f);
+	bool SpawnRoamingGhost(float ContactDelay = 0.0f);
+	void ScheduleRoamingSpawnRetry();
+	void FinishPossession(TWeakObjectPtr<ANPStablePhysicsPawn> PlayerKey);
+	void ClearPossessionTimers();
+	ANPGhostPatrolRoute* FindPatrolRoute() const;
+	void DestroyRoamingGhosts();
+
+	UFUNCTION()
+	void HandleRoamingGhostDestroyed(AActor* DestroyedActor);
 
 	UFUNCTION()
 	void OnRep_AffectedPlayers();
@@ -88,15 +100,13 @@ private:
 
 	TMap<TWeakObjectPtr<ANPStablePhysicsPawn>, TWeakObjectPtr<ANPGhostFollowerActor>> LocalGhosts;
 	TMap<TWeakObjectPtr<UAbilitySystemComponent>, FActiveGameplayEffectHandle> AppliedEffects;
+	TMap<TWeakObjectPtr<ANPStablePhysicsPawn>, FTimerHandle> PossessionTimers;
 	TSet<TWeakObjectPtr<ANPRelicCase>> TemporarilyUnlockedCases;
 	FTimerHandle PlayerRefreshTimer;
-	FTimerHandle ChaseCycleTimer;
+	FTimerHandle RoamingSpawnRetryTimer;
 
 	UPROPERTY(Transient)
-	TObjectPtr<ANPGhostFollowerActor> SpawnedRoamingGhost;
-
-	TWeakObjectPtr<ANPStablePhysicsPawn> CurrentChaseTarget;
-	TWeakObjectPtr<ANPStablePhysicsPawn> PreviousChaseTarget;
+	TArray<TObjectPtr<ANPGhostFollowerActor>> SpawnedRoamingGhosts;
 
 	bool bWarnedMissingGhostClass = false;
 	bool bWarnedSpawnFailure = false;
