@@ -10,6 +10,7 @@
 
 class UPrimitiveComponent;
 class UChildActorComponent;
+class UNiagaraComponent;
 class UAbilitySystemComponent;
 class AController;
 class FLifetimeProperty;
@@ -242,6 +243,12 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Status Visual", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UNPStatusVisualComponent> StatusVisual;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Lava", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UNiagaraComponent> LavaFireLeft;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Lava", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UNiagaraComponent> LavaFireRight;
 
 	UPROPERTY(EditDefaultsOnly, Category="Input")
 	TObjectPtr<UInputAction> RelicUseAction;

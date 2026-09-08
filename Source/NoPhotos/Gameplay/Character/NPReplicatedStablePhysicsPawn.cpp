@@ -8,6 +8,7 @@
 #include "EnhancedInputComponent.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
+#include "NiagaraComponent.h"
 #include "PhysicsEngine/BodyInstance.h"
 #include "Gameplay/AbilitySystem/NPAbilitySystemComponent.h"
 #include "Gameplay/Character/Component/NPInvisibilityComponent.h"
@@ -72,13 +73,23 @@ ANPReplicatedStablePhysicsPawn::ANPReplicatedStablePhysicsPawn()
 	ControlReversalVisual = CreateDefaultSubobject<UNPControlReversalVisualComponent>(TEXT("ControlReversalVisual"));
 	ControlReversalVisual->SetupAttachment(PhysicsMesh);
 	StatusVisual = CreateDefaultSubobject<UNPStatusVisualComponent>(TEXT("StatusVisual"));
+	LavaFireLeft = CreateDefaultSubobject<UNiagaraComponent>(TEXT("LavaFireLeft"));
+	LavaFireLeft->SetupAttachment(PhysicsMesh);
+	LavaFireLeft->SetRelativeLocation(FVector(0.0f, -25.0f, 100.0f));
+	LavaFireLeft->SetAutoActivate(false);
+	LavaFireLeft->SetHiddenInGame(true);
+	LavaFireRight = CreateDefaultSubobject<UNiagaraComponent>(TEXT("LavaFireRight"));
+	LavaFireRight->SetupAttachment(PhysicsMesh);
+	LavaFireRight->SetRelativeLocation(FVector(0.0f, 25.0f, 100.0f));
+	LavaFireRight->SetAutoActivate(false);
+	LavaFireRight->SetHiddenInGame(true);
 }
 
 void ANPReplicatedStablePhysicsPawn::BeginPlay()
 {
 	Super::BeginPlay();
 	AbilitySystem->InitializeForOwner();
-	StatusVisual->Initialize(AbilitySystem, LeaderCrown, ControlReversalVisual);
+	StatusVisual->Initialize(AbilitySystem, LeaderCrown, ControlReversalVisual, LavaFireLeft, LavaFireRight);
 	if (HasAuthority())
 	{
 		if (ANPMainGameState* MainGameState = GetWorld()->GetGameState<ANPMainGameState>())
