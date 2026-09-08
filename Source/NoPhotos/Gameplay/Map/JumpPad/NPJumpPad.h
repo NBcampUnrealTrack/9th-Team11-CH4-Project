@@ -41,10 +41,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Jump Pad", meta = (ClampMin = "0.0"))
 	float Cooldown = 1.0f;
 
-	/** 발사 직후 캐릭터에 설정할 월드 Z축 속도입니다. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Jump Pad", meta = (ClampMin = "0.0", Units = "cm/s"))
-	float LaunchStrength = 1000.0f;
-
 private:
 	bool IsOnCooldown(const APawn* Pawn) const;
 	void RecordLaunch(APawn* Pawn);
