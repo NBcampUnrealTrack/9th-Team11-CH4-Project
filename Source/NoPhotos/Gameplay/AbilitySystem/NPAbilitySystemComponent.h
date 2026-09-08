@@ -24,6 +24,10 @@ public:
 	/** 조준 입력 라우터가 호출합니다. */
 	void ActivateRelicAimAbility();
 	void CancelRelicAimAbility();
+	void ActivateRelicFireAbility();
+	void TogglePhotoAimAbility();
+	void CancelPhotoAimAbility();
+	void ActivatePhotoShotAbility();
 
 private:
 	void ActivateRelicUseAbility();
@@ -35,5 +39,7 @@ private:
 	void HandleKnockbackEffect(const FGameplayEffectSpec& EffectSpec);
 
 	TArray<FGameplayAbilitySpecHandle> HeldRelicAbilityHandles;
+	TArray<FGameplayAbilitySpecHandle> DefaultPhotoAbilityHandles;
 	bool bGameplayEffectDelegateBound = false;
+	bool bDefaultPhotoAbilitiesGranted = false;
 };

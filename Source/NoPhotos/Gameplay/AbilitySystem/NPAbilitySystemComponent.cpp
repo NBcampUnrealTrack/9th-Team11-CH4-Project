@@ -4,6 +4,8 @@
 #include "EnhancedInputComponent.h"
 #include "GameplayAbilitySpec.h"
 #include "Gameplay/Character/NPStablePhysicsPawn.h"
+#include "Gameplay/Photo/Abilities/NPPhotoAimAbility.h"
+#include "Gameplay/Photo/Abilities/NPPhotoShotAbility.h"
 #include "Gameplay/Relic/Components/NPUsableRelicComponent.h"
 #include "GameplayEffect.h"
 #include "InputAction.h"
@@ -26,6 +28,15 @@ void UNPAbilitySystemComponent::InitializeForOwner()
 				this,
 				&UNPAbilitySystemComponent::HandleGameplayEffectApplied);
 			bGameplayEffectDelegateBound = true;
+		}
+
+		if (OwningActor->HasAuthority() && !bDefaultPhotoAbilitiesGranted)
+		{
+			DefaultPhotoAbilityHandles.Add(GiveAbility(
+				FGameplayAbilitySpec(UNPPhotoAimAbility::StaticClass(), 1)));
+			DefaultPhotoAbilityHandles.Add(GiveAbility(
+				FGameplayAbilitySpec(UNPPhotoShotAbility::StaticClass(), 1)));
+			bDefaultPhotoAbilitiesGranted = true;
 		}
 	}
 }
@@ -103,6 +114,40 @@ void UNPAbilitySystemComponent::CancelRelicAimAbility()
 	FGameplayTagContainer AbilityTags;
 	AbilityTags.AddTag(NPGameplayTags::Ability_Relic_Aim);
 	CancelAbilities(&AbilityTags);
+}
+
+void UNPAbilitySystemComponent::ActivateRelicFireAbility()
+{
+	FGameplayTagContainer AbilityTags;
+	AbilityTags.AddTag(NPGameplayTags::Input_Relic_Fire);
+	TryActivateAbilitiesByTag(AbilityTags);
+}
+
+void UNPAbilitySystemComponent::TogglePhotoAimAbility()
+{
+	if (HasMatchingGameplayTag(NPGameplayTags::State_Photo_Aiming))
+	{
+		CancelPhotoAimAbility();
+		return;
+	}
+
+	FGameplayTagContainer AbilityTags;
+	AbilityTags.AddTag(NPGameplayTags::Input_Photo_Aim);
+	TryActivateAbilitiesByTag(AbilityTags);
+}
+
+void UNPAbilitySystemComponent::CancelPhotoAimAbility()
+{
+	FGameplayTagContainer AbilityTags;
+	AbilityTags.AddTag(NPGameplayTags::Ability_Photo_Aim);
+	CancelAbilities(&AbilityTags);
+}
+
+void UNPAbilitySystemComponent::ActivatePhotoShotAbility()
+{
+	FGameplayTagContainer AbilityTags;
+	AbilityTags.AddTag(NPGameplayTags::Input_Photo_Shot);
+	TryActivateAbilitiesByTag(AbilityTags);
 }
 
 void UNPAbilitySystemComponent::ClearHeldRelicAbilities()

@@ -2,6 +2,7 @@
 
 #include "Core/Main/NPMainGameMode.h"
 #include "Core/Main/NPMainGameState.h"
+#include "Core/GameplayTag/NPGameplayTags.h"
 #include "Core/Chat/NPChatComponent.h"
 #include "Core/Room/NPRoomSubsystem.h"
 #include "Blueprint/UserWidget.h"
@@ -533,42 +534,27 @@ bool ANPMainPlayerController::InputKey(const FInputKeyEventArgs& Params)
 
 void ANPMainPlayerController::HandleAimStarted()
 {
-	if (const ANPReplicatedStablePhysicsPawn* StablePawn =
-		GetPawn<ANPReplicatedStablePhysicsPawn>();
-		IsValid(StablePawn) && StablePawn->IsPhotoStunned())
+	UNPAbilitySystemComponent* AbilitySystem = ResolveAbilitySystem();
+	if (!AbilitySystem)
 	{
-		return;
-	}
-
-	if (!PhotoCaptureComponent)
-	{
-		UE_LOG(LogNPPhoto, Error, TEXT("[Input] PhotoCaptureComponent is null."));
+		UE_LOG(LogNPPhoto, Error, TEXT("[Input] AbilitySystemComponent is null."));
 		return;
 	}
 
 	if (IsHoldingAimableRelic())
 	{
-		if (PhotoCaptureComponent->IsPhotoModeActive())
-		{
-			PhotoCaptureComponent->ExitPhotoMode();
-		}
-		if (UNPAbilitySystemComponent* AbilitySystem =
-			ResolveRelicAbilitySystem())
-		{
-			AbilitySystem->ActivateRelicAimAbility();
-		}
+		AbilitySystem->CancelPhotoAimAbility();
+		AbilitySystem->ActivateRelicAimAbility();
 		return;
 	}
 
-	PhotoCaptureComponent->TogglePhotoMode();
-	UE_LOG(LogNPPhoto, Log, TEXT("[Input] Photo mode toggled. Active=%s"),
-		PhotoCaptureComponent->IsPhotoModeActive() ? TEXT("true") : TEXT("false"));
+	AbilitySystem->CancelRelicAimAbility();
+	AbilitySystem->TogglePhotoAimAbility();
 }
 
 void ANPMainPlayerController::HandleAimReleased()
 {
-	if (UNPAbilitySystemComponent* AbilitySystem =
-		ResolveRelicAbilitySystem())
+	if (UNPAbilitySystemComponent* AbilitySystem = ResolveAbilitySystem())
 	{
 		AbilitySystem->CancelRelicAimAbility();
 	}
@@ -576,28 +562,25 @@ void ANPMainPlayerController::HandleAimReleased()
 
 void ANPMainPlayerController::HandleFireStarted()
 {
-	if (const ANPReplicatedStablePhysicsPawn* StablePawn =
-		GetPawn<ANPReplicatedStablePhysicsPawn>();
-		IsValid(StablePawn) && StablePawn->IsPhotoStunned())
+	UNPAbilitySystemComponent* AbilitySystem = ResolveAbilitySystem();
+	if (!AbilitySystem)
 	{
+		UE_LOG(LogNPPhoto, Error, TEXT("[Input] AbilitySystemComponent is null."));
 		return;
 	}
 
-	if (!PhotoCaptureComponent)
+	if (AbilitySystem->HasMatchingGameplayTag(
+		NPGameplayTags::State_Relic_Aiming))
 	{
-		UE_LOG(LogNPPhoto, Error, TEXT("[Input] PhotoCaptureComponent is null."));
+		AbilitySystem->ActivateRelicFireAbility();
 		return;
 	}
 
-	if (!PhotoCaptureComponent->IsPhotoModeActive())
+	if (AbilitySystem->HasMatchingGameplayTag(
+		NPGameplayTags::State_Photo_Aiming))
 	{
-		return;
+		AbilitySystem->ActivatePhotoShotAbility();
 	}
-
-	UE_LOG(LogNPPhoto, Log, TEXT("[Input] Photo input received. Controller=%s Local=%s"),
-		*GetNameSafe(this), IsLocalController() ? TEXT("true") : TEXT("false"));
-	const bool bStarted = PhotoCaptureComponent->TakePhoto();
-	UE_LOG(LogNPPhoto, Log, TEXT("[Input] TakePhoto result=%s"), bStarted ? TEXT("success") : TEXT("failed"));
 }
 
 bool ANPMainPlayerController::IsHoldingAimableRelic() const
@@ -617,7 +600,7 @@ bool ANPMainPlayerController::IsHoldingAimableRelic() const
 }
 
 UNPAbilitySystemComponent*
-ANPMainPlayerController::ResolveRelicAbilitySystem() const
+ANPMainPlayerController::ResolveAbilitySystem() const
 {
 	const ANPReplicatedStablePhysicsPawn* StablePawn =
 		Cast<ANPReplicatedStablePhysicsPawn>(GetPawn());

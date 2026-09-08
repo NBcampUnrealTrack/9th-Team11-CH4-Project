@@ -1,6 +1,8 @@
 #include "Gameplay/Photo/NPPhotoCapturePenaltyComponent.h"
 
 #include "Engine/World.h"
+#include "Core/GameplayTag/NPGameplayTags.h"
+#include "Gameplay/AbilitySystem/NPAbilitySystemComponent.h"
 #include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 #include "Gameplay/Interaction/Components/GrabbableComponent.h"
 #include "Gameplay/Photo/NPRelicHolderInterface.h"
@@ -174,6 +176,19 @@ void UNPPhotoCapturePenaltyComponent::ApplyStunStateLocally()
 	if (bPhotoStunActive)
 	{
 		Pawn->StopMovementInput();
+	}
+
+	if (UNPAbilitySystemComponent* AbilitySystem =
+		Cast<UNPAbilitySystemComponent>(Pawn->GetAbilitySystemComponent()))
+	{
+		AbilitySystem->SetLooseGameplayTagCount(
+			NPGameplayTags::State_CrowdControl_Stunned,
+			bPhotoStunActive ? 1 : 0);
+		if (bPhotoStunActive)
+		{
+			AbilitySystem->CancelRelicAimAbility();
+			AbilitySystem->CancelPhotoAimAbility();
+		}
 	}
 
 	UNPPhotoStunVisualComponent* StunVisual =
