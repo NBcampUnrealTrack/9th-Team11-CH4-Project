@@ -198,6 +198,27 @@ void ANPReplicatedStablePhysicsPawn::ClientApplyExternalVelocityChange_Implement
 	ApplyExternalVelocityChangeLocal(FVector(VelocityChange));
 }
 
+void ANPReplicatedStablePhysicsPawn::SetExternalVerticalVelocity(
+	float VerticalVelocity)
+{
+	if (!HasAuthority() || !FMath::IsFinite(VerticalVelocity))
+	{
+		return;
+	}
+
+	SetExternalVerticalVelocityLocal(VerticalVelocity);
+	if (IsPlayerControlled() && !IsLocallyControlled())
+	{
+		ClientSetExternalVerticalVelocity(VerticalVelocity);
+	}
+}
+
+void ANPReplicatedStablePhysicsPawn::ClientSetExternalVerticalVelocity_Implementation(
+	float VerticalVelocity)
+{
+	SetExternalVerticalVelocityLocal(VerticalVelocity);
+}
+
 void ANPReplicatedStablePhysicsPawn::StartTemporaryRagdoll()
 {
 	if (HasAuthority())

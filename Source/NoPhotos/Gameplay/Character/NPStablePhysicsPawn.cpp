@@ -176,6 +176,16 @@ void ANPStablePhysicsPawn::AddExternalVelocityChange(const FVector& VelocityChan
 	ApplyExternalVelocityChangeLocal(VelocityChange);
 }
 
+void ANPStablePhysicsPawn::SetExternalVerticalVelocity(float VerticalVelocity)
+{
+	if (!HasAuthority() || !FMath::IsFinite(VerticalVelocity))
+	{
+		return;
+	}
+
+	SetExternalVerticalVelocityLocal(VerticalVelocity);
+}
+
 void ANPStablePhysicsPawn::StartTemporaryRagdoll()
 {
 	if (HasAuthority())
@@ -199,6 +209,37 @@ void ANPStablePhysicsPawn::ApplyExternalVelocityChangeLocal(
 		FullBodyRootName,
 		true,
 		true);
+	if (bTemporaryRagdollRecoveryActive)
+	{
+		BeginTemporaryRagdoll();
+	}
+}
+
+void ANPStablePhysicsPawn::SetExternalVerticalVelocityLocal(float VerticalVelocity)
+{
+	if (!PhysicsMesh || !FMath::IsFinite(VerticalVelocity))
+	{
+		return;
+	}
+
+	StopMovementInput();
+	PhysicsMesh->WakeAllRigidBodies();
+	PhysicsMesh->ForEachBodyBelow(
+		FullBodyRootName,
+		true,
+		false,
+		[VerticalVelocity](FBodyInstance* BodyInstance)
+		{
+			if (!BodyInstance || !BodyInstance->IsInstanceSimulatingPhysics())
+			{
+				return;
+			}
+
+			FVector BodyVelocity = BodyInstance->GetUnrealWorldVelocity();
+			BodyVelocity.Z = VerticalVelocity;
+			BodyInstance->SetLinearVelocity(BodyVelocity, false);
+		});
+
 	if (bTemporaryRagdollRecoveryActive)
 	{
 		BeginTemporaryRagdoll();
