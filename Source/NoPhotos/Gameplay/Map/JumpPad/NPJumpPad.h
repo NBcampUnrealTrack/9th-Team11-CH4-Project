@@ -41,9 +41,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Jump Pad", meta = (ClampMin = "0.0"))
 	float Cooldown = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Jump Pad", meta = (ClampMin = "0.0"))
-	float LaunchStrength = 1000.0f;
-
 private:
 	bool IsOnCooldown(const APawn* Pawn) const;
 	void RecordLaunch(APawn* Pawn);

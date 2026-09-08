@@ -12,6 +12,7 @@
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsMovementComponent.h"
 #include "Gameplay/Character/Component/NPControlReversalComponent.h"
+#include "Gameplay/Photo/NPPhotoCapturePenaltyComponent.h"
 
 UNPStablePhysicsNetworkPredictionComponent::UNPStablePhysicsNetworkPredictionComponent()
 {
@@ -167,6 +168,25 @@ void UNPStablePhysicsNetworkPredictionComponent::ServerSetMoveInput_Implementati
 	{
 		return;
 	}
+	if (const UNPPhotoCapturePenaltyComponent* PhotoPenalty =
+		GetOwner()->FindComponentByClass<UNPPhotoCapturePenaltyComponent>();
+		PhotoPenalty && PhotoPenalty->IsPhotoStunActive())
+	{
+		if (UNPControlReversalComponent* Reversal =
+			GetOwner()->FindComponentByClass<UNPControlReversalComponent>())
+		{
+			Reversal->ApplyRawMovementInput(FVector::ZeroVector, 0.0f);
+		}
+		else
+		{
+			Movement->SetMoveInput(FVector::ZeroVector);
+		}
+		if (Grab)
+		{
+			Grab->SetMovementIntent(FVector::ZeroVector);
+		}
+		return;
+	}
 
 	const FVector ClampedInput = ReceivedInput.GetClampedToMaxSize(1.0f);
 	if (UNPControlReversalComponent* Reversal = GetOwner()->FindComponentByClass<UNPControlReversalComponent>())
@@ -205,6 +225,12 @@ void UNPStablePhysicsNetworkPredictionComponent::ServerStopMove_Implementation(
 void UNPStablePhysicsNetworkPredictionComponent::ServerRequestJump_Implementation()
 {
 	if (!Movement)
+	{
+		return;
+	}
+	if (const UNPPhotoCapturePenaltyComponent* PhotoPenalty =
+		GetOwner()->FindComponentByClass<UNPPhotoCapturePenaltyComponent>();
+		PhotoPenalty && PhotoPenalty->IsPhotoStunActive())
 	{
 		return;
 	}

@@ -69,6 +69,7 @@ DA 타입은 기존 **NPSantaEventDefinition** 그대로 사용합니다.
 | Gift Drops → Count | 5 |
 | Gift Drops → Start Progress | 0.1 |
 | Gift Drops → End Progress | 0.9 |
+| Gift Drops → Random Drop Radius | 500cm |
 | Gift Drop Height Offset | 100cm |
 | Relic Classes | 생성할 기존 유물 BP 여러 개 |
 
@@ -81,6 +82,7 @@ DA 타입은 기존 **NPSantaEventDefinition** 그대로 사용합니다.
 - 유물 목록은 **ANPBaseRelic 파생 BP 클래스**입니다. 메시나 데이터 테이블 Row를 넣는 칸이 아닙니다. 기존 유물 BP가 가진 가격/등급/상호작용 설정을 그대로 사용합니다.
 - 후보는 중복 제거 후 균등 추첨합니다. 서로 다른 상자에서 같은 유물이 나올 수 있습니다. 한 종류만 넣으면 해당 유물만 나옵니다.
 - 랜덤 풀을 비우거나 Gift Class를 누락하면 경고를 남기고 **비행만** 진행합니다. 유물 전체 에셋을 임의로 스캔하지 않습니다.
+- 투하 시간과 진행 간격은 기존처럼 유지되며, 각 투하 위치만 경로상의 지점을 중심으로 `Random Drop Radius` 수평 원 안에서 서버가 무작위로 정합니다. 0이면 기존처럼 일직선으로 투하합니다.
 - 이번 작업에서 BP/DA/레벨 에셋은 수정하거나 생성하지 않았습니다.
 
 ## 착지 / 실패 조건

@@ -16,6 +16,10 @@ DECLARE_MULTICAST_DELEGATE_OneParam(
 	FNPOnRelicValueChanged,
 	ANPBaseRelic*);
 
+DECLARE_MULTICAST_DELEGATE_OneParam(
+	FNPOnRelicReleasedFromDisplay,
+	ANPBaseRelic*);
+
 UCLASS(Abstract, Blueprintable)
 class NOPHOTOS_API ANPBaseRelic : public AActor
 {
@@ -64,6 +68,9 @@ public:
 
 	/** 서버와 클라이언트에서 현재 유물 가치가 변경될 때 실행됩니다. */
 	FNPOnRelicValueChanged OnRelicValueChanged;
+
+	/** 서버에서 유물이 전시 상태를 벗어나는 최초 순간에 한 번 실행됩니다. */
+	FNPOnRelicReleasedFromDisplay OnReleasedFromDisplay;
 
 	UFUNCTION(BlueprintPure, Category="Relic|Ownership")
 	UNPRelicOwnershipComponent* GetOwnershipComponent() const { return OwnershipComponent; }

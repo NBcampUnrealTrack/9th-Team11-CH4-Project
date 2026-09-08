@@ -1,5 +1,7 @@
 #include "NPMainGameMode.h"
 
+#include "AbilitySystemComponent.h"
+#include "Core/GameplayTag/NPGameplayTags.h"
 #include "Core/Main/NPMainPlayerController.h"
 #include "Core/NPPlayerState.h"
 #include "Core/Room/NPRoomSubsystem.h"
@@ -14,8 +16,11 @@
 #include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Gameplay/Relic/NPRelicDeliveryService.h"
+#include "Gameplay/MapEvents/NPMapEventManager.h"
+#include "Gameplay/Map/Room/NPRoomGenerationHelper.h"
 #include "NPMainGameLog.h"
 #include "NPMainGameState.h"
+#include "SubSystem/Room/NPRoomGenerateSubsystem.h"
 #include "TimerManager.h"
 
 ANPMainGameMode::ANPMainGameMode()
@@ -90,9 +95,20 @@ FNPPhotoEvidenceResult ANPMainGameMode::HandlePhotoCaptureRequest(const FNPPhoto
 	{
 		ANPReplicatedStablePhysicsPawn* ThiefPawn =
 			Cast<ANPReplicatedStablePhysicsPawn>(Result.Thief->GetPawn());
-		if (UNPPhotoCapturePenaltyComponent* PenaltyComponent = ThiefPawn
+		UNPPhotoCapturePenaltyComponent* PenaltyComponent = ThiefPawn
 			? ThiefPawn->FindComponentByClass<UNPPhotoCapturePenaltyComponent>()
-			: nullptr)
+			: nullptr;
+		UE_LOG(
+			LogNPPhoto,
+			Warning,
+			TEXT("[PhotoStun][Request] Success=%s Thief=%s Relic=%s Penalty=%d Pawn=%s Component=%s"),
+			Result.bSuccess ? TEXT("true") : TEXT("false"),
+			*GetNameSafe(Result.Thief.Get()),
+			*GetNameSafe(EvidenceRelic),
+			AppliedPhotoPenalty,
+			*GetNameSafe(ThiefPawn),
+			*GetNameSafe(PenaltyComponent));
+		if (PenaltyComponent)
 		{
 			PenaltyComponent->ApplyCapturedWithRelicPenalty(
 				EvidenceRelic,
@@ -138,11 +154,21 @@ void ANPMainGameMode::PlayPhotoWorldFeedback(
 
 	if (IsValid(PhotographerPawn))
 	{
-		PhotographerPawn->MulticastPlayPhotographerFeedback();
+		if (UAbilitySystemComponent* AbilitySystem =
+			PhotographerPawn->GetAbilitySystemComponent())
+		{
+			AbilitySystem->ExecuteGameplayCue(
+				NPGameplayTags::GameplayCue_Photo_WorldFeedback_Photographer);
+		}
 	}
 	if (IsValid(PhotographedPawn))
 	{
-		PhotographedPawn->MulticastPlayPhotographedFeedback();
+		if (UAbilitySystemComponent* AbilitySystem =
+			PhotographedPawn->GetAbilitySystemComponent())
+		{
+			AbilitySystem->ExecuteGameplayCue(
+				NPGameplayTags::GameplayCue_Photo_WorldFeedback_Photographed);
+		}
 		if (ANPMainPlayerController* PhotographedController =
 			Cast<ANPMainPlayerController>(PhotographedPawn->GetController()))
 		{
@@ -153,7 +179,7 @@ void ANPMainGameMode::PlayPhotoWorldFeedback(
 	UE_LOG(
 		LogNPPhoto,
 		Log,
-		TEXT("[PhotoWorldFeedback] Multicast requested. PhotographerPawn=%s PhotographedPawn=%s"),
+		TEXT("[PhotoWorldFeedback] GameplayCues requested. PhotographerPawn=%s PhotographedPawn=%s"),
 		*GetNameSafe(PhotographerPawn),
 		*GetNameSafe(PhotographedPawn));
 }
@@ -176,7 +202,7 @@ void ANPMainGameMode::HandlePhotoStored(
 void ANPMainGameMode::BeginPlay()
 {
 	Super::BeginPlay();
-	StartMainGame();
+	BeginWorldPreparation();
 }
 
 void ANPMainGameMode::PostLogin(APlayerController* NewPlayer)
@@ -185,7 +211,14 @@ void ANPMainGameMode::PostLogin(APlayerController* NewPlayer)
 
 	if (ANPMainPlayerController* NPPlayerController = Cast<ANPMainPlayerController>(NewPlayer))
 	{
-		NPPlayerController->ClientShowGameScreenUI();
+		if (bMainGameStarted)
+		{
+			NPPlayerController->ClientFinishMainWorldPreparation();
+		}
+		else
+		{
+			NPPlayerController->ClientBeginMainWorldPreparation();
+		}
 	}
 
 	RefreshPlayerRankings();
@@ -193,7 +226,9 @@ void ANPMainGameMode::PostLogin(APlayerController* NewPlayer)
 
 void ANPMainGameMode::Logout(AController* Exiting)
 {
+	ReadyPlayers.Remove(Cast<ANPMainPlayerController>(Exiting));
 	Super::Logout(Exiting);
+	TryStartPreparedMainGame();
 	RefreshPlayerRankings();
 
 	ANPMainGameState* MainGameState = GetGameState<ANPMainGameState>();
@@ -230,10 +265,207 @@ void ANPMainGameMode::HandleSeamlessTravelPlayer(AController*& Controller)
 
 	if (ANPMainPlayerController* NPPlayerController = Cast<ANPMainPlayerController>(Controller))
 	{
-		NPPlayerController->ClientShowGameScreenUI();
+		if (bMainGameStarted)
+		{
+			NPPlayerController->ClientFinishMainWorldPreparation();
+		}
+		else
+		{
+			NPPlayerController->ClientBeginMainWorldPreparation();
+		}
 	}
 
 	RefreshPlayerRankings();
+}
+
+void ANPMainGameMode::BeginWorldPreparation()
+{
+	if (ShouldBypassRoomPreparationForEditorTest())
+	{
+		NPMainGameLog::Info(
+			this,
+			TEXT("에디터 개별 레벨 테스트: RoomGenerationHelper가 없어 방 로딩 대기를 건너뜁니다."));
+		HandleServerRoomGenerationCompleted();
+		return;
+	}
+
+	GetWorldTimerManager().SetTimer(
+		WorldPreparationTimeoutTimer,
+		this,
+		&ThisClass::HandleWorldPreparationTimeout,
+		WorldPreparationTimeoutSeconds,
+		false);
+
+	ANPMainGameState* MainGameState = GetGameState<ANPMainGameState>();
+	if (MainGameState)
+	{
+		MainGameState->SetMainWorldState(ENPMainWorldState::Preparing);
+	}
+
+	UNPRoomGenerateSubsystem* RoomGenerator = GetWorld()
+		? GetWorld()->GetSubsystem<UNPRoomGenerateSubsystem>()
+		: nullptr;
+	if (!RoomGenerator)
+	{
+		FailWorldPreparation();
+		return;
+	}
+
+	RoomGenerator->OnRoomGenerationCompleted.AddUniqueDynamic(
+		this,
+		&ThisClass::HandleServerRoomGenerationCompleted);
+	RoomGenerator->OnRoomGenerationFailed.AddUniqueDynamic(
+		this,
+		&ThisClass::HandleServerRoomGenerationFailed);
+	if (RoomGenerator->IsGenerationComplete())
+	{
+		HandleServerRoomGenerationCompleted();
+	}
+	else if (RoomGenerator->HasGenerationFailed())
+	{
+		HandleServerRoomGenerationFailed();
+	}
+}
+
+bool ANPMainGameMode::ShouldBypassRoomPreparationForEditorTest() const
+{
+#if WITH_EDITOR
+	UWorld* World = GetWorld();
+	if (!World || World->WorldType != EWorldType::PIE)
+	{
+		return false;
+	}
+
+	TActorIterator<ANPRoomGenerationHelper> RoomGenerationHelperIterator(World);
+	const bool bHasRoomGenerationHelper =
+		static_cast<bool>(RoomGenerationHelperIterator);
+	if (bHasRoomGenerationHelper)
+	{
+		return false;
+	}
+
+	return true;
+#else
+	return false;
+#endif
+}
+
+void ANPMainGameMode::HandleServerRoomGenerationCompleted()
+{
+	bServerWorldReady = true;
+	NPMainGameLog::Info(this, TEXT("메인 월드 서버 방 로딩 완료: 클라이언트 준비를 기다립니다."));
+	if (ANPMainGameState* MainGameState = GetGameState<ANPMainGameState>())
+	{
+		MainGameState->SetMainWorldState(ENPMainWorldState::WaitingForPlayers);
+	}
+	TryStartPreparedMainGame();
+}
+
+void ANPMainGameMode::HandleServerRoomGenerationFailed()
+{
+	FailWorldPreparation();
+}
+
+void ANPMainGameMode::RegisterPlayerWorldReady(
+	ANPMainPlayerController* PlayerController)
+{
+	if (!IsValid(PlayerController) || bMainGameStarted)
+	{
+		return;
+	}
+
+	ReadyPlayers.Add(PlayerController);
+	NPMainGameLog::Info(
+		this,
+		FString::Printf(
+			TEXT("메인 월드 클라이언트 준비 완료: %s"),
+			*GetNameSafe(PlayerController)));
+	TryStartPreparedMainGame();
+}
+
+void ANPMainGameMode::TryStartPreparedMainGame()
+{
+	if (!bServerWorldReady || bMainGameStarted)
+	{
+		return;
+	}
+
+	int32 ConnectedPlayerCount = 0;
+	for (FConstPlayerControllerIterator Iterator =
+		GetWorld()->GetPlayerControllerIterator(); Iterator; ++Iterator)
+	{
+		ANPMainPlayerController* PlayerController =
+			Cast<ANPMainPlayerController>(Iterator->Get());
+		if (!IsValid(PlayerController))
+		{
+			continue;
+		}
+
+		++ConnectedPlayerCount;
+		if (!ReadyPlayers.Contains(PlayerController))
+		{
+			return;
+		}
+	}
+
+	if (ConnectedPlayerCount == 0)
+	{
+		return;
+	}
+
+	bMainGameStarted = true;
+	GetWorldTimerManager().ClearTimer(WorldPreparationTimeoutTimer);
+	NPMainGameLog::Info(this, TEXT("메인 월드 전원 준비 완료: 타이머와 맵 이벤트를 시작합니다."));
+	StartMainGame();
+	if (ANPMainGameState* MainGameState = GetGameState<ANPMainGameState>())
+	{
+		if (UNPMapEventManagerComponent* EventManager =
+			MainGameState->FindComponentByClass<UNPMapEventManagerComponent>();
+			EventManager && EventManager->ShouldStartAutomatically())
+		{
+			EventManager->StartEventScheduling();
+		}
+	}
+
+	for (FConstPlayerControllerIterator Iterator =
+		GetWorld()->GetPlayerControllerIterator(); Iterator; ++Iterator)
+	{
+		if (ANPMainPlayerController* PlayerController =
+			Cast<ANPMainPlayerController>(Iterator->Get()))
+		{
+			PlayerController->ClientFinishMainWorldPreparation();
+		}
+	}
+}
+
+void ANPMainGameMode::FailWorldPreparation()
+{
+	GetWorldTimerManager().ClearTimer(WorldPreparationTimeoutTimer);
+	if (ANPMainGameState* MainGameState = GetGameState<ANPMainGameState>())
+	{
+		MainGameState->SetMainWorldState(ENPMainWorldState::LoadFailed);
+	}
+
+	for (FConstPlayerControllerIterator Iterator =
+		GetWorld()->GetPlayerControllerIterator(); Iterator; ++Iterator)
+	{
+		if (ANPMainPlayerController* PlayerController =
+			Cast<ANPMainPlayerController>(Iterator->Get()))
+		{
+			PlayerController->ClientNotifyMainWorldLoadFailed();
+		}
+	}
+}
+
+void ANPMainGameMode::HandleWorldPreparationTimeout()
+{
+	NPMainGameLog::Info(
+		this,
+		FString::Printf(
+			TEXT("메인 월드 준비 시간 초과: ServerReady=%s ReadyPlayers=%d"),
+			bServerWorldReady ? TEXT("true") : TEXT("false"),
+			ReadyPlayers.Num()));
+	FailWorldPreparation();
 }
 
 AActor* ANPMainGameMode::ChoosePlayerStart_Implementation(AController* Player)

@@ -1,13 +1,19 @@
 #include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 
 #include "Components/PrimitiveComponent.h"
+#include "Components/ChildActorComponent.h"
+#include "Core/GameplayTag/NPGameplayTags.h"
+#include "Core/Main/NPMainGameState.h"
+#include "Gameplay/AbilitySystem/Effects/NPLeaderGameplayEffect.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "EnhancedInputComponent.h"
+#include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
 #include "PhysicsEngine/BodyInstance.h"
 #include "Gameplay/AbilitySystem/NPAbilitySystemComponent.h"
 #include "Gameplay/Character/Component/NPInvisibilityComponent.h"
 #include "Gameplay/Character/Component/NPControlReversalComponent.h"
+#include "Gameplay/Character/Component/NPStatusVisualComponent.h"
 #include "Gameplay/Character/Component/NPVisionRestrictionComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsNetworkPredictionComponent.h"
@@ -15,7 +21,6 @@
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Gameplay/Relic/Components/NPRelicOwnershipComponent.h"
 #include "Gameplay/Relic/Components/NPAimableRelicComponent.h"
-#include "Gameplay/Photo/NPPhotoWorldFeedbackComponent.h"
 #include "Gameplay/Photo/NPPhotoCapturePenaltyComponent.h"
 #include "UI/GameScreen/NPScoreFeedbackWidgetComponent.h"
 #include "Core/NPPlayerState.h"
@@ -34,10 +39,6 @@ ANPReplicatedStablePhysicsPawn::ANPReplicatedStablePhysicsPawn()
 	NetworkPrediction = CreateDefaultSubobject<
 		UNPStablePhysicsNetworkPredictionComponent>(TEXT("NetworkPrediction"));
 
-	PhotoWorldFeedback = CreateDefaultSubobject<
-		UNPPhotoWorldFeedbackComponent>(TEXT("PhotoWorldFeedback"));
-	PhotoWorldFeedback->SetupAttachment(GetRootComponent());
-
 	PhotoCapturePenalty = CreateDefaultSubobject<
 		UNPPhotoCapturePenaltyComponent>(TEXT("PhotoCapturePenalty"));
 
@@ -49,15 +50,38 @@ ANPReplicatedStablePhysicsPawn::ANPReplicatedStablePhysicsPawn()
 
 	AbilitySystem = CreateDefaultSubobject<UNPAbilitySystemComponent>(
 		TEXT("AbilitySystem"));
+	LeaderCrown = CreateDefaultSubobject<UChildActorComponent>(TEXT("LeaderCrown"));
+	LeaderCrown->SetupAttachment(PhysicsMesh);
+	LeaderCrown->SetRelativeLocation(FVector(0.0f, 0.0f, 190.0f));
+	LeaderCrown->SetAbsolute(false, true, false);
+	LeaderCrown->SetVisibility(false, true);
+	LeaderCrown->SetHiddenInGame(true, true);
 	Invisibility = CreateDefaultSubobject<UNPInvisibilityComponent>(TEXT("Invisibility"));
 	VisionRestriction = CreateDefaultSubobject<UNPVisionRestrictionComponent>(TEXT("VisionRestriction"));
 	ControlReversal = CreateDefaultSubobject<UNPControlReversalComponent>(TEXT("ControlReversal"));
+	StatusVisual = CreateDefaultSubobject<UNPStatusVisualComponent>(TEXT("StatusVisual"));
 }
 
 void ANPReplicatedStablePhysicsPawn::BeginPlay()
 {
 	Super::BeginPlay();
 	AbilitySystem->InitializeForOwner();
+	RelicCarryingTagChangedHandle = AbilitySystem->RegisterGameplayTagEvent(
+		NPGameplayTags::State_Relic_Carrying,
+		EGameplayTagEventType::NewOrRemoved).AddUObject(
+			this,
+			&ANPReplicatedStablePhysicsPawn::HandleRelicCarryingTagChanged);
+	HandleRelicCarryingTagChanged(
+		NPGameplayTags::State_Relic_Carrying,
+		AbilitySystem->GetTagCount(NPGameplayTags::State_Relic_Carrying));
+	StatusVisual->Initialize(AbilitySystem, LeaderCrown);
+	if (HasAuthority())
+	{
+		if (ANPMainGameState* MainGameState = GetWorld()->GetGameState<ANPMainGameState>())
+		{
+			MainGameState->RefreshPlayerRankings();
+		}
+	}
 
 	const bool bServerAuthority = HasAuthority();
 	const bool bRunsMovementPhysics = bServerAuthority || IsLocallyControlled();
@@ -99,6 +123,16 @@ void ANPReplicatedStablePhysicsPawn::PossessedBy(AController* NewController)
 	Super::PossessedBy(NewController);
 
 	AbilitySystem->InitializeForOwner();
+	if (ANPMainGameState* MainGameState = GetWorld()->GetGameState<ANPMainGameState>())
+	{
+		MainGameState->RefreshPlayerRankings();
+	}
+}
+
+void ANPReplicatedStablePhysicsPawn::UnPossessed()
+{
+	SetRankingLeader(false);
+	Super::UnPossessed();
 }
 
 void ANPReplicatedStablePhysicsPawn::OnRep_Controller()
@@ -107,24 +141,17 @@ void ANPReplicatedStablePhysicsPawn::OnRep_Controller()
 	AbilitySystem->InitializeForOwner();
 }
 
-void ANPReplicatedStablePhysicsPawn::MulticastPlayPhotographerFeedback_Implementation()
-{
-	if (IsValid(PhotoWorldFeedback))
-	{
-		PhotoWorldFeedback->PlayPhotographerEffect();
-	}
-}
-
-void ANPReplicatedStablePhysicsPawn::MulticastPlayPhotographedFeedback_Implementation()
-{
-	if (IsValid(PhotoWorldFeedback))
-	{
-		PhotoWorldFeedback->PlayPhotographedEffect();
-	}
-}
-
 void ANPReplicatedStablePhysicsPawn::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (IsValid(AbilitySystem) && RelicCarryingTagChangedHandle.IsValid())
+	{
+		AbilitySystem->RegisterGameplayTagEvent(
+			NPGameplayTags::State_Relic_Carrying,
+			EGameplayTagEventType::NewOrRemoved).Remove(
+				RelicCarryingTagChangedHandle);
+		RelicCarryingTagChangedHandle.Reset();
+	}
+
 	if (HasAuthority() && IsValid(RegisteredGrabbedRelic))
 	{
 		if (UNPRelicOwnershipComponent* Ownership =
@@ -172,6 +199,26 @@ UAbilitySystemComponent* ANPReplicatedStablePhysicsPawn::GetAbilitySystemCompone
 	return AbilitySystem;
 }
 
+void ANPReplicatedStablePhysicsPawn::SetRankingLeader(bool bLeader)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	if (bLeader && !AbilitySystem->GetActiveGameplayEffect(LeaderEffectHandle))
+	{
+		LeaderEffectHandle = AbilitySystem->ApplyGameplayEffectToSelf(
+			GetDefault<UNPLeaderGameplayEffect>(), 1.0f, AbilitySystem->MakeEffectContext());
+		ForceNetUpdate();
+	}
+	else if (!bLeader && LeaderEffectHandle.IsValid())
+	{
+		AbilitySystem->RemoveActiveGameplayEffect(LeaderEffectHandle);
+		LeaderEffectHandle.Invalidate();
+		ForceNetUpdate();
+	}
+}
+
 void ANPReplicatedStablePhysicsPawn::AddExternalVelocityChange(
 	const FVector& VelocityChange)
 {
@@ -191,6 +238,27 @@ void ANPReplicatedStablePhysicsPawn::ClientApplyExternalVelocityChange_Implement
 	FVector_NetQuantize10 VelocityChange)
 {
 	ApplyExternalVelocityChangeLocal(FVector(VelocityChange));
+}
+
+void ANPReplicatedStablePhysicsPawn::SetExternalVerticalVelocity(
+	float VerticalVelocity)
+{
+	if (!HasAuthority() || !FMath::IsFinite(VerticalVelocity))
+	{
+		return;
+	}
+
+	SetExternalVerticalVelocityLocal(VerticalVelocity);
+	if (IsPlayerControlled() && !IsLocallyControlled())
+	{
+		ClientSetExternalVerticalVelocity(VerticalVelocity);
+	}
+}
+
+void ANPReplicatedStablePhysicsPawn::ClientSetExternalVerticalVelocity_Implementation(
+	float VerticalVelocity)
+{
+	SetExternalVerticalVelocityLocal(VerticalVelocity);
 }
 
 void ANPReplicatedStablePhysicsPawn::StartTemporaryRagdoll()
@@ -360,8 +428,12 @@ void ANPReplicatedStablePhysicsPawn::ApplyMoveInput(const FVector& WorldMoveInpu
 	}
 
 	const float InputViewYaw = GetTargetViewRotation().Yaw;
-	const FVector ClampedMoveInput = WorldMoveInput.ContainsNaN() || !FMath::IsFinite(InputViewYaw)
-		? FVector::ZeroVector : WorldMoveInput.GetClampedToMaxSize(1.0f);
+	FVector ClampedMoveInput = FVector::ZeroVector;
+	if (!IsPhotoStunned() && !WorldMoveInput.ContainsNaN()
+		&& FMath::IsFinite(InputViewYaw))
+	{
+		ClampedMoveInput = WorldMoveInput.GetClampedToMaxSize(1.0f);
+	}
 	if (IsValid(ControlReversal))
 	{
 		ControlReversal->ApplyRawMovementInput(ClampedMoveInput, InputViewYaw);
@@ -392,6 +464,11 @@ void ANPReplicatedStablePhysicsPawn::ApplyMoveInput(const FVector& WorldMoveInpu
 
 void ANPReplicatedStablePhysicsPawn::ApplyJumpRequest()
 {
+	if (IsPhotoStunned())
+	{
+		return;
+	}
+
 	if (HasAuthority())
 	{
 		Super::ApplyJumpRequest();
@@ -405,6 +482,11 @@ void ANPReplicatedStablePhysicsPawn::ApplyJumpRequest()
 
 void ANPReplicatedStablePhysicsPawn::ApplyRightHandState(bool bActive)
 {
+	if (bActive && IsPhotoStunned())
+	{
+		return;
+	}
+
 #if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
 	if (!bActive && IsLocallyControlled() && bDebugGrabLocked)
 	{
@@ -472,6 +554,11 @@ void ANPReplicatedStablePhysicsPawn::ServerSetViewRotation_Implementation(
 	uint16 CompressedYaw,
 	uint16 CompressedPitch)
 {
+	if (IsPhotoStunned())
+	{
+		return;
+	}
+
 	SetReplicatedViewRotation(FRotator(
 		FRotator::DecompressAxisFromShort(CompressedPitch),
 		FRotator::DecompressAxisFromShort(CompressedYaw),
@@ -482,6 +569,16 @@ void ANPReplicatedStablePhysicsPawn::ServerRequestAimableRelicFire_Implementatio
 	FVector_NetQuantize10 CameraLocation,
 	FVector_NetQuantizeNormal CameraForward)
 {
+	if (IsPhotoStunned())
+	{
+		UE_LOG(
+			LogNoPhotos,
+			Warning,
+			TEXT("[AimableRelic] Server request rejected: Pawn is photo stunned. Pawn=%s"),
+			*GetNameSafe(this));
+		return;
+	}
+
 	ANPBaseRelic* HeldRelic = Cast<ANPBaseRelic>(
 		ReplicatedGrabState.GrabbedActor);
 	UNPAimableRelicComponent* AimableRelic = HeldRelic
@@ -553,7 +650,20 @@ void ANPReplicatedStablePhysicsPawn::ServerRequestAimableRelicFire_Implementatio
 void ANPReplicatedStablePhysicsPawn::ServerSetRightHandActive_Implementation(
 	bool bActive)
 {
+	if (bActive && IsPhotoStunned())
+	{
+		SetServerRightHandState(false);
+		return;
+	}
+
 	SetServerRightHandState(bActive);
+}
+
+bool ANPReplicatedStablePhysicsPawn::IsPhotoStunned() const
+{
+	return IsValid(AbilitySystem)
+		&& AbilitySystem->HasMatchingGameplayTag(
+			NPGameplayTags::State_CrowdControl_Stunned);
 }
 
 void ANPReplicatedStablePhysicsPawn::OnRep_RightHandActive()
@@ -773,6 +883,28 @@ void ANPReplicatedStablePhysicsPawn::HandleGrabbedComponentChanged(
 	}
 	UpdateBlueprintGrabState(NewGrabbedComponent);
 	ForceNetUpdate();
+}
+
+void ANPReplicatedStablePhysicsPawn::HandleRelicCarryingTagChanged(
+	FGameplayTag,
+	const int32 NewCount)
+{
+	static const FName RelicCarrySpeedSource(TEXT("RelicCarry"));
+	if (!IsValid(PhysicsMovement))
+	{
+		return;
+	}
+
+	if (NewCount > 0)
+	{
+		PhysicsMovement->SetMoveSpeedMultiplier(
+			RelicCarrySpeedSource,
+			RelicCarryMoveSpeedMultiplier);
+	}
+	else
+	{
+		PhysicsMovement->ClearMoveSpeedMultiplier(RelicCarrySpeedSource);
+	}
 }
 
 void ANPReplicatedStablePhysicsPawn::HandleGrabConstraintBroken()

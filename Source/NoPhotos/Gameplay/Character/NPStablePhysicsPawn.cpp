@@ -1,8 +1,13 @@
 #include "Gameplay/Character/NPStablePhysicsPawn.h"
 
+#include "AbilitySystemBlueprintLibrary.h"
+#include "AbilitySystemComponent.h"
+#include "Core/GameplayTag/NPGameplayTags.h"
+
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Engine/World.h"
 #include "EnhancedInputComponent.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -17,6 +22,9 @@
 #include "Gameplay/Character/Component/NPStablePhysicsDebugComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsMovementComponent.h"
+#include "Gameplay/Character/Component/NPScanComponent.h"
+#include "Gameplay/Relic/NPBaseRelic.h"
+#include "Gameplay/Relic/Components/NPScanOutlineComponent.h"
 #include "Gameplay/Relic/Components/NPSwingableRelicComponent.h"
 #include "Gameplay/Photo/NPPhotoLog.h"
 #include "Core/Audio/NPSoundSubsystem.h"
@@ -56,6 +64,9 @@ ANPStablePhysicsPawn::ANPStablePhysicsPawn()
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 
+	ScanComponent = CreateDefaultSubobject<UNPScanComponent>(TEXT("ScanComponent"));
+	ScanComponent->SetupAttachment(FollowCamera);
+
 	PhysicalAnimation = CreateDefaultSubobject<UPhysicalAnimationComponent>(TEXT("PhysicalAnimation"));
 	PhysicsControl = CreateDefaultSubobject<UPhysicsControlComponent>(TEXT("PhysicsControl"));
 	PhysicsMovement = CreateDefaultSubobject<UNPStablePhysicsMovementComponent>(TEXT("NPPhysicsMovement"));
@@ -82,12 +93,20 @@ void ANPStablePhysicsPawn::BeginPlay()
 {
 	Super::BeginPlay();
 
+	SeamlessTravelTransitionHandle =
+		FWorldDelegates::OnSeamlessTravelTransition.AddUObject(
+			this,
+			&ANPStablePhysicsPawn::HandleSeamlessTravelTransition);
+
 	ApplyCharacterProfile();
 	PhysicsMovement->Initialize(PhysicsMesh, CharacterForwardYawOffset);
 	RightHandGrab->Initialize(PhysicsMesh, RightHandBoneName);
 	PhysicsMovement->OnJumpApplied.AddUObject(
 		RightHandGrab,
 		&UNPStablePhysicsGrabComponent::NotifyJumpIntent);
+	ScanComponent->OnActorScanned.AddUniqueDynamic(
+		this,
+		&ThisClass::HandleActorScanned);
 	InitializePhysicalAnimation();
 	PhysicsMovement->InitializeFacingControl(PhysicsControl);
 	DefaultCameraArmLength = CameraBoom->TargetArmLength;
@@ -98,6 +117,42 @@ void ANPStablePhysicsPawn::BeginPlay()
 	CameraBoom->AddTickPrerequisiteActor(this);
 	PhysicsDebug->AddTickPrerequisiteActor(this);
 	PhysicsDebug->AddTickPrerequisiteComponent(RightHandGrab);
+}
+
+void ANPStablePhysicsPawn::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (SeamlessTravelTransitionHandle.IsValid())
+	{
+		FWorldDelegates::OnSeamlessTravelTransition.Remove(
+			SeamlessTravelTransitionHandle);
+		SeamlessTravelTransitionHandle.Reset();
+	}
+
+	if (PhysicalAnimation)
+	{
+		PhysicalAnimation->SetComponentTickEnabled(false);
+		PhysicalAnimation->Deactivate();
+		PhysicalAnimation->SetSkeletalMeshComponent(nullptr);
+	}
+
+	GetWorldTimerManager().ClearTimer(TemporaryRagdollTimer);
+	GetWorldTimerManager().ClearTimer(TemporaryRagdollRecoveryTimer);
+	GetWorldTimerManager().ClearTimer(TemporaryRagdollInputDelayTimer);
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void ANPStablePhysicsPawn::HandleSeamlessTravelTransition(
+	UWorld* TransitioningWorld)
+{
+	if (TransitioningWorld != GetWorld() || !PhysicalAnimation)
+	{
+		return;
+	}
+
+	PhysicalAnimation->SetComponentTickEnabled(false);
+	PhysicalAnimation->Deactivate();
+	PhysicalAnimation->SetSkeletalMeshComponent(nullptr);
 }
 
 void ANPStablePhysicsPawn::Tick(float DeltaSeconds)
@@ -134,6 +189,16 @@ void ANPStablePhysicsPawn::AddExternalVelocityChange(const FVector& VelocityChan
 	ApplyExternalVelocityChangeLocal(VelocityChange);
 }
 
+void ANPStablePhysicsPawn::SetExternalVerticalVelocity(float VerticalVelocity)
+{
+	if (!HasAuthority() || !FMath::IsFinite(VerticalVelocity))
+	{
+		return;
+	}
+
+	SetExternalVerticalVelocityLocal(VerticalVelocity);
+}
+
 void ANPStablePhysicsPawn::StartTemporaryRagdoll()
 {
 	if (HasAuthority())
@@ -157,6 +222,37 @@ void ANPStablePhysicsPawn::ApplyExternalVelocityChangeLocal(
 		FullBodyRootName,
 		true,
 		true);
+	if (bTemporaryRagdollRecoveryActive)
+	{
+		BeginTemporaryRagdoll();
+	}
+}
+
+void ANPStablePhysicsPawn::SetExternalVerticalVelocityLocal(float VerticalVelocity)
+{
+	if (!PhysicsMesh || !FMath::IsFinite(VerticalVelocity))
+	{
+		return;
+	}
+
+	StopMovementInput();
+	PhysicsMesh->WakeAllRigidBodies();
+	PhysicsMesh->ForEachBodyBelow(
+		FullBodyRootName,
+		true,
+		false,
+		[VerticalVelocity](FBodyInstance* BodyInstance)
+		{
+			if (!BodyInstance || !BodyInstance->IsInstanceSimulatingPhysics())
+			{
+				return;
+			}
+
+			FVector BodyVelocity = BodyInstance->GetUnrealWorldVelocity();
+			BodyVelocity.Z = VerticalVelocity;
+			BodyInstance->SetLinearVelocity(BodyVelocity, false);
+		});
+
 	if (bTemporaryRagdollRecoveryActive)
 	{
 		BeginTemporaryRagdoll();
@@ -849,6 +945,44 @@ void ANPStablePhysicsPawn::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 		EnhancedInputComponent->BindAction(RightHandAction, ETriggerEvent::Completed, this, &ANPStablePhysicsPawn::StopRightHand);
 		EnhancedInputComponent->BindAction(RightHandAction, ETriggerEvent::Canceled, this, &ANPStablePhysicsPawn::StopRightHand);
 	}
+	if (ScanAction)
+	{
+		EnhancedInputComponent->BindAction(ScanAction, ETriggerEvent::Started, this, &ANPStablePhysicsPawn::HandleScanPressed);
+	}
+}
+
+void ANPStablePhysicsPawn::HandleScanPressed()
+{
+	if (const UAbilitySystemComponent* AbilitySystem =
+		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(this);
+		AbilitySystem &&
+		(AbilitySystem->HasMatchingGameplayTag(NPGameplayTags::State_Photo_Aiming) ||
+		 AbilitySystem->HasMatchingGameplayTag(NPGameplayTags::State_Relic_Aiming)))
+	{
+		return;
+	}
+
+	EventPressScan();
+}
+
+void ANPStablePhysicsPawn::HandleActorScanned(AActor* ScannedActor)
+{
+	ANPBaseRelic* Relic = Cast<ANPBaseRelic>(ScannedActor);
+	if (!IsValid(Relic))
+	{
+		return;
+	}
+	if (Relic->IsReturned())
+	{
+		return;
+	}
+
+	UNPScanOutlineComponent* OutlineComponent =
+		Relic->FindComponentByClass<UNPScanOutlineComponent>();
+	if (IsValid(OutlineComponent))
+	{
+		OutlineComponent->PlayOutline();
+	}
 }
 
 void ANPStablePhysicsPawn::Move(const FInputActionValue& Value)
@@ -874,6 +1008,14 @@ void ANPStablePhysicsPawn::Move(const FInputActionValue& Value)
 
 void ANPStablePhysicsPawn::Look(const FInputActionValue& Value)
 {
+	if (const UAbilitySystemComponent* AbilitySystem =
+		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(this);
+		AbilitySystem && AbilitySystem->HasMatchingGameplayTag(
+			NPGameplayTags::State_CrowdControl_Stunned))
+	{
+		return;
+	}
+
 	const FVector2D LookInput = Value.Get<FVector2D>();
 	AddControllerYawInput(LookInput.X);
 	AddControllerPitchInput(LookInput.Y);

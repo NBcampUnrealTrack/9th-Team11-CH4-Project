@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AbilitySystemInterface.h"
+#include "GameplayEffectTypes.h"
 #include "CoreMinimal.h"
 #include "Engine/EngineTypes.h"
 #include "Gameplay/Character/NPStablePhysicsPawn.h"
@@ -8,15 +9,16 @@
 #include "NPReplicatedStablePhysicsPawn.generated.h"
 
 class UPrimitiveComponent;
+class UChildActorComponent;
 class UAbilitySystemComponent;
 class AController;
 class FLifetimeProperty;
 class UNPAbilitySystemComponent;
 class UNPInvisibilityComponent;
 class UNPControlReversalComponent;
+class UNPStatusVisualComponent;
 class UNPVisionRestrictionComponent;
 class UNPStablePhysicsNetworkPredictionComponent;
-class UNPPhotoWorldFeedbackComponent;
 class UNPPhotoCapturePenaltyComponent;
 class UNPScoreFeedbackWidgetComponent;
 class ANPBaseRelic;
@@ -55,11 +57,17 @@ class NOPHOTOS_API ANPReplicatedStablePhysicsPawn
 public:
 	ANPReplicatedStablePhysicsPawn();
 
+	/** 증거 사진 패널티로 현재 조작이 차단되었는지 반환합니다. */
+	UFUNCTION(BlueprintPure, Category="Photo|Penalty")
+	bool IsPhotoStunned() const;
+
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	void SetRankingLeader(bool bLeader);
 	virtual void AddExternalVelocityChange(
 		const FVector& VelocityChange) override;
+	virtual void SetExternalVerticalVelocity(float VerticalVelocity) override;
 	virtual void StartTemporaryRagdoll() override;
 
 	UFUNCTION(BlueprintPure, Category="Network|Grab")
@@ -83,18 +91,11 @@ public:
 		FVector_NetQuantize10 CameraLocation,
 		FVector_NetQuantizeNormal CameraForward);
 
-	/** 서버가 확정한 촬영자 표시를 현재 관련된 모든 클라이언트에서 재생합니다. */
-	UFUNCTION(NetMulticast, Reliable)
-	void MulticastPlayPhotographerFeedback();
-
-	/** 서버가 확정한 피촬영자 표시를 현재 관련된 모든 클라이언트에서 재생합니다. */
-	UFUNCTION(NetMulticast, Reliable)
-	void MulticastPlayPhotographedFeedback();
-
 protected:
 	virtual void BeginPlay() override;
 	virtual void CompleteTemporaryRagdollRecovery() override;
 	virtual void PossessedBy(AController* NewController) override;
+	virtual void UnPossessed() override;
 	virtual void OnRep_Controller() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
@@ -114,6 +115,12 @@ protected:
 	void OnGrabConstraintBroken();
 
 private:
+	FActiveGameplayEffectHandle LeaderEffectHandle;
+
+	/** Child Actor Class에 NPLeaderCrown 기반 Blueprint를 지정합니다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Ranking", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UChildActorComponent> LeaderCrown;
+
 	static constexpr float ViewRotationSendInterval = 0.05f;
 
 	/** 현재 카메라 회전을 서버 권한 캐릭터 제어에 전달합니다. */
@@ -126,6 +133,9 @@ private:
 	UFUNCTION(Client, Reliable)
 	void ClientApplyExternalVelocityChange(
 		FVector_NetQuantize10 VelocityChange);
+
+	UFUNCTION(Client, Reliable)
+	void ClientSetExternalVerticalVelocity(float VerticalVelocity);
 
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastStartTemporaryRagdoll();
@@ -148,6 +158,7 @@ private:
 	void OnRep_ExternallyGrabbed();
 
 	void HandleGrabbedComponentChanged(UPrimitiveComponent* NewGrabbedComponent);
+	void HandleRelicCarryingTagChanged(FGameplayTag Tag, int32 NewCount);
 	void HandleGrabConstraintBroken();
 	void UpdateBlueprintGrabState(UPrimitiveComponent* NewGrabbedComponent);
 	void AddExternalGrabber();
@@ -216,14 +227,13 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Control Reversal", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UNPControlReversalComponent> ControlReversal;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Status Visual", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UNPStatusVisualComponent> StatusVisual;
+
 	UPROPERTY(EditDefaultsOnly, Category="Input")
 	TObjectPtr<UInputAction> RelicUseAction;
 
-	/** 사진 촬영/피촬영 상태를 발밑 데칼로 표시합니다. */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Photo|World Feedback", meta=(AllowPrivateAccess="true"))
-	TObjectPtr<UNPPhotoWorldFeedbackComponent> PhotoWorldFeedback;
-
-	/** 유물 증거 사진에 찍혔을 때 Drop, 감속과 Overlay 연출을 처리합니다. */
+	/** 유물 증거 사진에 찍혔을 때 Drop과 일시적인 조작 차단을 처리합니다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Photo|Penalty", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UNPPhotoCapturePenaltyComponent> PhotoCapturePenalty;
 
@@ -238,6 +248,13 @@ private:
 	/** 서버에서 RightHandGrab을 소유자로 등록한 현재 Relic입니다. */
 	UPROPERTY(Transient)
 	TObjectPtr<ANPBaseRelic> RegisteredGrabbedRelic = nullptr;
+
+	/** State.Relic.Carrying이 활성화된 동안 기본 이동 속도에 적용할 배율입니다. */
+	UPROPERTY(EditDefaultsOnly, Category="Movement|Relic",
+		meta=(ClampMin="0.0", ClampMax="1.0"))
+	float RelicCarryMoveSpeedMultiplier = 0.9f;
+
+	FDelegateHandle RelicCarryingTagChangedHandle;
 
 	UPROPERTY(EditAnywhere, Category="Network|Grab Prediction", meta=(ClampMin="0.0"))
 	float LocalGrabPredictionTimeout = 0.35f;

@@ -15,9 +15,11 @@ class USkeletalMeshComponent;
 class USoundAttenuation;
 class USoundBase;
 class USpringArmComponent;
+class UWorld;
 class UNPStablePhysicsDebugComponent;
 class UNPStablePhysicsGrabComponent;
 class UNPStablePhysicsMovementComponent;
+class UNPScanComponent;
 struct FNPRelicSwingSettings;
 struct FInputActionValue;
 
@@ -37,6 +39,8 @@ public:
 	void SetLadderVolumeActive(bool bActive) { bInsideLadderVolume = bActive; }
 	/** 점프대처럼 외부 게임 규칙이 물리 캐릭터 전체에 즉시 속도 변화를 적용할 때 사용합니다. */
 	virtual void AddExternalVelocityChange(const FVector& VelocityChange);
+	/** 물리 캐릭터 전체의 수평 속도는 유지하고 수직 속도를 지정한 값으로 설정합니다. */
+	virtual void SetExternalVerticalVelocity(float VerticalVelocity);
 	/** 캐릭터 설정에 따라 일시적인 래그돌과 골반 직립 복구를 시작합니다. */
 	virtual void StartTemporaryRagdoll();
 	bool BeginRelicSwing(const FNPRelicSwingSettings& Settings);
@@ -108,8 +112,11 @@ protected:
 
 	/** 현재 실행 환경의 캐릭터 물리에 속도 변화를 직접 적용합니다. */
 	void ApplyExternalVelocityChangeLocal(const FVector& VelocityChange);
+	/** 현재 실행 환경의 캐릭터 물리에 수직 속도를 직접 설정합니다. */
+	void SetExternalVerticalVelocityLocal(float VerticalVelocity);
 
 	virtual void BeginPlay() override;
+	void EndPlay(EEndPlayReason::Type EndPlayReason);
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
@@ -157,6 +164,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	UNPStablePhysicsDebugComponent* PhysicsDebug;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	UNPScanComponent* ScanComponent;
+
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* MoveAction;
 
@@ -171,6 +181,12 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* RightHandAction;
+
+	UPROPERTY(EditAnywhere, Category="Input")
+	UInputAction* ScanAction;
+
+	UFUNCTION(BlueprintImplementableEvent, Category="Input")
+	void EventPressScan();
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation|Photo")
 	TObjectPtr<UAnimMontage> PhotoShotMontage;
@@ -249,6 +265,7 @@ protected:
 	FName RightHandBoneName = TEXT("hand_r");
 
 private:
+	void HandleSeamlessTravelTransition(UWorld* TransitioningWorld);
 	void WaitForTemporaryRagdollSettle();
 	void FinishTemporaryRagdollRecovery();
 	void FinishTemporaryRagdollInputDelay();
@@ -274,11 +291,16 @@ private:
 	void Jump();
 	void StartRightHand();
 	void StopRightHand();
+	void HandleScanPressed();
+
+	UFUNCTION()
+	void HandleActorScanned(AActor* ScannedActor);
 
 	bool bRightHandActive = false;
 	bool bTemporaryRagdollActive = false;
 	bool bTemporaryRagdollRecoveryActive = false;
 	bool bRelicSwingActive = false;
+	FDelegateHandle SeamlessTravelTransitionHandle;
 	FTimerHandle TemporaryRagdollTimer;
 	FTimerHandle TemporaryRagdollRecoveryTimer;
 	FTimerHandle TemporaryRagdollInputDelayTimer;
