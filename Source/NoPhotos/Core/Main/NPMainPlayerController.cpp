@@ -2,6 +2,7 @@
 
 #include "Core/Main/NPMainGameMode.h"
 #include "Core/Main/NPMainGameState.h"
+#include "Core/GameplayTag/NPGameplayTags.h"
 #include "Core/Chat/NPChatComponent.h"
 #include "Core/Room/NPRoomSubsystem.h"
 #include "Blueprint/UserWidget.h"
@@ -9,6 +10,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/GameInstance.h"
+#include "EngineUtils.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerState.h"
@@ -21,14 +23,19 @@
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 #include "Gameplay/Relic/Components/NPAimableRelicComponent.h"
+#include "Gameplay/Map/Room/NPRoomGenerationHelper.h"
 #include "NoPhotos.h"
 #include "SubSystem/NPUIManagerSubsystem.h"
+#include "SubSystem/Room/NPRoomGenerateSubsystem.h"
 #include "UI/GameScreen/Event/NPNoticeEventWidget.h"
+#include "UI/Loading/NPMainWorldLoadingWidget.h"
 #include "UI/NPUserWidget.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Widgets/Input/SVirtualJoystick.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
+#include "HAL/PlatformTime.h"
+#include "TimerManager.h"
 
 ANPMainPlayerController::ANPMainPlayerController()
 {
@@ -158,6 +165,8 @@ void ANPMainPlayerController::BeginPlay()
 
 	if (IsLocalController())
 	{
+		BeginLocalMainWorldPreparation();
+
 		if (PhotoFlashWidgetClass)
 		{
 			PhotoFlashWidget = CreateWidget<UNPPhotoFlashWidget>(this, PhotoFlashWidgetClass);
@@ -185,6 +194,223 @@ void ANPMainPlayerController::BeginPlay()
 		{
 			UE_LOG(LogNoPhotos, Error, TEXT("Could not spawn mobile controls widget."));
 		}
+	}
+}
+
+void ANPMainPlayerController::ClientBeginMainWorldPreparation_Implementation()
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	bReportedMainWorldReady = false;
+	BeginLocalMainWorldPreparation();
+}
+
+void ANPMainPlayerController::BeginLocalMainWorldPreparation()
+{
+	if (ShouldBypassRoomPreparationForEditorTest())
+	{
+		GetWorldTimerManager().ClearTimer(MinimumMainWorldLoadingTimer);
+		SetMainWorldInputLocked(false);
+		HideMainWorldLoadingOverlay();
+		CompleteLocalMainWorldReadiness();
+		UE_LOG(
+			LogNoPhotos,
+			Log,
+			TEXT("[MainWorldLoading] Editor level-instance test bypass enabled. Controller=%s"),
+			*GetNameSafe(this));
+		return;
+	}
+
+	SetMainWorldInputLocked(true);
+	ShowMainWorldLoadingOverlay();
+	BindRoomGenerationState();
+}
+
+bool ANPMainPlayerController::ShouldBypassRoomPreparationForEditorTest() const
+{
+#if WITH_EDITOR
+	UWorld* World = GetWorld();
+	if (!World || World->WorldType != EWorldType::PIE)
+	{
+		return false;
+	}
+
+	TActorIterator<ANPRoomGenerationHelper> RoomGenerationHelperIterator(World);
+	const bool bHasRoomGenerationHelper =
+		static_cast<bool>(RoomGenerationHelperIterator);
+	if (bHasRoomGenerationHelper)
+	{
+		return false;
+	}
+
+	return true;
+#else
+	return false;
+#endif
+}
+
+void ANPMainPlayerController::BindRoomGenerationState()
+{
+	UNPRoomGenerateSubsystem* RoomGenerator = GetWorld()
+		? GetWorld()->GetSubsystem<UNPRoomGenerateSubsystem>()
+		: nullptr;
+	if (!RoomGenerator)
+	{
+		return;
+	}
+
+	RoomGenerator->OnRoomGenerationCompleted.AddUniqueDynamic(
+		this,
+		&ThisClass::HandleLocalRoomGenerationCompleted);
+	RoomGenerator->OnRoomGenerationFailed.AddUniqueDynamic(
+		this,
+		&ThisClass::HandleLocalRoomGenerationFailed);
+
+	if (RoomGenerator->IsGenerationComplete())
+	{
+		HandleLocalRoomGenerationCompleted();
+	}
+	else if (RoomGenerator->HasGenerationFailed())
+	{
+		HandleLocalRoomGenerationFailed();
+	}
+}
+
+void ANPMainPlayerController::HandleLocalRoomGenerationCompleted()
+{
+	if (!IsLocalController() || bReportedMainWorldReady)
+	{
+		return;
+	}
+
+	const double CurrentRealTime = FPlatformTime::Seconds();
+	double ElapsedDisplayTime = 0.0;
+	if (MainWorldLoadingShownAtRealTime >= 0.0)
+	{
+		ElapsedDisplayTime = CurrentRealTime - MainWorldLoadingShownAtRealTime;
+	}
+	const float RemainingDisplayTime = FMath::Max(
+		0.0f,
+		MinimumMainWorldLoadingDisplaySeconds - static_cast<float>(ElapsedDisplayTime));
+	if (RemainingDisplayTime > 0.0f)
+	{
+		GetWorldTimerManager().SetTimer(
+			MinimumMainWorldLoadingTimer,
+			this,
+			&ThisClass::CompleteLocalMainWorldReadiness,
+			RemainingDisplayTime,
+			false);
+		return;
+	}
+
+	CompleteLocalMainWorldReadiness();
+}
+
+void ANPMainPlayerController::CompleteLocalMainWorldReadiness()
+{
+	if (!IsLocalController() || bReportedMainWorldReady)
+	{
+		return;
+	}
+
+	bReportedMainWorldReady = true;
+	ServerReportMainWorldReady();
+}
+
+void ANPMainPlayerController::HandleLocalRoomGenerationFailed()
+{
+	if (IsLocalController())
+	{
+		GetWorldTimerManager().ClearTimer(MinimumMainWorldLoadingTimer);
+		UE_LOG(LogNoPhotos, Error,
+			TEXT("[MainWorldLoading] Local room generation failed. Controller=%s"),
+			*GetNameSafe(this));
+	}
+}
+
+void ANPMainPlayerController::ServerReportMainWorldReady_Implementation()
+{
+	if (ANPMainGameMode* MainGameMode = GetWorld()
+		? GetWorld()->GetAuthGameMode<ANPMainGameMode>()
+		: nullptr)
+	{
+		MainGameMode->RegisterPlayerWorldReady(this);
+	}
+}
+
+void ANPMainPlayerController::ClientFinishMainWorldPreparation_Implementation()
+{
+	GetWorldTimerManager().ClearTimer(MinimumMainWorldLoadingTimer);
+	SetMainWorldInputLocked(false);
+	HideMainWorldLoadingOverlay();
+	ShowGameScreenUI();
+}
+
+void ANPMainPlayerController::ClientNotifyMainWorldLoadFailed_Implementation()
+{
+	SetMainWorldInputLocked(true);
+	ShowMainWorldLoadingFailure();
+	UE_LOG(LogNoPhotos, Error,
+		TEXT("[MainWorldLoading] Server reported main world load failure."));
+}
+
+void ANPMainPlayerController::SetMainWorldInputLocked(const bool bLocked)
+{
+	SetIgnoreMoveInput(bLocked);
+	SetIgnoreLookInput(bLocked);
+}
+
+void ANPMainPlayerController::ShowMainWorldLoadingOverlay()
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	if (!IsValid(MainWorldLoadingWidget))
+	{
+		TSubclassOf<UNPMainWorldLoadingWidget> WidgetClass =
+			MainWorldLoadingWidgetClass;
+		if (!WidgetClass)
+		{
+			WidgetClass = UNPMainWorldLoadingWidget::StaticClass();
+		}
+		MainWorldLoadingWidget =
+			CreateWidget<UNPMainWorldLoadingWidget>(this, WidgetClass);
+		if (IsValid(MainWorldLoadingWidget))
+		{
+			MainWorldLoadingWidget->AddToPlayerScreen(10000);
+			MainWorldLoadingShownAtRealTime = FPlatformTime::Seconds();
+		}
+	}
+
+	if (IsValid(MainWorldLoadingWidget))
+	{
+		MainWorldLoadingWidget->ShowLoading();
+	}
+}
+
+void ANPMainPlayerController::HideMainWorldLoadingOverlay()
+{
+	if (!IsValid(MainWorldLoadingWidget))
+	{
+		return;
+	}
+
+	MainWorldLoadingWidget->RemoveFromParent();
+	MainWorldLoadingWidget = nullptr;
+	MainWorldLoadingShownAtRealTime = -1.0;
+}
+
+void ANPMainPlayerController::ShowMainWorldLoadingFailure()
+{
+	ShowMainWorldLoadingOverlay();
+	if (IsValid(MainWorldLoadingWidget))
+	{
+		MainWorldLoadingWidget->ShowFailure();
 	}
 }
 
@@ -308,35 +534,27 @@ bool ANPMainPlayerController::InputKey(const FInputKeyEventArgs& Params)
 
 void ANPMainPlayerController::HandleAimStarted()
 {
-	if (!PhotoCaptureComponent)
+	UNPAbilitySystemComponent* AbilitySystem = ResolveAbilitySystem();
+	if (!AbilitySystem)
 	{
-		UE_LOG(LogNPPhoto, Error, TEXT("[Input] PhotoCaptureComponent is null."));
+		UE_LOG(LogNPPhoto, Error, TEXT("[Input] AbilitySystemComponent is null."));
 		return;
 	}
 
 	if (IsHoldingAimableRelic())
 	{
-		if (PhotoCaptureComponent->IsPhotoModeActive())
-		{
-			PhotoCaptureComponent->ExitPhotoMode();
-		}
-		if (UNPAbilitySystemComponent* AbilitySystem =
-			ResolveRelicAbilitySystem())
-		{
-			AbilitySystem->ActivateRelicAimAbility();
-		}
+		AbilitySystem->CancelPhotoAimAbility();
+		AbilitySystem->ActivateRelicAimAbility();
 		return;
 	}
 
-	PhotoCaptureComponent->TogglePhotoMode();
-	UE_LOG(LogNPPhoto, Log, TEXT("[Input] Photo mode toggled. Active=%s"),
-		PhotoCaptureComponent->IsPhotoModeActive() ? TEXT("true") : TEXT("false"));
+	AbilitySystem->CancelRelicAimAbility();
+	AbilitySystem->TogglePhotoAimAbility();
 }
 
 void ANPMainPlayerController::HandleAimReleased()
 {
-	if (UNPAbilitySystemComponent* AbilitySystem =
-		ResolveRelicAbilitySystem())
+	if (UNPAbilitySystemComponent* AbilitySystem = ResolveAbilitySystem())
 	{
 		AbilitySystem->CancelRelicAimAbility();
 	}
@@ -344,21 +562,25 @@ void ANPMainPlayerController::HandleAimReleased()
 
 void ANPMainPlayerController::HandleFireStarted()
 {
-	if (!PhotoCaptureComponent)
+	UNPAbilitySystemComponent* AbilitySystem = ResolveAbilitySystem();
+	if (!AbilitySystem)
 	{
-		UE_LOG(LogNPPhoto, Error, TEXT("[Input] PhotoCaptureComponent is null."));
+		UE_LOG(LogNPPhoto, Error, TEXT("[Input] AbilitySystemComponent is null."));
 		return;
 	}
 
-	if (!PhotoCaptureComponent->IsPhotoModeActive())
+	if (AbilitySystem->HasMatchingGameplayTag(
+		NPGameplayTags::State_Relic_Aiming))
 	{
+		AbilitySystem->ActivateRelicFireAbility();
 		return;
 	}
 
-	UE_LOG(LogNPPhoto, Log, TEXT("[Input] Photo input received. Controller=%s Local=%s"),
-		*GetNameSafe(this), IsLocalController() ? TEXT("true") : TEXT("false"));
-	const bool bStarted = PhotoCaptureComponent->TakePhoto();
-	UE_LOG(LogNPPhoto, Log, TEXT("[Input] TakePhoto result=%s"), bStarted ? TEXT("success") : TEXT("failed"));
+	if (AbilitySystem->HasMatchingGameplayTag(
+		NPGameplayTags::State_Photo_Aiming))
+	{
+		AbilitySystem->ActivatePhotoShotAbility();
+	}
 }
 
 bool ANPMainPlayerController::IsHoldingAimableRelic() const
@@ -378,7 +600,7 @@ bool ANPMainPlayerController::IsHoldingAimableRelic() const
 }
 
 UNPAbilitySystemComponent*
-ANPMainPlayerController::ResolveRelicAbilitySystem() const
+ANPMainPlayerController::ResolveAbilitySystem() const
 {
 	const ANPReplicatedStablePhysicsPawn* StablePawn =
 		Cast<ANPReplicatedStablePhysicsPawn>(GetPawn());

@@ -9,6 +9,16 @@ class APlayerController;
 class APlayerState;
 class ANPPlayerState;
 
+UENUM(BlueprintType)
+enum class ENPMainWorldState : uint8
+{
+	Preparing,
+	WaitingForPlayers,
+	Playing,
+	LoadFailed,
+	Ended
+};
+
 USTRUCT(BlueprintType)
 struct NOPHOTOS_API FNPPlayerRanking
 {
@@ -32,6 +42,7 @@ class NOPHOTOS_API ANPMainGameState : public AGameState
 	GENERATED_BODY()
 
 public:
+	virtual void RemovePlayerState(APlayerState* PlayerState) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	UFUNCTION(BlueprintPure, Category = "Main Game")
@@ -45,6 +56,12 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Main Game")
 	bool IsMainGameEnded() const;
+
+	UFUNCTION(BlueprintPure, Category = "Main Game|Loading")
+	ENPMainWorldState GetMainWorldState() const { return MainWorldState; }
+
+	UFUNCTION(BlueprintPure, Category = "Main Game|Loading")
+	bool IsMainWorldReady() const { return MainWorldState == ENPMainWorldState::Playing; }
 
 	UFUNCTION(BlueprintPure, Category = "Picture Selection")
 	bool IsPlayerPictureSelectionComplete(const APlayerState* PlayerState) const;
@@ -74,6 +91,7 @@ public:
 	FOnNoPhotosPhotoEvidenceChanged OnPhotoEvidenceChanged;
 
 	void RefreshPlayerRankings();
+	void SetMainWorldState(ENPMainWorldState NewState);
 	void StartMainGame(int32 DurationSeconds);
 	void SetRemainingGameTime(int32 RemainingSeconds);
 	void FinishMainGame();
@@ -117,6 +135,9 @@ private:
 
 	UPROPERTY(ReplicatedUsing = OnRep_MainGameState)
 	bool bMainGameEnded = false;
+
+	UPROPERTY(ReplicatedUsing = OnRep_MainGameState)
+	ENPMainWorldState MainWorldState = ENPMainWorldState::Preparing;
 
 	//사진 선택 완료를 누른 플레이어 목록
 	UPROPERTY(ReplicatedUsing = OnRep_PictureSelectionCompletedPlayers)

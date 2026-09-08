@@ -13,7 +13,10 @@ class USkeletalMeshComponent;
 class UMaterialInstanceDynamic;
 class UPrimitiveComponent;
 
-/** 서버 순찰 고스트와 빙의 후 화면별 등 뒤 외형에 함께 사용하는 충돌 없는 유령 액터입니다. */
+/**
+
+순찰 고스트와 빙의 후 화면별 등 뒤 외형에 함께 사용하는 충돌 없는 유령 액터입니다. */
+/** 서버에서 플레이어를 추격하고 접촉 시 빙의를 요청하는 복제 유령입니다. */
 UCLASS(Blueprintable)
 class NOPHOTOS_API ANPGhostFollowerActor : public AActor
 {
@@ -30,6 +33,8 @@ public:
 	/** 서버의 deferred spawn 중 호출합니다. 지정한 Spline을 왕복하는 복제 유령으로 초기화합니다. */
 	bool InitializeRoamingGhost(ANPGhostPatrolRoute* InPatrolRoute, float StartDistance,
 		bool bStartForward = true);
+	/** 서버의 deferred spawn 중 호출합니다. 추적 대상 없이 Point에서 대기하는 복제 유령으로 초기화합니다. */
+	bool InitializeRoamingGhost();
 
 	/** 서버 Roaming 유령이 추격할 플레이어를 지정합니다. 이동 결과는 Replicate Movement로 전달됩니다. */
 	bool SetRoamingChaseTarget(ANPStablePhysicsPawn* InTarget);
@@ -113,20 +118,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Roaming", meta=(ClampMin="0.0"))
 	float RoamingRotationInterpSpeed = 8.0f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Follow", meta=(ClampMin="0.0", Units="cm"))
-	float FollowDistance = 150.0f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Follow", meta=(Units="cm"))
-	float HeightOffset = 70.0f;
-
-	/** 0이면 보간 없이 바로 등 뒤에 붙습니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Follow", meta=(ClampMin="0.0"))
-	float FollowInterpSpeed = 8.0f;
-
-	/** 순간이동 등으로 멀어지면 긴 거리를 보간하지 않고 즉시 따라갑니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Follow", meta=(ClampMin="1.0", Units="cm"))
-	float SnapDistance = 600.0f;
-
 	/** 유령 머티리얼의 Opacity에 연결한 Scalar Parameter 이름입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Fade")
 	FName GhostOpacityParameterName = TEXT("GhostOpacity");
@@ -167,7 +158,6 @@ private:
 	void InitializeFadeMaterials();
 	void ApplyGhostOpacity(float Opacity);
 	void UpdateFade(float DeltaSeconds);
-	void StopFollowing();
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> FadeMaterials;
@@ -179,7 +169,6 @@ private:
 	bool bGhostFadingOut = false;
 	bool bGhostFadeRunning = false;
 
-	TWeakObjectPtr<ANPStablePhysicsPawn> FollowTarget;
 	TWeakObjectPtr<ANPStablePhysicsPawn> RoamingChaseTarget;
 	TWeakObjectPtr<ANPGhostPatrolRoute> RoamingPatrolRoute;
 	float RoamingPatrolDistance = 0.0f;

@@ -38,5 +38,4 @@ private:
 
 	TWeakObjectPtr<ANPStablePhysicsPawn> AimPawn;
 	TWeakObjectPtr<UGrabbableComponent> AimGrabbable;
-	bool bAimingTagAdded = false;
 };

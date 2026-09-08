@@ -4,6 +4,8 @@
 #include "EnhancedInputComponent.h"
 #include "GameplayAbilitySpec.h"
 #include "Gameplay/Character/NPStablePhysicsPawn.h"
+#include "Gameplay/Photo/Abilities/NPPhotoAimAbility.h"
+#include "Gameplay/Photo/Abilities/NPPhotoShotAbility.h"
 #include "Gameplay/Relic/Components/NPUsableRelicComponent.h"
 #include "GameplayEffect.h"
 #include "InputAction.h"
@@ -26,6 +28,15 @@ void UNPAbilitySystemComponent::InitializeForOwner()
 				this,
 				&UNPAbilitySystemComponent::HandleGameplayEffectApplied);
 			bGameplayEffectDelegateBound = true;
+		}
+
+		if (OwningActor->HasAuthority() && !bDefaultPhotoAbilitiesGranted)
+		{
+			DefaultPhotoAbilityHandles.Add(GiveAbility(
+				FGameplayAbilitySpec(UNPPhotoAimAbility::StaticClass(), 1)));
+			DefaultPhotoAbilityHandles.Add(GiveAbility(
+				FGameplayAbilitySpec(UNPPhotoShotAbility::StaticClass(), 1)));
+			bDefaultPhotoAbilitiesGranted = true;
 		}
 	}
 }
@@ -52,6 +63,27 @@ void UNPAbilitySystemComponent::SetHeldRelic(AActor* Relic)
 	if (!OwningActor || !OwningActor->HasAuthority())
 	{
 		return;
+	}
+
+	const bool bWasCarryingRelic = HasMatchingGameplayTag(
+		NPGameplayTags::State_Relic_Carrying);
+	const bool bIsCarryingRelic = IsValid(Relic);
+	if (bWasCarryingRelic != bIsCarryingRelic)
+	{
+		if (bIsCarryingRelic)
+		{
+			AddLooseGameplayTag(
+				NPGameplayTags::State_Relic_Carrying,
+				1,
+				EGameplayTagReplicationState::TagOnly);
+		}
+		else
+		{
+			RemoveLooseGameplayTag(
+				NPGameplayTags::State_Relic_Carrying,
+				1,
+				EGameplayTagReplicationState::TagOnly);
+		}
 	}
 
 	ClearHeldRelicAbilities();
@@ -105,6 +137,40 @@ void UNPAbilitySystemComponent::CancelRelicAimAbility()
 	CancelAbilities(&AbilityTags);
 }
 
+void UNPAbilitySystemComponent::ActivateRelicFireAbility()
+{
+	FGameplayTagContainer AbilityTags;
+	AbilityTags.AddTag(NPGameplayTags::Input_Relic_Fire);
+	TryActivateAbilitiesByTag(AbilityTags);
+}
+
+void UNPAbilitySystemComponent::TogglePhotoAimAbility()
+{
+	if (HasMatchingGameplayTag(NPGameplayTags::State_Photo_Aiming))
+	{
+		CancelPhotoAimAbility();
+		return;
+	}
+
+	FGameplayTagContainer AbilityTags;
+	AbilityTags.AddTag(NPGameplayTags::Input_Photo_Aim);
+	TryActivateAbilitiesByTag(AbilityTags);
+}
+
+void UNPAbilitySystemComponent::CancelPhotoAimAbility()
+{
+	FGameplayTagContainer AbilityTags;
+	AbilityTags.AddTag(NPGameplayTags::Ability_Photo_Aim);
+	CancelAbilities(&AbilityTags);
+}
+
+void UNPAbilitySystemComponent::ActivatePhotoShotAbility()
+{
+	FGameplayTagContainer AbilityTags;
+	AbilityTags.AddTag(NPGameplayTags::Input_Photo_Shot);
+	TryActivateAbilitiesByTag(AbilityTags);
+}
+
 void UNPAbilitySystemComponent::ClearHeldRelicAbilities()
 {
 	for (const FGameplayAbilitySpecHandle& AbilityHandle : HeldRelicAbilityHandles)
@@ -129,6 +195,15 @@ void UNPAbilitySystemComponent::HandleGameplayEffectApplied(
 		|| !EffectSpec.Def)
 	{
 		return;
+	}
+	FGameplayTagContainer GrantedTags;
+	EffectSpec.GetAllGrantedTags(GrantedTags);
+	if (GrantedTags.HasTagExact(NPGameplayTags::State_LavaBurning))
+	{
+		if (ANPStablePhysicsPawn* TargetPawn = Cast<ANPStablePhysicsPawn>(GetAvatarActor()))
+		{
+			TargetPawn->SetExternalVerticalVelocity(FMath::Max(0.0f, LavaJumpVelocity));
+		}
 	}
 	FGameplayTagContainer EffectAssetTags;
 	EffectSpec.GetAllAssetTags(EffectAssetTags);

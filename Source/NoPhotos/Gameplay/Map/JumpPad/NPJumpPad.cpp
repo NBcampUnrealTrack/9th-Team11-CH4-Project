@@ -4,10 +4,10 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "GameFramework/Character.h"
-#include "Gameplay/Character/NPStablePhysicsPawn.h"
-
-DEFINE_LOG_CATEGORY_STATIC(LogNPJumpPad, Log, All);
+#include "Engine/World.h"
+#include "GameFramework/Pawn.h"
+#include "Gameplay/AbilitySystem/NPAbilitySystemComponent.h"
+#include "Gameplay/AbilitySystem/Effects/NPLavaGameplayEffect.h"
 
 ANPJumpPad::ANPJumpPad()
 {
@@ -58,13 +58,6 @@ void ANPJumpPad::HandleLaunchOverlap(
 	}
 
 	RecordLaunch(Pawn);
-	UE_LOG(
-		LogNPJumpPad,
-		Log,
-		TEXT("점프대 발사: Pawn=%s, Pad=%s, Strength=%.1f"),
-		*GetNameSafe(Pawn),
-		*GetName(),
-		LaunchStrength);
 }
 
 bool ANPJumpPad::IsOnCooldown(const APawn* Pawn) const
@@ -90,29 +83,24 @@ void ANPJumpPad::RecordLaunch(APawn* Pawn)
 
 bool ANPJumpPad::LaunchPawn(APawn* Pawn) const
 {
-	if (!IsValid(Pawn) || LaunchStrength <= 0.0f)
+	if (!IsValid(Pawn))
 	{
 		return false;
 	}
-
-	const FVector LaunchVelocityChange = GetActorUpVector() * LaunchStrength;
-	if (ANPStablePhysicsPawn* StablePhysicsPawn = Cast<ANPStablePhysicsPawn>(Pawn))
+	UNPAbilitySystemComponent* AbilitySystem = Pawn->FindComponentByClass<UNPAbilitySystemComponent>();
+	if (!IsValid(AbilitySystem) || AbilitySystem->GetAvatarActor() != Pawn)
 	{
-		StablePhysicsPawn->AddExternalVelocityChange(LaunchVelocityChange);
-		return true;
+		return false;
 	}
-
-	if (ACharacter* Character = Cast<ACharacter>(Pawn))
+	FGameplayEffectContextHandle Context = AbilitySystem->MakeEffectContext();
+	Context.AddSourceObject(this);
+	const FGameplayEffectSpecHandle Spec = AbilitySystem->MakeOutgoingSpec(
+		UNPLavaGameplayEffect::StaticClass(), 1.0f, Context);
+	if (!Spec.IsValid())
 	{
-		Character->LaunchCharacter(LaunchVelocityChange, false, true);
-		return true;
+		return false;
 	}
-
-	if (UPrimitiveComponent* RootPrimitive = Cast<UPrimitiveComponent>(Pawn->GetRootComponent()))
-	{
-		RootPrimitive->AddImpulse(LaunchVelocityChange, NAME_None, true);
-		return true;
-	}
-
-	return false;
+	const float Duration = AbilitySystem->GetLavaBurnDuration();
+	Spec.Data->SetDuration(FMath::IsFinite(Duration) ? FMath::Max(0.01f, Duration) : 0.5f, true);
+	return AbilitySystem->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get()).IsValid();
 }

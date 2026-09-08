@@ -45,6 +45,10 @@ void ANPPlayerState::ResetPlayerScore()
 	PlayerScore = 0;
 	ForceNetUpdate();
 	OnPlayerScoreChanged.Broadcast();
+	if (ANPMainGameState* MainGameState = GetWorld() ? GetWorld()->GetGameState<ANPMainGameState>() : nullptr)
+	{
+		MainGameState->RefreshPlayerRankings();
+	}
 }
 
 void ANPPlayerState::OnRep_PlayerScore()

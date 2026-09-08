@@ -14,9 +14,12 @@ UNPRelicFireAbility::UNPRelicFireAbility()
 
 	FGameplayTagContainer Tags;
 	Tags.AddTag(NPGameplayTags::Input_Relic_Use);
+	Tags.AddTag(NPGameplayTags::Input_Relic_Fire);
 	Tags.AddTag(NPGameplayTags::Ability_Relic);
 	Tags.AddTag(NPGameplayTags::Ability_Relic_Fire);
 	SetAssetTags(Tags);
+	ActivationBlockedTags.AddTag(
+		NPGameplayTags::State_CrowdControl_Stunned);
 }
 
 bool UNPRelicFireAbility::CanActivateAbility(

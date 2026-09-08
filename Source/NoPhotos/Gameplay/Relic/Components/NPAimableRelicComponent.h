@@ -4,6 +4,7 @@
 #include "NPAimableRelicComponent.generated.h"
 
 class ANPReplicatedStablePhysicsPawn;
+class ANPAimableRelicVisualProjectile;
 class UAbilitySystemComponent;
 class UGameplayEffect;
 class UNiagaraSystem;
@@ -45,8 +46,6 @@ struct NOPHOTOS_API FNPRelicAimSettings
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Knockback")
 	TSubclassOf<UGameplayEffect> KnockbackEffectClass;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Debug")
-	bool bDrawDebugTrace = true;
 };
 
 /** 잡은 플레이어에게 조준/발사 GAS Ability를 제공하는 유물 컴포넌트입니다. */
@@ -75,6 +74,12 @@ protected:
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayMuzzleEffect();
 
+	/** 서버 Trace의 총구 시작점과 종료점을 각 클라이언트의 로컬 장식 투사체로 재생합니다. */
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastSpawnVisualProjectile(
+		FVector_NetQuantize10 StartLocation,
+		FVector_NetQuantize10 EndLocation);
+
 private:
 	bool TryFindAssistedPlayer(
 		UWorld* World,
@@ -98,6 +103,10 @@ private:
 	/** RelicMesh에 생성한 총구 Socket 이름입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Aimable Relic|Effects", meta=(AllowPrivateAccess="true"))
 	FName MuzzleSocketName = TEXT("Muzzle");
+
+	/** BP 조준 유물에서 Niagara Trail을 설정한 로컬 장식 투사체 클래스를 지정합니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Aimable Relic|Effects", meta=(AllowPrivateAccess="true"))
+	TSubclassOf<ANPAimableRelicVisualProjectile> VisualProjectileClass;
 
 	double LastServerFireTime = -TNumericLimits<double>::Max();
 };
