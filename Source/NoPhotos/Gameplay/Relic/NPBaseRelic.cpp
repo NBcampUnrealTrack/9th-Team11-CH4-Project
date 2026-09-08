@@ -213,6 +213,7 @@ void ANPBaseRelic::ReleaseFromDisplay()
 	}
 
 	bIsDisplayed = false;
+	OnReleasedFromDisplay.Broadcast(this);
 	OnRep_IsDisplayed();
 	ForceNetUpdate();
 }

@@ -93,9 +93,20 @@ FNPPhotoEvidenceResult ANPMainGameMode::HandlePhotoCaptureRequest(const FNPPhoto
 	{
 		ANPReplicatedStablePhysicsPawn* ThiefPawn =
 			Cast<ANPReplicatedStablePhysicsPawn>(Result.Thief->GetPawn());
-		if (UNPPhotoCapturePenaltyComponent* PenaltyComponent = ThiefPawn
+		UNPPhotoCapturePenaltyComponent* PenaltyComponent = ThiefPawn
 			? ThiefPawn->FindComponentByClass<UNPPhotoCapturePenaltyComponent>()
-			: nullptr)
+			: nullptr;
+		UE_LOG(
+			LogNPPhoto,
+			Warning,
+			TEXT("[PhotoStun][Request] Success=%s Thief=%s Relic=%s Penalty=%d Pawn=%s Component=%s"),
+			Result.bSuccess ? TEXT("true") : TEXT("false"),
+			*GetNameSafe(Result.Thief.Get()),
+			*GetNameSafe(EvidenceRelic),
+			AppliedPhotoPenalty,
+			*GetNameSafe(ThiefPawn),
+			*GetNameSafe(PenaltyComponent));
+		if (PenaltyComponent)
 		{
 			PenaltyComponent->ApplyCapturedWithRelicPenalty(
 				EvidenceRelic,

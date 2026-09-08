@@ -5,12 +5,12 @@
 #include "CollisionQueryParams.h"
 #include "Components/SceneComponent.h"
 #include "Core/GameplayTag/NPGameplayTags.h"
-#include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "Gameplay/AbilitySystem/Effects/NPKnockbackGameplayEffect.h"
 #include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 #include "Gameplay/Relic/Abilities/NPRelicAimAbility.h"
 #include "Gameplay/Relic/Abilities/NPRelicFireAbility.h"
+#include "Gameplay/Relic/Projectile/NPAimableRelicVisualProjectile.h"
 #include "GameplayEffect.h"
 #include "GameFramework/Actor.h"
 #include "Kismet/GameplayStatics.h"
@@ -101,24 +101,10 @@ bool UNPAimableRelicComponent::TryFire(
 			*TraceEnd.ToCompactString());
 	}
 
-#if ENABLE_DRAW_DEBUG
-	if (AimSettings.bDrawDebugTrace)
-	{
-		DrawDebugLine(
-			World,
-			TraceStart,
-			bPrimaryHit ? Hit.ImpactPoint : TraceEnd,
-			bPrimaryHit ? FColor::Red : FColor::Green,
-			false,
-			1.0f,
-			0,
-			2.0f);
-	}
-#endif
-
 	ANPStablePhysicsPawn* TargetPawn = bPrimaryHit
 		? Cast<ANPStablePhysicsPawn>(Hit.GetActor())
 		: nullptr;
+	bool bAssistedHit = false;
 	if (!IsValid(TargetPawn) && AimSettings.AimAssistRadius > 0.0f)
 	{
 		FHitResult AssistedHit;
@@ -132,6 +118,7 @@ bool UNPAimableRelicComponent::TryFire(
 		{
 			Hit = AssistedHit;
 			TargetPawn = Cast<ANPStablePhysicsPawn>(Hit.GetActor());
+			bAssistedHit = IsValid(TargetPawn);
 			UE_LOG(
 				LogNoPhotos,
 				Log,
@@ -142,6 +129,22 @@ bool UNPAimableRelicComponent::TryFire(
 				AimSettings.AimAssistRadius);
 		}
 	}
+
+	const FVector VisualStart = GetMuzzleTransform().GetLocation();
+	const FVector VisualEnd = bPrimaryHit || bAssistedHit
+		? FVector(Hit.ImpactPoint)
+		: TraceEnd;
+	UE_LOG(
+		LogNoPhotos,
+		Warning,
+		TEXT("[VisualProjectile][Request] Relic=%s Class=%s Start=%s End=%s PrimaryHit=%s AssistedHit=%s"),
+		*GetNameSafe(GetOwner()),
+		*GetNameSafe(VisualProjectileClass),
+		*VisualStart.ToCompactString(),
+		*VisualEnd.ToCompactString(),
+		bPrimaryHit ? TEXT("true") : TEXT("false"),
+		bAssistedHit ? TEXT("true") : TEXT("false"));
+	MulticastSpawnVisualProjectile(VisualStart, VisualEnd);
 
 	if (bPrimaryHit && !IsValid(TargetPawn))
 	{
@@ -289,31 +292,6 @@ bool UNPAimableRelicComponent::TryFindAssistedPlayer(
 		FCollisionShape::MakeSphere(AimSettings.AimAssistRadius),
 		SweepQueryParams);
 
-#if ENABLE_DRAW_DEBUG
-	if (AimSettings.bDrawDebugTrace)
-	{
-		DrawDebugLine(
-			World,
-			TraceStart,
-			TraceEnd,
-			FColor::Cyan,
-			false,
-			1.0f,
-			0,
-			1.0f);
-		DrawDebugSphere(
-			World,
-			TraceEnd,
-			AimSettings.AimAssistRadius,
-			16,
-			FColor::Cyan,
-			false,
-			1.0f,
-			0,
-			1.0f);
-	}
-#endif
-
 	const FVector TraceDirection = (TraceEnd - TraceStart).GetSafeNormal();
 	const float TraceLength = FVector::Distance(TraceStart, TraceEnd);
 	float BestScore = TNumericLimits<float>::Max();
@@ -417,5 +395,89 @@ void UNPAimableRelicComponent::MulticastPlayMuzzleEffect_Implementation()
 			this,
 			MuzzleSound,
 			GetMuzzleTransform().GetLocation());
+	}
+}
+
+void UNPAimableRelicComponent::MulticastSpawnVisualProjectile_Implementation(
+	const FVector_NetQuantize10 StartLocation,
+	const FVector_NetQuantize10 EndLocation)
+{
+	const TCHAR* NetModeText = TEXT("Unknown");
+	switch (GetNetMode())
+	{
+	case NM_Standalone:
+		NetModeText = TEXT("Standalone");
+		break;
+	case NM_DedicatedServer:
+		NetModeText = TEXT("DedicatedServer");
+		break;
+	case NM_ListenServer:
+		NetModeText = TEXT("ListenServer");
+		break;
+	case NM_Client:
+		NetModeText = TEXT("Client");
+		break;
+	default:
+		break;
+	}
+
+	UE_LOG(
+		LogNoPhotos,
+		Warning,
+		TEXT("[VisualProjectile][Multicast] Owner=%s NetMode=%s Class=%s Start=%s End=%s"),
+		*GetNameSafe(GetOwner()),
+		NetModeText,
+		*GetNameSafe(VisualProjectileClass),
+		*FVector(StartLocation).ToCompactString(),
+		*FVector(EndLocation).ToCompactString());
+
+	if (!VisualProjectileClass)
+	{
+		UE_LOG(
+			LogNoPhotos,
+			Error,
+			TEXT("[VisualProjectile][Multicast] Rejected: VisualProjectileClass is not assigned. Owner=%s"),
+			*GetNameSafe(GetOwner()));
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	const FVector Direction = (FVector(EndLocation) - FVector(StartLocation))
+		.GetSafeNormal();
+	if (!IsValid(World) || Direction.IsNearlyZero())
+	{
+		UE_LOG(
+			LogNoPhotos,
+			Error,
+			TEXT("[VisualProjectile][Multicast] Rejected: invalid world or direction. Owner=%s World=%s Direction=%s"),
+			*GetNameSafe(GetOwner()),
+			*GetNameSafe(World),
+			*Direction.ToCompactString());
+		return;
+	}
+
+	FActorSpawnParameters SpawnParameters;
+	SpawnParameters.Owner = GetOwner();
+	SpawnParameters.SpawnCollisionHandlingOverride =
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ANPAimableRelicVisualProjectile* VisualProjectile =
+		World->SpawnActor<ANPAimableRelicVisualProjectile>(
+			VisualProjectileClass,
+			FVector(StartLocation),
+			Direction.Rotation(),
+			SpawnParameters);
+	UE_LOG(
+		LogNoPhotos,
+		Warning,
+		TEXT("[VisualProjectile][Spawn] Result=%s Actor=%s Class=%s Location=%s"),
+		IsValid(VisualProjectile) ? TEXT("success") : TEXT("failed"),
+		*GetNameSafe(VisualProjectile),
+		*GetNameSafe(VisualProjectileClass),
+		*FVector(StartLocation).ToCompactString());
+	if (IsValid(VisualProjectile))
+	{
+		VisualProjectile->InitializeVisualProjectile(
+			FVector(StartLocation),
+			FVector(EndLocation));
 	}
 }

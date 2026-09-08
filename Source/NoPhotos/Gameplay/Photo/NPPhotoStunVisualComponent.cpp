@@ -1,6 +1,7 @@
 #include "Gameplay/Photo/NPPhotoStunVisualComponent.h"
 
 #include "Engine/StaticMesh.h"
+#include "Gameplay/Photo/NPPhotoLog.h"
 #include "UObject/ConstructorHelpers.h"
 
 UNPPhotoStunVisualComponent::UNPPhotoStunVisualComponent()
@@ -27,6 +28,16 @@ void UNPPhotoStunVisualComponent::OnRegister()
 	RebuildMarkerInstances();
 	SetVisibility(bStunVisualActive, true);
 	SetComponentTickEnabled(bStunVisualActive);
+	UE_LOG(
+		LogNPPhoto,
+		Warning,
+		TEXT("[PhotoStun][VisualRegister] Owner=%s Registered=%s Mesh=%s Instances=%d Parent=%s WorldLocation=%s"),
+		*GetNameSafe(GetOwner()),
+		IsRegistered() ? TEXT("true") : TEXT("false"),
+		*GetNameSafe(GetStaticMesh()),
+		GetInstanceCount(),
+		*GetNameSafe(GetAttachParent()),
+		*GetComponentLocation().ToCompactString());
 }
 
 void UNPPhotoStunVisualComponent::TickComponent(
@@ -48,9 +59,29 @@ void UNPPhotoStunVisualComponent::TickComponent(
 
 void UNPPhotoStunVisualComponent::SetStunVisualActive(const bool bActive)
 {
+	UE_LOG(
+		LogNPPhoto,
+		Warning,
+		TEXT("[PhotoStun][Visual] SetActive Owner=%s Requested=%s Registered=%s Mesh=%s Instances=%d VisibleBefore=%s Location=%s Scale=%s"),
+		*GetNameSafe(GetOwner()),
+		bActive ? TEXT("true") : TEXT("false"),
+		IsRegistered() ? TEXT("true") : TEXT("false"),
+		*GetNameSafe(GetStaticMesh()),
+		GetInstanceCount(),
+		IsVisible() ? TEXT("true") : TEXT("false"),
+		*GetComponentLocation().ToCompactString(),
+		*GetComponentScale().ToCompactString());
 	bStunVisualActive = bActive;
 	SetVisibility(bActive, true);
 	SetComponentTickEnabled(bActive);
+	UE_LOG(
+		LogNPPhoto,
+		Warning,
+		TEXT("[PhotoStun][Visual] Applied Active=%s VisibleAfter=%s Tick=%s Instances=%d"),
+		bStunVisualActive ? TEXT("true") : TEXT("false"),
+		IsVisible() ? TEXT("true") : TEXT("false"),
+		IsComponentTickEnabled() ? TEXT("true") : TEXT("false"),
+		GetInstanceCount());
 }
 
 void UNPPhotoStunVisualComponent::RebuildMarkerInstances()
