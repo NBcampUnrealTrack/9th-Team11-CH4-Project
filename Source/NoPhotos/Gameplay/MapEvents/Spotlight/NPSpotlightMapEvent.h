@@ -9,6 +9,7 @@ class ANPBaseRelic;
 class ANPEventSpotlight;
 class ANPStablePhysicsPawn;
 class UNPStablePhysicsGrabComponent;
+class URectLightComponent;
 
 USTRUCT()
 struct FNPSpotlightCycle
@@ -38,6 +39,7 @@ public:
 	const FNPSpotlightCycle& GetSpotlightCycle() const { return SpotlightCycle; }
 
 protected:
+	virtual void BeginPlay() override;
 	virtual void ApplyEventState_Implementation(bool bNewActive) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
@@ -53,6 +55,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Spotlight Event|Timing", meta = (ClampMin = "0.1", Units = "s"))
 	float DarkDuration = 2.0f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Spotlight Event|Lighting", meta = (ClampMin = "0.0", Units = "s"))
+	float RectLightFadeDuration = 1.0f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Spotlight Event|Price", meta = (ClampMin = "0.1", Units = "s"))
 	float BonusInterval = 2.0f;
 
@@ -60,6 +65,8 @@ protected:
 	double BonusRate = 0.1;
 
 private:
+	void SetMainRectLightsDimmed(bool bDimmed, bool bImmediate = false);
+	void UpdateMainRectLightFade(float DeltaSeconds);
 	void SpawnSpotlights();
 	void StartLightCycle(float Now);
 	void UpdatePriceBonuses(float Now);
@@ -83,4 +90,8 @@ private:
 
 	TMap<TWeakObjectPtr<ANPStablePhysicsPawn>, FPlayerExposure> PlayerExposures;
 	TMap<TWeakObjectPtr<ANPBaseRelic>, float> LastRelicBonusTimes;
+	TMap<TWeakObjectPtr<URectLightComponent>, float> MainRectLights;
+	float RectLightFadeElapsed = 0.0f;
+	float RectLightTargetIntensity = 160.0f;
+	bool bRectLightsFading = false;
 };

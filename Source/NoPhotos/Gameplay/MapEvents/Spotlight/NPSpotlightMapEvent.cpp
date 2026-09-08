@@ -1,7 +1,10 @@
 #include "NPSpotlightMapEvent.h"
 
 #include "Components/PrimitiveComponent.h"
+#include "Components/RectLightComponent.h"
+#include "Engine/RectLight.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/PlayerController.h"
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
@@ -22,6 +25,15 @@ ANPSpotlightMapEvent::ANPSpotlightMapEvent()
 	SpotlightClass = ANPEventSpotlight::StaticClass();
 }
 
+void ANPSpotlightMapEvent::BeginPlay()
+{
+	Super::BeginPlay();
+	if (IsEventActive())
+	{
+		SetMainRectLightsDimmed(true);
+	}
+}
+
 void ANPSpotlightMapEvent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -36,6 +48,7 @@ float ANPSpotlightMapEvent::GetServerTime() const
 
 void ANPSpotlightMapEvent::ApplyEventState_Implementation(const bool bNewActive)
 {
+	SetMainRectLightsDimmed(bNewActive);
 	if (!HasAuthority())
 	{
 		return;
@@ -55,6 +68,66 @@ void ANPSpotlightMapEvent::ApplyEventState_Implementation(const bool bNewActive)
 			UpdatePriceBonuses(FMath::Min(GetServerTime(), SpotlightCycle.EndServerWorldTime));
 		}
 		CleanupEvent();
+	}
+}
+
+void ANPSpotlightMapEvent::SetMainRectLightsDimmed(const bool bDimmed, const bool bImmediate)
+{
+	UWorld* World = GetWorld();
+	if (bDimmed && World)
+	{
+		for (TActorIterator<ARectLight> Iterator(World); Iterator; ++Iterator)
+		{
+			ARectLight* Light = *Iterator;
+			if (IsValid(Light) && Light->GetLevel() == World->PersistentLevel
+				&& IsValid(Light->RectLightComponent))
+			{
+				MainRectLights.FindOrAdd(TWeakObjectPtr<URectLightComponent>(Light->RectLightComponent.Get()));
+			}
+		}
+	}
+
+	for (auto& Entry : MainRectLights)
+	{
+		if (URectLightComponent* Light = Entry.Key.Get())
+		{
+			Light->SetIntensityUnits(ELightUnits::Candelas);
+			Entry.Value = Light->Intensity;
+		}
+	}
+	RectLightTargetIntensity = bDimmed ? 5.0f : 160.0f;
+	RectLightFadeElapsed = 0.0f;
+	bRectLightsFading = !MainRectLights.IsEmpty();
+	SetActorTickEnabled(bRectLightsFading || (HasAuthority() && IsEventActive()));
+	UpdateMainRectLightFade(bImmediate ? FMath::Max(0.0f, RectLightFadeDuration) : 0.0f);
+}
+
+void ANPSpotlightMapEvent::UpdateMainRectLightFade(const float DeltaSeconds)
+{
+	if (!bRectLightsFading)
+	{
+		return;
+	}
+
+	RectLightFadeElapsed += DeltaSeconds;
+	const float Alpha = RectLightFadeDuration > 0.0f
+		? FMath::Clamp(RectLightFadeElapsed / RectLightFadeDuration, 0.0f, 1.0f) : 1.0f;
+	const float SmoothAlpha = Alpha * Alpha * (3.0f - 2.0f * Alpha);
+	for (const auto& Entry : MainRectLights)
+	{
+		if (URectLightComponent* Light = Entry.Key.Get())
+		{
+			Light->SetIntensity(FMath::Lerp(Entry.Value, RectLightTargetIntensity, SmoothAlpha));
+		}
+	}
+	if (Alpha >= 1.0f)
+	{
+		bRectLightsFading = false;
+		if (RectLightTargetIntensity == 160.0f)
+		{
+			MainRectLights.Reset();
+		}
+		SetActorTickEnabled(HasAuthority() && IsEventActive());
 	}
 }
 
@@ -103,6 +176,7 @@ void ANPSpotlightMapEvent::StartLightCycle(const float Now)
 void ANPSpotlightMapEvent::Tick(const float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	UpdateMainRectLightFade(DeltaSeconds);
 	if (!HasAuthority() || !IsEventActive())
 	{
 		return;
@@ -218,7 +292,7 @@ void ANPSpotlightMapEvent::ClearExposures()
 
 void ANPSpotlightMapEvent::CleanupEvent()
 {
-	SetActorTickEnabled(false);
+	SetActorTickEnabled(bRectLightsFading);
 	ClearExposures();
 	SpotlightCycle = FNPSpotlightCycle();
 	for (ANPEventSpotlight* Light : SpawnedSpotlights)
@@ -233,6 +307,7 @@ void ANPSpotlightMapEvent::CleanupEvent()
 
 void ANPSpotlightMapEvent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	SetMainRectLightsDimmed(false, true);
 	CleanupEvent();
 	Super::EndPlay(EndPlayReason);
 }
