@@ -7,10 +7,8 @@
 
 class UAbilitySystemComponent;
 class UChildActorComponent;
-class UNiagaraComponent;
-class UNPControlReversalVisualComponent;
 
-/** GAS 상태에 따른 왕관, 조작 반전, 용암 연출의 표시를 관리합니다. */
+/** GAS 리더 상태에 따른 왕관 표시를 관리합니다. */
 UCLASS(ClassGroup=(Effects))
 class NOPHOTOS_API UNPStatusVisualComponent : public UActorComponent
 {
@@ -18,17 +16,13 @@ class NOPHOTOS_API UNPStatusVisualComponent : public UActorComponent
 
 public:
 	UNPStatusVisualComponent();
-	void Initialize(UAbilitySystemComponent* InAbilitySystem, UChildActorComponent* InLeaderCrown,
-		UNPControlReversalVisualComponent* InControlReversalVisual,
-		UNiagaraComponent* InLavaFireLeft, UNiagaraComponent* InLavaFireRight);
+	void Initialize(UAbilitySystemComponent* InAbilitySystem, UChildActorComponent* InLeaderCrown);
 
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
 	void HandleLeaderTagChanged(FGameplayTag Tag, int32 NewCount);
-	void HandleControlTagChanged(FGameplayTag Tag, int32 NewCount);
-	void HandleLavaTagChanged(FGameplayTag Tag, int32 NewCount);
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilitySystemComponent> AbilitySystem;
@@ -36,16 +30,5 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UChildActorComponent> LeaderCrown;
 
-	UPROPERTY(Transient)
-	TObjectPtr<UNPControlReversalVisualComponent> ControlReversalVisual;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UNiagaraComponent> LavaFireLeft;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UNiagaraComponent> LavaFireRight;
-
 	FDelegateHandle LeaderTagHandle;
-	FDelegateHandle ControlTagHandle;
-	FDelegateHandle LavaTagHandle;
 };
