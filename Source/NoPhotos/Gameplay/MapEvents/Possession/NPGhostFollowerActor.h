@@ -12,7 +12,7 @@ class USkeletalMeshComponent;
 class UMaterialInstanceDynamic;
 class UPrimitiveComponent;
 
-/** 화면별로 생성하는 충돌 없는 유령 외형. 서버 위치 복제나 캐릭터 입력에는 관여하지 않습니다. */
+/** 서버에서 플레이어를 추격하고 접촉 시 빙의를 요청하는 복제 유령입니다. */
 UCLASS(Blueprintable)
 class NOPHOTOS_API ANPGhostFollowerActor : public AActor
 {
@@ -22,9 +22,6 @@ public:
 	ANPGhostFollowerActor();
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-
-	/** 이벤트의 deferred spawn 중 호출합니다. 캐릭터 자체에는 컴포넌트를 추가하지 않습니다. */
-	bool InitializeFollower(ANPStablePhysicsPawn* InTarget);
 
 	/** 서버의 deferred spawn 중 호출합니다. 추적 대상 없이 Point에서 대기하는 복제 유령으로 초기화합니다. */
 	bool InitializeRoamingGhost();
@@ -41,13 +38,6 @@ public:
 	/** 현재 알파부터 퇴장한 뒤 자동 파괴합니다. 중복 요청은 무시합니다. */
 	UFUNCTION(BlueprintCallable, Category="Ghost Follower|Fade")
 	void RequestFadeOut();
-
-	UFUNCTION(BlueprintPure, Category="Ghost Follower")
-	ANPStablePhysicsPawn* GetFollowTarget() const { return FollowTarget.Get(); }
-
-	/** 수평 정면을 기준으로 뒤쪽/위쪽 오프셋을 계산합니다. 외형 Scale은 포함하지 않습니다. */
-	static FTransform CalculateFollowTransform(const FVector& TargetLocation, const FVector& Forward,
-		float Distance, float Height);
 
 	static float CalculateFadeOpacity(float StartOpacity, float TargetOpacity, float Elapsed, float Duration);
 
@@ -82,20 +72,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Roaming", meta=(ClampMin="0.0"))
 	float RoamingRotationInterpSpeed = 8.0f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Follow", meta=(ClampMin="0.0", Units="cm"))
-	float FollowDistance = 150.0f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Follow", meta=(Units="cm"))
-	float HeightOffset = 70.0f;
-
-	/** 0이면 보간 없이 바로 등 뒤에 붙습니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Follow", meta=(ClampMin="0.0"))
-	float FollowInterpSpeed = 8.0f;
-
-	/** 순간이동 등으로 멀어지면 긴 거리를 보간하지 않고 즉시 따라갑니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Follow", meta=(ClampMin="1.0", Units="cm"))
-	float SnapDistance = 600.0f;
-
 	/** 유령 머티리얼의 Opacity에 연결한 Scalar Parameter 이름입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Fade")
 	FName GhostOpacityParameterName = TEXT("GhostOpacity");
@@ -126,12 +102,10 @@ private:
 	void ApplyRoamingGhostConsumedState();
 	void CheckRoamingPlayerContacts();
 	void TryHandleRoamingPlayerContact(ANPStablePhysicsPawn* PlayerPawn);
-	void UpdateFollow(float DeltaSeconds, bool bSnap);
 	void UpdateRoamingChase(float DeltaSeconds);
 	void InitializeFadeMaterials();
 	void ApplyGhostOpacity(float Opacity);
 	void UpdateFade(float DeltaSeconds);
-	void StopFollowing();
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> FadeMaterials;
@@ -143,9 +117,7 @@ private:
 	bool bGhostFadingOut = false;
 	bool bGhostFadeRunning = false;
 
-	TWeakObjectPtr<ANPStablePhysicsPawn> FollowTarget;
 	TWeakObjectPtr<ANPStablePhysicsPawn> RoamingChaseTarget;
-	FVector LastHorizontalForward = FVector::ForwardVector;
 
 	UPROPERTY(Replicated)
 	bool bRoamingGhost = false;

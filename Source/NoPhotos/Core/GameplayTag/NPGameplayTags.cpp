@@ -2,6 +2,7 @@
 
 namespace NPGameplayTags
 {
+	UE_DEFINE_GAMEPLAY_TAG(State_LavaBurning, "State.LavaBurning");
 	UE_DEFINE_GAMEPLAY_TAG(State_Ranking_Leader, "State.Ranking.Leader");
 	UE_DEFINE_GAMEPLAY_TAG(Input_Relic_Use, "Input.Relic.Use");
 	UE_DEFINE_GAMEPLAY_TAG(Input_Relic_Aim, "Input.Relic.Aim");

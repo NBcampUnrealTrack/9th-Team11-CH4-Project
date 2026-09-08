@@ -175,6 +175,15 @@ void UNPAbilitySystemComponent::HandleGameplayEffectApplied(
 	{
 		return;
 	}
+	FGameplayTagContainer GrantedTags;
+	EffectSpec.GetAllGrantedTags(GrantedTags);
+	if (GrantedTags.HasTagExact(NPGameplayTags::State_LavaBurning))
+	{
+		if (ANPStablePhysicsPawn* TargetPawn = Cast<ANPStablePhysicsPawn>(GetAvatarActor()))
+		{
+			TargetPawn->SetExternalVerticalVelocity(FMath::Max(0.0f, LavaJumpVelocity));
+		}
+	}
 	FGameplayTagContainer EffectAssetTags;
 	EffectSpec.GetAllAssetTags(EffectAssetTags);
 	if (!EffectAssetTags.HasTag(NPGameplayTags::Effect_Knockback))

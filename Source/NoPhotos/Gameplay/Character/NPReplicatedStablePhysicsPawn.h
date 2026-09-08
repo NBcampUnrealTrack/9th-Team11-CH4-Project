@@ -10,12 +10,15 @@
 
 class UPrimitiveComponent;
 class UChildActorComponent;
+class UNiagaraComponent;
 class UAbilitySystemComponent;
 class AController;
 class FLifetimeProperty;
 class UNPAbilitySystemComponent;
 class UNPInvisibilityComponent;
 class UNPControlReversalComponent;
+class UNPControlReversalVisualComponent;
+class UNPStatusVisualComponent;
 class UNPVisionRestrictionComponent;
 class UNPStablePhysicsNetworkPredictionComponent;
 class UNPPhotoWorldFeedbackComponent;
@@ -124,8 +127,6 @@ protected:
 	void OnGrabConstraintBroken();
 
 private:
-	void HandleLeaderTagChanged(FGameplayTag Tag, int32 NewCount);
-	FDelegateHandle LeaderTagHandle;
 	FActiveGameplayEffectHandle LeaderEffectHandle;
 
 	/** Child Actor Class에 NPLeaderCrown 기반 Blueprint를 지정합니다. */
@@ -236,6 +237,18 @@ private:
 	/** GAS 상태에 따라 원본 이동 입력의 전후/좌우 성분을 반전합니다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Control Reversal", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UNPControlReversalComponent> ControlReversal;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Control Reversal", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UNPControlReversalVisualComponent> ControlReversalVisual;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Status Visual", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UNPStatusVisualComponent> StatusVisual;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Lava", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UNiagaraComponent> LavaFireLeft;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Lava", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UNiagaraComponent> LavaFireRight;
 
 	UPROPERTY(EditDefaultsOnly, Category="Input")
 	TObjectPtr<UInputAction> RelicUseAction;

@@ -19,6 +19,7 @@ class UWorld;
 class UNPStablePhysicsDebugComponent;
 class UNPStablePhysicsGrabComponent;
 class UNPStablePhysicsMovementComponent;
+class UNPScanComponent;
 struct FNPRelicSwingSettings;
 struct FInputActionValue;
 
@@ -163,6 +164,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	UNPStablePhysicsDebugComponent* PhysicsDebug;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	UNPScanComponent* ScanComponent;
+
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* MoveAction;
 
@@ -177,6 +181,12 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* RightHandAction;
+
+	UPROPERTY(EditAnywhere, Category="Input")
+	UInputAction* ScanAction;
+
+	UFUNCTION(BlueprintImplementableEvent, Category="Input")
+	void EventPressScan();
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation|Photo")
 	TObjectPtr<UAnimMontage> PhotoShotMontage;
@@ -281,6 +291,10 @@ private:
 	void Jump();
 	void StartRightHand();
 	void StopRightHand();
+	void HandleScanPressed();
+
+	UFUNCTION()
+	void HandleActorScanned(AActor* ScannedActor);
 
 	bool bRightHandActive = false;
 	bool bTemporaryRagdollActive = false;

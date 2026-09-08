@@ -20,7 +20,6 @@ ANPGhostFollowerActor::ANPGhostFollowerActor()
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickGroup = TG_PostPhysics;
 	// Roaming 유령이 SpawnActorDeferred 이전부터 네트워크 액터로 등록되도록 기본 복제를 켭니다.
-	// 화면별 등 뒤 고스트는 InitializeFollower에서 생성 완료 전에 다시 복제를 끕니다.
 	bReplicates = true;
 	bAlwaysRelevant = true;
 	SetReplicateMovement(true);
@@ -59,29 +58,13 @@ void ANPGhostFollowerActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	DOREPLIFETIME(ANPGhostFollowerActor, bRoamingGhostConsumed);
 }
 
-bool ANPGhostFollowerActor::InitializeFollower(ANPStablePhysicsPawn* InTarget)
-{
-	if (!IsValid(InTarget) || InTarget->IsActorBeingDestroyed()
-		|| InTarget->GetWorld() != GetWorld() || FollowTarget.IsValid())
-	{
-		return false;
-	}
-	FollowTarget = InTarget;
-	// Deferred spawn 중 SetReplicates 호출은 pre-init 경고를 발생시키므로 직접 설정합니다.
-	bReplicates = false;
-	SetReplicateMovement(false);
-	AddTickPrerequisiteActor(InTarget);
-	UpdateFollow(0.0f, true);
-	return true;
-}
-
 bool ANPGhostFollowerActor::InitializeRoamingGhost()
 {
-	if (HasActorBegunPlay() || FollowTarget.IsValid())
+	if (HasActorBegunPlay())
 	{
 		UE_LOG(LogNPGhostFollower, Warning,
-			TEXT("[GhostTrace] Roaming 초기화 거부: Actor=%s BegunPlay=%d FollowTarget=%s"),
-			*GetNameSafe(this), HasActorBegunPlay() ? 1 : 0, *GetNameSafe(FollowTarget.Get()));
+			TEXT("[GhostTrace] Roaming 초기화 거부: Actor=%s BegunPlay=%d"),
+			*GetNameSafe(this), HasActorBegunPlay() ? 1 : 0);
 		return false;
 	}
 	bRoamingInitializationRequested = true;
@@ -178,18 +161,10 @@ void ANPGhostFollowerActor::ApplyRoamingGhostConsumedState()
 void ANPGhostFollowerActor::BeginPlay()
 {
 	Super::BeginPlay();
-	// 같은 BP를 Roaming(복제)과 화면별 Follower(비복제)에 함께 사용합니다.
-	// Deferred FinishSpawning의 Blueprint Construction이 bReplicates를 CDO 값으로 되돌릴 수 있으므로
-	// FollowTarget이 있는 로컬 Follower는 초기화 완료 시점에 다시 확실히 복제를 끕니다.
-	if (FollowTarget.IsValid())
-	{
-		SetReplicates(false);
-		SetReplicateMovement(false);
-	}
 	UE_LOG(LogNPGhostFollower, Display,
-		TEXT("[GhostTrace] BeginPlay 진입: Actor=%s Requested=%d Roaming=%d FollowTarget=%s Authority=%d"),
+		TEXT("[GhostTrace] BeginPlay 진입: Actor=%s Requested=%d Roaming=%d Authority=%d"),
 		*GetNameSafe(this), bRoamingInitializationRequested ? 1 : 0,
-		bRoamingGhost ? 1 : 0, *GetNameSafe(FollowTarget.Get()), HasAuthority() ? 1 : 0);
+		bRoamingGhost ? 1 : 0, HasAuthority() ? 1 : 0);
 	if (bRoamingInitializationRequested)
 	{
 		// Blueprint Construction이 복제 UPROPERTY를 CDO 값으로 되돌린 경우를 복원합니다.
@@ -200,8 +175,7 @@ void ANPGhostFollowerActor::BeginPlay()
 	{
 		return;
 	}
-	if ((!FollowTarget.IsValid() && !bRoamingGhost)
-		|| (GetNetMode() == NM_DedicatedServer && !bRoamingGhost))
+	if (!bRoamingGhost)
 	{
 		Destroy();
 		return;
@@ -212,16 +186,6 @@ void ANPGhostFollowerActor::BeginPlay()
 	RoamingContactSphere->SetSphereRadius(FMath::Max(1.0f, RoamingContactRadius));
 	RoamingContactSphere->SetGenerateOverlapEvents(false);
 	RoamingContactSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	// Point에 대기 중인 Roaming 유령은 아직 추적 대상이 없습니다.
-	// 대상 없는 상태에서 UpdateFollow를 호출하면 RequestFadeOut을 거쳐 즉시 파괴됩니다.
-	if (FollowTarget.IsValid())
-	{
-		UpdateFollow(0.0f, true);
-	}
-	if (IsActorBeingDestroyed())
-	{
-		return;
-	}
 	InitializeFadeMaterials();
 	FadeTargetOpacity = FMath::IsFinite(GhostMaxOpacity) ? FMath::Clamp(GhostMaxOpacity, 0.0f, 1.0f) : 0.35f;
 	FadeDuration = FMath::IsFinite(GhostFadeInDuration) ? FMath::Max(0.0f, GhostFadeInDuration) : 0.0f;
@@ -377,7 +341,6 @@ void ANPGhostFollowerActor::RequestFadeOut()
 		return;
 	}
 	bGhostFadingOut = true;
-	StopFollowing();
 	SetOwner(nullptr);
 	FadeStartOpacity = CurrentGhostOpacity;
 	FadeTargetOpacity = 0.0f;
@@ -394,24 +357,6 @@ void ANPGhostFollowerActor::RequestFadeOut()
 	SetLifeSpan(FadeDuration + 0.1f);
 }
 
-FTransform ANPGhostFollowerActor::CalculateFollowTransform(const FVector& TargetLocation,
-	const FVector& Forward, float Distance, float Height)
-{
-	if (TargetLocation.ContainsNaN())
-	{
-		return FTransform::Identity;
-	}
-	FVector HorizontalForward(Forward.X, Forward.Y, 0.0);
-	if (HorizontalForward.ContainsNaN() || !HorizontalForward.Normalize())
-	{
-		HorizontalForward = FVector::ForwardVector;
-	}
-	const float SafeDistance = FMath::IsFinite(Distance) ? FMath::Max(0.0f, Distance) : 150.0f;
-	const float SafeHeight = FMath::IsFinite(Height) ? Height : 70.0f;
-	return FTransform(HorizontalForward.Rotation(),
-		TargetLocation - HorizontalForward * SafeDistance + FVector::UpVector * SafeHeight);
-}
-
 void ANPGhostFollowerActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -419,10 +364,6 @@ void ANPGhostFollowerActor::Tick(float DeltaSeconds)
 	{
 		UpdateRoamingChase(DeltaSeconds);
 		CheckRoamingPlayerContacts();
-	}
-	else if (!bGhostFadingOut && !IsActorBeingDestroyed() && FollowTarget.IsValid())
-	{
-		UpdateFollow(DeltaSeconds, false);
 	}
 	UpdateFade(DeltaSeconds);
 }
@@ -460,54 +401,11 @@ void ANPGhostFollowerActor::UpdateRoamingChase(const float DeltaSeconds)
 	}
 }
 
-void ANPGhostFollowerActor::UpdateFollow(float DeltaSeconds, bool bSnap)
-{
-	const ANPStablePhysicsPawn* Target = FollowTarget.Get();
-	if (!IsValid(Target) || Target->IsActorBeingDestroyed())
-	{
-		RequestFadeOut();
-		return;
-	}
-	FVector Forward = Target->GetVisualForwardDirection();
-	Forward.Z = 0.0;
-	if (!Forward.ContainsNaN() && Forward.Normalize())
-	{
-		LastHorizontalForward = Forward;
-	}
-	const FVector TargetLocation = Target->GetActorLocation();
-	if (TargetLocation.ContainsNaN())
-	{
-		return;
-	}
-	const FTransform Desired = CalculateFollowTransform(TargetLocation, LastHorizontalForward, FollowDistance, HeightOffset);
-	const float SafeSnapDistance = FMath::IsFinite(SnapDistance) ? FMath::Max(1.0f, SnapDistance) : 600.0f;
-	const float Speed = FMath::IsFinite(FollowInterpSpeed) ? FMath::Max(0.0f, FollowInterpSpeed) : 8.0f;
-	if (bSnap || Speed <= 0.0f || FVector::DistSquared(GetActorLocation(), Desired.GetLocation()) > FMath::Square(SafeSnapDistance))
-	{
-		SetActorLocationAndRotation(Desired.GetLocation(), Desired.GetRotation());
-		return;
-	}
-	SetActorLocationAndRotation(
-		FMath::VInterpTo(GetActorLocation(), Desired.GetLocation(), DeltaSeconds, Speed),
-		FMath::RInterpTo(GetActorRotation(), Desired.Rotator(), DeltaSeconds, Speed));
-}
-
-void ANPGhostFollowerActor::StopFollowing()
-{
-	if (ANPStablePhysicsPawn* Target = FollowTarget.Get())
-	{
-		RemoveTickPrerequisiteActor(Target);
-	}
-	FollowTarget.Reset();
-}
-
 void ANPGhostFollowerActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	UE_LOG(LogNPGhostFollower, Display,
-		TEXT("[GhostTrace] EndPlay: Actor=%s Reason=%d Roaming=%d FollowTarget=%s"),
-		*GetNameSafe(this), static_cast<int32>(EndPlayReason), bRoamingGhost ? 1 : 0,
-		*GetNameSafe(FollowTarget.Get()));
-	StopFollowing();
+		TEXT("[GhostTrace] EndPlay: Actor=%s Reason=%d Roaming=%d"),
+		*GetNameSafe(this), static_cast<int32>(EndPlayReason), bRoamingGhost ? 1 : 0);
 	RoamingChaseTarget.Reset();
 	bGhostFadeRunning = false;
 	FadeMaterials.Reset();
