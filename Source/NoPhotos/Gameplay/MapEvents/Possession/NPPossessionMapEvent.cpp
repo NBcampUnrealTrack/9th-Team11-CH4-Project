@@ -10,6 +10,7 @@
 #include "Gameplay/AbilitySystem/Effects/NPPossessionGameplayEffect.h"
 #include "Gameplay/Relic/Case/NPRelicCase.h"
 #include "Kismet/GameplayStatics.h"
+#include "Net/UnrealNetwork.h"
 #include "NPGhostFollowerActor.h"
 #include "NPGhostPatrolRoute.h"
 #include "TimerManager.h"
@@ -32,6 +33,7 @@ void ANPPossessionMapEvent::GetLifetimeReplicatedProps(
 void ANPPossessionMapEvent::BeginPlay()
 {
 	Super::BeginPlay();
+	// 초기 복제의 RepNotify가 BeginPlay보다 먼저 실행된 경우도 복원합니다.
 	UpdateTrackingState();
 }
 
@@ -85,46 +87,6 @@ void ANPPossessionMapEvent::SpawnRoamingGhostsToCount(const float ContactDelay)
 			break;
 		}
 	}
-	if (!bHasRestartTransform && IsValid(SpawnedRoamingGhost))
-	{
-		RestartTransform = SpawnedRoamingGhost->GetActorTransform();
-		bHasRestartTransform = true;
-	}
-
-	PreviousChaseTarget = CurrentChaseTarget;
-	CurrentChaseTarget.Reset();
-	DestroyRoamingGhost();
-	if (!AffectedPlayers.IsEmpty())
-	{
-		AffectedPlayers.Reset();
-		ForceNetUpdate();
-		RefreshAppliedEffects();
-	}
-
-	const float ContactDelay = bRestartingAfterPossession && FMath::IsFinite(PostPossessionContactDelay)
-		? FMath::Max(0.0f, PostPossessionContactDelay) : 0.0f;
-	SpawnRoamingGhost(bHasRestartTransform ? &RestartTransform : nullptr, ContactDelay);
-	ANPStablePhysicsPawn* NewTarget = SelectRandomChaseTarget();
-	if (IsValid(SpawnedRoamingGhost) && IsValid(NewTarget)
-		&& SpawnedRoamingGhost->SetRoamingChaseTarget(NewTarget))
-	{
-		CurrentChaseTarget = NewTarget;
-		UE_LOG(LogNPPossessionEvent, Display,
-			TEXT("Roaming 유령 추격 시작: Ghost=%s Target=%s Duration=%.2fs Start=%s"),
-			*GetNameSafe(SpawnedRoamingGhost), *GetNameSafe(NewTarget),
-			ChaseTargetDuration, *SpawnedRoamingGhost->GetActorLocation().ToCompactString());
-	}
-	else
-	{
-		UE_LOG(LogNPPossessionEvent, Warning,
-			TEXT("Roaming 유령 추격 대상 없음: Ghost=%s. 다음 주기에 다시 검색합니다."),
-			*GetNameSafe(SpawnedRoamingGhost));
-	}
-
-	const float CycleDuration = FMath::IsFinite(ChaseTargetDuration)
-		? FMath::Max(0.1f, ChaseTargetDuration) : 10.0f;
-	GetWorldTimerManager().SetTimer(
-		ChaseCycleTimer, this, &ThisClass::BeginNextChaseCycle, CycleDuration, false);
 }
 
 void ANPPossessionMapEvent::ScheduleRoamingSpawnRetry()
@@ -289,7 +251,6 @@ void ANPPossessionMapEvent::HandleRoamingGhostContact(
 	{
 		return;
 	}
-	GetWorldTimerManager().ClearTimer(ChaseCycleTimer);
 	const float SafePossessionDuration = FMath::IsFinite(PossessionDuration)
 		? FMath::Max(0.1f, PossessionDuration) : 5.0f;
 	const TWeakObjectPtr<ANPStablePhysicsPawn> PlayerKey(PlayerPawn);
@@ -359,15 +320,12 @@ void ANPPossessionMapEvent::HandleRoamingGhostDestroyed(AActor* DestroyedActor)
 
 void ANPPossessionMapEvent::UpdateTrackingState()
 {
-	if (!HasAuthority())
-	{
-		return;
-	}
 	GetWorldTimerManager().ClearTimer(PlayerRefreshTimer);
 	if (!IsEventActive())
 	{
 		RemoveTemporaryCaseUnlocks();
 		RemoveAppliedEffects();
+		ClearLocalGhosts();
 		if (HasAuthority() && !AffectedPlayers.IsEmpty())
 		{
 			AffectedPlayers.Reset();
@@ -375,6 +333,8 @@ void ANPPossessionMapEvent::UpdateTrackingState()
 		}
 		return;
 	}
+	bWarnedMissingGhostClass = false;
+	bWarnedSpawnFailure = false;
 	bWarnedUnsupportedPawn = false;
 	RefreshPlayersAndGhosts();
 	if (!IsEventActive() || IsActorBeingDestroyed())
@@ -441,6 +401,7 @@ void ANPPossessionMapEvent::RefreshPlayersAndGhosts()
 		}
 		RefreshAppliedEffects();
 	}
+	RefreshLocalGhosts();
 }
 
 void ANPPossessionMapEvent::RefreshRelicCases()
@@ -723,7 +684,6 @@ void ANPPossessionMapEvent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	RemoveAppliedEffects();
 	DestroyRoamingGhosts();
 	ClearLocalGhosts(EndPlayReason != EEndPlayReason::Destroyed);
-	DestroyRoamingGhost();
 	AffectedPlayers.Reset();
 	Super::EndPlay(EndPlayReason);
 }

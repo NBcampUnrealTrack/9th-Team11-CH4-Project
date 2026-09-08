@@ -12,7 +12,7 @@ class ANPRelicCase;
 class ANPStablePhysicsPawn;
 class UAbilitySystemComponent;
 
-/** 추격 유령, 서버 GAS 이동 반전, 이벤트 동안의 진열장 임시 해제를 관리합니다. */
+/** 등 뒤 유령, 서버 GAS 이동 반전, 이벤트 동안의 진열장 임시 해제를 관리합니다. */
 UCLASS(Blueprintable)
 class NOPHOTOS_API ANPPossessionMapEvent : public ANPMapEvent
 {
@@ -20,6 +20,7 @@ class NOPHOTOS_API ANPPossessionMapEvent : public ANPMapEvent
 
 public:
 	ANPPossessionMapEvent();
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	/** 서버 Roaming 유령이 플레이어와 접촉했을 때 해당 플레이어에게만 빙의를 적용합니다. */
 	void HandleRoamingGhostContact(ANPGhostFollowerActor* Ghost, ANPStablePhysicsPawn* PlayerPawn);
@@ -33,7 +34,6 @@ protected:
 	virtual void ApplyEventState_Implementation(bool bNewActive) override;
 
 	/** RoamingGhostClass가 비어 있을 때 사용할 순찰 유령 BP입니다. */
-	/** RoamingGhostClass가 비어 있을 때 사용할 추격 유령 BP입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Possession Event")
 	TSubclassOf<ANPGhostFollowerActor> GhostClass;
 
@@ -63,7 +63,6 @@ protected:
 	float PatrolSpawnRetryInterval = 2.0f;
 
 	/** 플레이어와 접촉한 순간부터 GameplayCue 연출과 입력 반전을 유지할 시간입니다. */
-	/** 플레이어와 접촉한 순간부터 입력 반전을 유지할 시간입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Possession Event|Roaming Ghost", meta=(ClampMin="0.1", Units="s"))
 	float PossessionDuration = 5.0f;
 
@@ -78,6 +77,8 @@ protected:
 private:
 	void UpdateTrackingState();
 	void RefreshPlayersAndGhosts();
+	void RefreshLocalGhosts();
+	void ClearLocalGhosts(bool bImmediately = false);
 	void RefreshAppliedEffects();
 	void RemoveAppliedEffects();
 	void RefreshRelicCases();
@@ -98,10 +99,9 @@ private:
 
 	/** 서버가 선정한 빙의 대상입니다. 클라이언트는 이 목록으로 등 뒤 Follower를 표시합니다. */
 	UPROPERTY(ReplicatedUsing=OnRep_AffectedPlayers)
-	/** 서버가 이 이벤트의 효과를 적용할 대상입니다. 연출은 캐릭터의 GAS 태그를 사용합니다. */
-	UPROPERTY(Transient)
 	TArray<TObjectPtr<ANPStablePhysicsPawn>> AffectedPlayers;
 
+	TMap<TWeakObjectPtr<ANPStablePhysicsPawn>, TWeakObjectPtr<ANPGhostFollowerActor>> LocalGhosts;
 	TMap<TWeakObjectPtr<UAbilitySystemComponent>, FActiveGameplayEffectHandle> AppliedEffects;
 	TMap<TWeakObjectPtr<ANPStablePhysicsPawn>, FTimerHandle> PossessionTimers;
 	TSet<TWeakObjectPtr<ANPRelicCase>> TemporarilyUnlockedCases;
@@ -111,5 +111,7 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<ANPGhostFollowerActor>> SpawnedRoamingGhosts;
 
+	bool bWarnedMissingGhostClass = false;
+	bool bWarnedSpawnFailure = false;
 	bool bWarnedUnsupportedPawn = false;
 };
