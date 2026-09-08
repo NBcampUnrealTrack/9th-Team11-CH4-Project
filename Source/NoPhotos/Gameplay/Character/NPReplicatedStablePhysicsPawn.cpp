@@ -2,7 +2,6 @@
 
 #include "Components/PrimitiveComponent.h"
 #include "Components/ChildActorComponent.h"
-#include "Core/GameplayTag/NPGameplayTags.h"
 #include "Core/Main/NPMainGameState.h"
 #include "Gameplay/AbilitySystem/Effects/NPLeaderGameplayEffect.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -13,6 +12,8 @@
 #include "Gameplay/AbilitySystem/NPAbilitySystemComponent.h"
 #include "Gameplay/Character/Component/NPInvisibilityComponent.h"
 #include "Gameplay/Character/Component/NPControlReversalComponent.h"
+#include "Gameplay/Character/Component/NPControlReversalVisualComponent.h"
+#include "Gameplay/Character/Component/NPStatusVisualComponent.h"
 #include "Gameplay/Character/Component/NPVisionRestrictionComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsNetworkPredictionComponent.h"
@@ -68,17 +69,16 @@ ANPReplicatedStablePhysicsPawn::ANPReplicatedStablePhysicsPawn()
 	Invisibility = CreateDefaultSubobject<UNPInvisibilityComponent>(TEXT("Invisibility"));
 	VisionRestriction = CreateDefaultSubobject<UNPVisionRestrictionComponent>(TEXT("VisionRestriction"));
 	ControlReversal = CreateDefaultSubobject<UNPControlReversalComponent>(TEXT("ControlReversal"));
+	ControlReversalVisual = CreateDefaultSubobject<UNPControlReversalVisualComponent>(TEXT("ControlReversalVisual"));
+	ControlReversalVisual->SetupAttachment(PhysicsMesh);
+	StatusVisual = CreateDefaultSubobject<UNPStatusVisualComponent>(TEXT("StatusVisual"));
 }
 
 void ANPReplicatedStablePhysicsPawn::BeginPlay()
 {
 	Super::BeginPlay();
 	AbilitySystem->InitializeForOwner();
-	LeaderTagHandle = AbilitySystem->RegisterGameplayTagEvent(
-		NPGameplayTags::State_Ranking_Leader, EGameplayTagEventType::NewOrRemoved).AddUObject(
-			this, &ThisClass::HandleLeaderTagChanged);
-	HandleLeaderTagChanged(NPGameplayTags::State_Ranking_Leader,
-		AbilitySystem->GetTagCount(NPGameplayTags::State_Ranking_Leader));
+	StatusVisual->Initialize(AbilitySystem, LeaderCrown, ControlReversalVisual);
 	if (HasAuthority())
 	{
 		if (ANPMainGameState* MainGameState = GetWorld()->GetGameState<ANPMainGameState>())
@@ -163,8 +163,6 @@ void ANPReplicatedStablePhysicsPawn::MulticastPlayPhotographedFeedback_Implement
 
 void ANPReplicatedStablePhysicsPawn::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	AbilitySystem->RegisterGameplayTagEvent(
-		NPGameplayTags::State_Ranking_Leader, EGameplayTagEventType::NewOrRemoved).Remove(LeaderTagHandle);
 	if (HasAuthority() && IsValid(RegisteredGrabbedRelic))
 	{
 		if (UNPRelicOwnershipComponent* Ownership =
@@ -229,18 +227,6 @@ void ANPReplicatedStablePhysicsPawn::SetRankingLeader(bool bLeader)
 		AbilitySystem->RemoveActiveGameplayEffect(LeaderEffectHandle);
 		LeaderEffectHandle.Invalidate();
 		ForceNetUpdate();
-	}
-}
-
-void ANPReplicatedStablePhysicsPawn::HandleLeaderTagChanged(FGameplayTag Tag, int32 NewCount)
-{
-	const bool bShowCrown = NewCount > 0 && GetNetMode() != NM_DedicatedServer;
-	LeaderCrown->SetVisibility(bShowCrown, true);
-	LeaderCrown->SetHiddenInGame(!bShowCrown, true);
-	if (AActor* Crown = LeaderCrown->GetChildActor())
-	{
-		Crown->SetActorHiddenInGame(!bShowCrown);
-		Crown->SetActorTickEnabled(bShowCrown);
 	}
 }
 

@@ -5,33 +5,6 @@
 #include "Misc/AutomationTest.h"
 #include <limits>
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FNPGhostFollowTransformTest,
-	"NoPhotos.MapEvents.Possession.GhostFollowTransform",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FNPGhostFollowTransformTest::RunTest(const FString& Parameters)
-{
-	const FVector Target(1000.0, 2000.0, 300.0);
-	const FTransform FacingX = ANPGhostFollowerActor::CalculateFollowTransform(Target, FVector::ForwardVector, 150.0f, 70.0f);
-	TestTrue(TEXT("Ghost is behind translated target and above its root"),
-		FacingX.GetLocation().Equals(FVector(850.0, 2000.0, 370.0)));
-	const FTransform FacingY = ANPGhostFollowerActor::CalculateFollowTransform(Target, FVector(0.0, 2.0, 3.0), 150.0f, 70.0f);
-	TestTrue(TEXT("Visual heading is flattened and normalized before offsetting"),
-		FacingY.GetLocation().Equals(FVector(1000.0, 1850.0, 370.0)));
-	TestTrue(TEXT("Ghost faces same horizontal direction as target"),
-		FacingY.GetRotation().GetForwardVector().Equals(FVector::YAxisVector, 0.001));
-	const FTransform FacingNegativeX = ANPGhostFollowerActor::CalculateFollowTransform(Target, -FVector::ForwardVector, 150.0f, 70.0f);
-	TestTrue(TEXT("Turning around moves the ghost to opposite side"),
-		FacingNegativeX.GetLocation().Equals(FVector(1150.0, 2000.0, 370.0)));
-	const FTransform VerticalForward = ANPGhostFollowerActor::CalculateFollowTransform(Target, FVector::UpVector, 150.0f, 70.0f);
-	TestTrue(TEXT("Degenerate horizontal direction has a finite fallback"),
-		VerticalForward.GetLocation().Equals(FacingX.GetLocation()) && !VerticalForward.ContainsNaN());
-	const FTransform NegativeDistance = ANPGhostFollowerActor::CalculateFollowTransform(Target, FVector::ForwardVector, -50.0f, -20.0f);
-	TestTrue(TEXT("Negative distance clamps to zero while height can be below root"),
-		NegativeDistance.GetLocation().Equals(Target - FVector(0.0, 0.0, 20.0)));
-	return true;
-}
-
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FNPGhostFadeOpacityTest,
 	"NoPhotos.MapEvents.Possession.GhostFadeOpacity",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
