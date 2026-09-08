@@ -2,6 +2,7 @@
 
 #include "Components/PrimitiveComponent.h"
 #include "Components/ChildActorComponent.h"
+#include "Core/GameplayTag/NPGameplayTags.h"
 #include "Core/Main/NPMainGameState.h"
 #include "Gameplay/AbilitySystem/Effects/NPLeaderGameplayEffect.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -22,7 +23,6 @@
 #include "Gameplay/Relic/Components/NPAimableRelicComponent.h"
 #include "Gameplay/Photo/NPPhotoWorldFeedbackComponent.h"
 #include "Gameplay/Photo/NPPhotoCapturePenaltyComponent.h"
-#include "Gameplay/Photo/NPPhotoStunVisualComponent.h"
 #include "UI/GameScreen/NPScoreFeedbackWidgetComponent.h"
 #include "Core/NPPlayerState.h"
 #include "Gameplay/Character/Component/NPStablePhysicsMovementComponent.h"
@@ -46,10 +46,6 @@ ANPReplicatedStablePhysicsPawn::ANPReplicatedStablePhysicsPawn()
 
 	PhotoCapturePenalty = CreateDefaultSubobject<
 		UNPPhotoCapturePenaltyComponent>(TEXT("PhotoCapturePenalty"));
-	PhotoStunVisual = CreateDefaultSubobject<UNPPhotoStunVisualComponent>(
-		TEXT("PhotoStunVisual"));
-	PhotoStunVisual->SetupAttachment(PhysicsMesh);
-	PhotoStunVisual->SetRelativeLocation(FVector(0.0f, 0.0f, 190.0f));
 
 	// 기존 Blueprint의 네이티브 컴포넌트 설정을 보존하기 위해
 	// 서브오브젝트 이름은 클래스 이름 변경 전 값을 유지합니다.

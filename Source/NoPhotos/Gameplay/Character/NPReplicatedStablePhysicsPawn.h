@@ -21,7 +21,6 @@ class UNPVisionRestrictionComponent;
 class UNPStablePhysicsNetworkPredictionComponent;
 class UNPPhotoWorldFeedbackComponent;
 class UNPPhotoCapturePenaltyComponent;
-class UNPPhotoStunVisualComponent;
 class UNPScoreFeedbackWidgetComponent;
 class ANPBaseRelic;
 
@@ -249,11 +248,6 @@ private:
 	/** 유물 증거 사진에 찍혔을 때 Drop과 일시적인 조작 차단을 처리합니다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Photo|Penalty", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UNPPhotoCapturePenaltyComponent> PhotoCapturePenalty;
-
-	/** 스턴 중 머리 위에서 회전하는 표시물 3개입니다. */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Photo|Penalty",
-		meta=(AllowPrivateAccess="true"))
-	TObjectPtr<UNPPhotoStunVisualComponent> PhotoStunVisual;
 
 	/** 로컬 소유자를 포함해 실제 유물 가격 감점액을 머리 위에 표시합니다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Photo|Penalty", meta=(AllowPrivateAccess="true"))

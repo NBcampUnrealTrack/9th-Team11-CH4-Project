@@ -32,6 +32,9 @@ namespace NPGameplayTags
 		GameplayCue_Status_LavaBurning,
 		"GameplayCue.Status.LavaBurning");
 	UE_DEFINE_GAMEPLAY_TAG(
+		GameplayCue_Status_PhotoStun,
+		"GameplayCue.Status.PhotoStun");
+	UE_DEFINE_GAMEPLAY_TAG(
 		Data_Knockback_Magnitude,
 		"Data.Knockback.Magnitude");
 }
