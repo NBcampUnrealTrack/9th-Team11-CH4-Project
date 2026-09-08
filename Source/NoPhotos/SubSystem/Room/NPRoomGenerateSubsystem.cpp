@@ -10,6 +10,23 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogNPRoomGenerate, Log, All);
 
+namespace
+{
+	const TCHAR* GetAssetLoadFailureName(const ENPAssetLoadFailure Failure)
+	{
+		switch (Failure)
+		{
+		case ENPAssetLoadFailure::None: return TEXT("None");
+		case ENPAssetLoadFailure::InvalidRequest: return TEXT("InvalidRequest");
+		case ENPAssetLoadFailure::OwnerInvalid: return TEXT("OwnerInvalid");
+		case ENPAssetLoadFailure::WorldChanged: return TEXT("WorldChanged");
+		case ENPAssetLoadFailure::Canceled: return TEXT("Canceled");
+		case ENPAssetLoadFailure::LoadFailed: return TEXT("LoadFailed");
+		default: return TEXT("Unknown");
+		}
+	}
+}
+
 void UNPRoomGenerateSubsystem::Deinitialize()
 {
 	if (AssetLoadRequestId.IsValid())
@@ -54,12 +71,20 @@ bool UNPRoomGenerateSubsystem::GenerateRooms(
 {
 	if (bGenerationStarted)
 	{
+		UE_LOG(LogNPRoomGenerate, Warning,
+			TEXT("GenerateRooms rejected because generation already started. World=%s Complete=%s Failed=%s"),
+			*GetNameSafe(GetWorld()),
+			bGenerationComplete ? TEXT("true") : TEXT("false"),
+			bGenerationFailed ? TEXT("true") : TEXT("false"));
 		return false;
 	}
 
 	bGenerationStarted = true;
 	if (LayoutSeed == 0 || Rooms.IsEmpty() || SlotTransforms.IsEmpty())
 	{
+		UE_LOG(LogNPRoomGenerate, Error,
+			TEXT("GenerateRooms received invalid input. World=%s LayoutSeed=%d Rooms=%d SlotTransforms=%d"),
+			*GetNameSafe(GetWorld()), LayoutSeed, Rooms.Num(), SlotTransforms.Num());
 		FailGeneration();
 		return false;
 	}
@@ -84,6 +109,9 @@ bool UNPRoomGenerateSubsystem::GenerateRooms(
 		const TSoftObjectPtr<UWorld>& Room = Rooms[RoomOrder[SlotIndex]];
 		if (Room.IsNull())
 		{
+			UE_LOG(LogNPRoomGenerate, Warning,
+				TEXT("Skipping null room reference. SourceIndex=%d SlotIndex=%d"),
+				RoomOrder[SlotIndex], SlotIndex);
 			continue;
 		}
 
@@ -105,6 +133,10 @@ bool UNPRoomGenerateSubsystem::GenerateRooms(
 		: nullptr;
 	if (!AssetLoader || ExpectedRoomCount == 0)
 	{
+		UE_LOG(LogNPRoomGenerate, Error,
+			TEXT("Room preload cannot start. World=%s GameInstance=%s AssetLoader=%s SelectedRooms=%d"),
+			*GetNameSafe(GetWorld()), *GetNameSafe(GameInstance),
+			*GetNameSafe(AssetLoader), ExpectedRoomCount);
 		FailGeneration();
 		return false;
 	}
@@ -115,6 +147,12 @@ bool UNPRoomGenerateSubsystem::GenerateRooms(
 		FNPOnAssetLoadComplete::CreateUObject(
 			this,
 			&UNPRoomGenerateSubsystem::HandleRoomAssetsLoaded));
+	if (!AssetLoadRequestId.IsValid())
+	{
+		UE_LOG(LogNPRoomGenerate, Error,
+			TEXT("Room preload request returned an invalid RequestId. World=%s Paths=%d"),
+			*GetNameSafe(GetWorld()), RoomPaths.Num());
+	}
 	return AssetLoadRequestId.IsValid();
 }
 
@@ -125,8 +163,17 @@ void UNPRoomGenerateSubsystem::HandleRoomAssetsLoaded(
 	if (!Result.IsSuccess())
 	{
 		UE_LOG(LogNPRoomGenerate, Error,
-			TEXT("Room asset preload failed. Failure=%d"),
-			static_cast<int32>(Result.Failure));
+			TEXT("Room asset preload failed. RequestId=%s Status=%d Failure=%s(%d) LoadedObjects=%d ExpectedRooms=%d"),
+			*Result.RequestId.Value.ToString(), static_cast<int32>(Result.Status),
+			GetAssetLoadFailureName(Result.Failure), static_cast<int32>(Result.Failure),
+			Result.LoadedObjects.Num(), ExpectedRoomCount);
+		for (const TSoftObjectPtr<UWorld>& SelectedRoom : SelectedRooms)
+		{
+			UE_LOG(LogNPRoomGenerate, Error,
+				TEXT("Room preload failure candidate. Path=%s Resolved=%s"),
+				*SelectedRoom.ToSoftObjectPath().ToString(),
+				SelectedRoom.Get() ? TEXT("true") : TEXT("false"));
+		}
 		FailGeneration();
 		return;
 	}
@@ -157,8 +204,12 @@ void UNPRoomGenerateSubsystem::CreateSelectedRoomInstances()
 		if (!bLoadSucceeded || !IsValid(LoadedRoom))
 		{
 			UE_LOG(LogNPRoomGenerate, Error,
-				TEXT("Room level instance creation failed. Room=%s"),
-				*Room.ToSoftObjectPath().ToString());
+				TEXT("Room level instance creation failed. Slot=%d Room=%s Instance=%s LoadSucceeded=%s StreamingLevel=%s Transform=%s World=%s"),
+				RoomIndex, *Room.ToSoftObjectPath().ToString(), *InstanceName,
+				bLoadSucceeded ? TEXT("true") : TEXT("false"),
+				*GetNameSafe(LoadedRoom),
+				*SelectedRoomTransforms[RoomIndex].ToHumanReadableString(),
+				*GetNameSafe(GetWorld()));
 			FailGeneration();
 			return;
 		}
@@ -185,9 +236,16 @@ void UNPRoomGenerateSubsystem::FailGeneration()
 {
 	if (bGenerationFailed)
 	{
+		UE_LOG(LogNPRoomGenerate, Verbose,
+			TEXT("Duplicate room generation failure ignored. World=%s"),
+			*GetNameSafe(GetWorld()));
 		return;
 	}
 
+	UE_LOG(LogNPRoomGenerate, Error,
+		TEXT("Room generation marked failed. World=%s ExpectedRooms=%d GeneratedRooms=%d SelectedRooms=%d RequestActive=%s"),
+		*GetNameSafe(GetWorld()), ExpectedRoomCount, GeneratedRooms.Num(),
+		SelectedRooms.Num(), AssetLoadRequestId.IsValid() ? TEXT("true") : TEXT("false"));
 	bGenerationComplete = false;
 	bGenerationFailed = true;
 	OnRoomGenerationFailed.Broadcast();
@@ -206,6 +264,15 @@ void UNPRoomGenerateSubsystem::HandleLevelShown()
 		if (!IsValid(RoomInfo.StreamingLevel) ||
 			!RoomInfo.StreamingLevel->IsLevelVisible())
 		{
+			UE_LOG(LogNPRoomGenerate, Log,
+				TEXT("Waiting for room visibility. Slot=%d Room=%s StreamingLevel=%s LoadedLevel=%s Visible=%s"),
+				RoomInfo.SlotIndex,
+				*RoomInfo.RoomLevel.ToSoftObjectPath().ToString(),
+				*GetNameSafe(RoomInfo.StreamingLevel),
+				*GetNameSafe(IsValid(RoomInfo.StreamingLevel)
+					? RoomInfo.StreamingLevel->GetLoadedLevel() : nullptr),
+				IsValid(RoomInfo.StreamingLevel) && RoomInfo.StreamingLevel->IsLevelVisible()
+					? TEXT("true") : TEXT("false"));
 			return;
 		}
 	}

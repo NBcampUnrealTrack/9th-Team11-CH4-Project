@@ -72,15 +72,17 @@ void UNPAbilitySystemComponent::SetHeldRelic(AActor* Relic)
 	{
 		if (bIsCarryingRelic)
 		{
-			AddLooseGameplayTag(NPGameplayTags::State_Relic_Carrying);
-			AddReplicatedLooseGameplayTag(
-				NPGameplayTags::State_Relic_Carrying);
+			AddLooseGameplayTag(
+				NPGameplayTags::State_Relic_Carrying,
+				1,
+				EGameplayTagReplicationState::TagOnly);
 		}
 		else
 		{
-			RemoveReplicatedLooseGameplayTag(
-				NPGameplayTags::State_Relic_Carrying);
-			RemoveLooseGameplayTag(NPGameplayTags::State_Relic_Carrying);
+			RemoveLooseGameplayTag(
+				NPGameplayTags::State_Relic_Carrying,
+				1,
+				EGameplayTagReplicationState::TagOnly);
 		}
 	}
 

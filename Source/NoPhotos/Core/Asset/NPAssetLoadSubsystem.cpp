@@ -1,12 +1,15 @@
 #include "Core/Asset/NPAssetLoadSubsystem.h"
 
 #include "Engine/AssetManager.h"
+#include "Engine/Engine.h"
 #include "UObject/UObjectGlobals.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogNPAssetLoad, Log, All);
 
 void UNPAssetLoadSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
-	PreLoadMapHandle = FCoreUObjectDelegates::PreLoadMap.AddUObject(
+	PreLoadMapHandle = FCoreUObjectDelegates::PreLoadMapWithContext.AddUObject(
 		this,
 		&UNPAssetLoadSubsystem::HandlePreLoadMap);
 }
@@ -15,11 +18,12 @@ void UNPAssetLoadSubsystem::Deinitialize()
 {
 	if (PreLoadMapHandle.IsValid())
 	{
-		FCoreUObjectDelegates::PreLoadMap.Remove(PreLoadMapHandle);
+		FCoreUObjectDelegates::PreLoadMapWithContext.Remove(PreLoadMapHandle);
 		PreLoadMapHandle.Reset();
 	}
 
 	CancelAllSoftPathRequests();
+	LastPreLoadMapName.Reset();
 	Super::Deinitialize();
 }
 
@@ -111,6 +115,13 @@ FNPAssetLoadRequestId UNPAssetLoadSubsystem::LoadSoftPathsAsync(
 
 	if (!IsValid(Owner) || ValidPaths.IsEmpty())
 	{
+		UE_LOG(LogNPAssetLoad, Error,
+			TEXT("Soft path request rejected. Owner=%s OwnerValid=%s InputPaths=%d ValidPaths=%d WorldGeneration=%u"),
+			*GetNameSafe(Owner),
+			IsValid(Owner) ? TEXT("true") : TEXT("false"),
+			Paths.Num(),
+			ValidPaths.Num(),
+			WorldGeneration);
 		FNPAssetLoadResult Result;
 		Result.Status = ENPAssetLoadStatus::Failed;
 		Result.Failure = IsValid(Owner)
@@ -130,6 +141,15 @@ FNPAssetLoadRequestId UNPAssetLoadSubsystem::LoadSoftPathsAsync(
 	ActiveSoftPathRequests.Add(RequestId, MoveTemp(Request));
 
 	const TArray<FSoftObjectPath> RequestedPaths = ActiveSoftPathRequests.FindChecked(RequestId).Paths;
+	UE_LOG(LogNPAssetLoad, Log,
+		TEXT("Soft path request started. RequestId=%s Owner=%s Paths=%d WorldGeneration=%u"),
+		*RequestId.Value.ToString(), *GetNameSafe(Owner), RequestedPaths.Num(), WorldGeneration);
+	for (const FSoftObjectPath& RequestedPath : RequestedPaths)
+	{
+		UE_LOG(LogNPAssetLoad, Verbose,
+			TEXT("Soft path request item. RequestId=%s Path=%s"),
+			*RequestId.Value.ToString(), *RequestedPath.ToString());
+	}
 	TSharedPtr<FStreamableHandle> Handle = UAssetManager::GetStreamableManager().RequestAsyncLoad(
 		RequestedPaths,
 		FStreamableDelegate::CreateUObject(
@@ -148,6 +168,9 @@ FNPAssetLoadRequestId UNPAssetLoadSubsystem::LoadSoftPathsAsync(
 
 	if (!Handle.IsValid() && ActiveSoftPathRequests.Contains(RequestId))
 	{
+		UE_LOG(LogNPAssetLoad, Warning,
+			TEXT("Streamable handle was not created; validating immediately. RequestId=%s"),
+			*RequestId.Value.ToString());
 		HandleSoftPathsLoaded(RequestId);
 	}
 	return RequestId;
@@ -158,11 +181,19 @@ void UNPAssetLoadSubsystem::HandleSoftPathsLoaded(const FNPAssetLoadRequestId Re
 	FSoftPathRequest Request;
 	if (!ActiveSoftPathRequests.RemoveAndCopyValue(RequestId, Request))
 	{
+		UE_LOG(LogNPAssetLoad, Verbose,
+			TEXT("Ignoring completion for inactive request. RequestId=%s"),
+			*RequestId.Value.ToString());
 		return;
 	}
 
 	if (!Request.Owner.IsValid() || Request.WorldGeneration != WorldGeneration)
 	{
+		UE_LOG(LogNPAssetLoad, Warning,
+			TEXT("Discarding stale completion. RequestId=%s OwnerValid=%s RequestGeneration=%u CurrentGeneration=%u"),
+			*RequestId.Value.ToString(),
+			Request.Owner.IsValid() ? TEXT("true") : TEXT("false"),
+			Request.WorldGeneration, WorldGeneration);
 		return;
 	}
 
@@ -174,11 +205,21 @@ void UNPAssetLoadSubsystem::HandleSoftPathsLoaded(const FNPAssetLoadRequestId Re
 		{
 			Result.LoadedObjects.Add(LoadedObject);
 		}
+		else
+		{
+			UE_LOG(LogNPAssetLoad, Error,
+				TEXT("Soft path failed to resolve after load. RequestId=%s Path=%s"),
+				*RequestId.Value.ToString(), *Path.ToString());
+		}
 	}
 
 	const bool bAllLoaded = Result.LoadedObjects.Num() == Request.Paths.Num();
 	Result.Status = bAllLoaded ? ENPAssetLoadStatus::Loaded : ENPAssetLoadStatus::Failed;
 	Result.Failure = bAllLoaded ? ENPAssetLoadFailure::None : ENPAssetLoadFailure::LoadFailed;
+	UE_LOG(LogNPAssetLoad, Log,
+		TEXT("Soft path request completed. RequestId=%s Success=%s Loaded=%d Requested=%d"),
+		*RequestId.Value.ToString(), bAllLoaded ? TEXT("true") : TEXT("false"),
+		Result.LoadedObjects.Num(), Request.Paths.Num());
 	Request.Completion.ExecuteIfBound(Result);
 
 	if (Request.Handle.IsValid())
@@ -200,8 +241,16 @@ bool UNPAssetLoadSubsystem::CancelSoftPathRequestInternal(
 	FSoftPathRequest Request;
 	if (!ActiveSoftPathRequests.RemoveAndCopyValue(RequestId, Request))
 	{
+		UE_LOG(LogNPAssetLoad, Verbose,
+			TEXT("Cancel ignored for inactive request. RequestId=%s Failure=%d"),
+			*RequestId.Value.ToString(), static_cast<int32>(Failure));
 		return false;
 	}
+
+	UE_LOG(LogNPAssetLoad, Log,
+		TEXT("Soft path request canceled. RequestId=%s Owner=%s Failure=%d NotifyOwner=%s"),
+		*RequestId.Value.ToString(), *GetNameSafe(Request.Owner.Get()),
+		static_cast<int32>(Failure), bNotifyOwner ? TEXT("true") : TEXT("false"));
 
 	if (Request.Handle.IsValid())
 	{
@@ -258,6 +307,7 @@ bool UNPAssetLoadSubsystem::IsSoftPathRequestActive(const FNPAssetLoadRequestId 
 
 void UNPAssetLoadSubsystem::AdvanceWorldGeneration()
 {
+	const uint32 PreviousGeneration = WorldGeneration;
 	++WorldGeneration;
 	if (WorldGeneration == 0)
 	{
@@ -266,13 +316,47 @@ void UNPAssetLoadSubsystem::AdvanceWorldGeneration()
 
 	TArray<FNPAssetLoadRequestId> RequestIds;
 	ActiveSoftPathRequests.GetKeys(RequestIds);
+	UE_LOG(LogNPAssetLoad, Log,
+		TEXT("World generation advanced. Previous=%u Current=%u RequestsToCancel=%d"),
+		PreviousGeneration, WorldGeneration, RequestIds.Num());
 	for (const FNPAssetLoadRequestId& RequestId : RequestIds)
 	{
-		CancelSoftPathRequestInternal(RequestId, ENPAssetLoadFailure::WorldChanged, false);
+		CancelSoftPathRequestInternal(
+			RequestId,
+			ENPAssetLoadFailure::WorldChanged,
+			true);
 	}
 }
 
-void UNPAssetLoadSubsystem::HandlePreLoadMap(const FString& MapName)
+void UNPAssetLoadSubsystem::HandlePreLoadMap(
+	const FWorldContext& WorldContext,
+	const FString& MapName)
 {
+	if (WorldContext.OwningGameInstance != GetGameInstance())
+	{
+		UE_LOG(LogNPAssetLoad, Verbose,
+			TEXT("Ignoring PreLoadMap from another GameInstance. Map=%s Context=%s"),
+			*MapName,
+			*WorldContext.ContextHandle.ToString());
+		return;
+	}
+
+	if (LastPreLoadMapName == MapName)
+	{
+		UE_LOG(LogNPAssetLoad, Log,
+			TEXT("Duplicate PreLoadMap ignored. Map=%s WorldGeneration=%u ActiveRequests=%d Context=%s"),
+			*MapName,
+			WorldGeneration,
+			ActiveSoftPathRequests.Num(),
+			*WorldContext.ContextHandle.ToString());
+		return;
+	}
+
+	LastPreLoadMapName = MapName;
+	UE_LOG(LogNPAssetLoad, Log,
+		TEXT("PreLoadMap received. Map=%s Context=%s GameInstance=%s"),
+		*MapName,
+		*WorldContext.ContextHandle.ToString(),
+		*GetNameSafe(GetGameInstance()));
 	AdvanceWorldGeneration();
 }

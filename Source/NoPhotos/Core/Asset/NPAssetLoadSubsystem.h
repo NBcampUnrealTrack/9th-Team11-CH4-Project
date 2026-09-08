@@ -7,6 +7,8 @@
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "NPAssetLoadSubsystem.generated.h"
 
+struct FWorldContext;
+
 DECLARE_DELEGATE_OneParam(FNPOnAssetLoadComplete, const FNPAssetLoadResult&);
 
 /**
@@ -78,9 +80,10 @@ private:
 		FNPAssetLoadRequestId RequestId,
 		ENPAssetLoadFailure Failure,
 		bool bNotifyOwner);
-	void HandlePreLoadMap(const FString& MapName);
+	void HandlePreLoadMap(const FWorldContext& WorldContext, const FString& MapName);
 
 	TMap<FNPAssetLoadRequestId, FSoftPathRequest> ActiveSoftPathRequests;
 	uint32 WorldGeneration = 1;
+	FString LastPreLoadMapName;
 	FDelegateHandle PreLoadMapHandle;
 };
