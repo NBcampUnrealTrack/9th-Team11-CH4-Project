@@ -47,6 +47,9 @@ public:
 	UFUNCTION(BlueprintPure, Category="Ghost Follower")
 	ANPStablePhysicsPawn* GetFollowTarget() const { return FollowTarget.Get(); }
 
+	/** 서버에서 이 순찰 고스트에 배정한 루트입니다. */
+	ANPGhostPatrolRoute* GetRoamingPatrolRoute() const { return RoamingPatrolRoute.Get(); }
+
 	/** 수평 정면을 기준으로 뒤쪽/위쪽 오프셋을 계산합니다. 외형 Scale은 포함하지 않습니다. */
 	static FTransform CalculateFollowTransform(const FVector& TargetLocation, const FVector& Forward,
 		float Distance, float Height);
@@ -85,10 +88,28 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Roaming", meta=(ClampMin="0.0", Units="cm/s"))
 	float RoamingChaseSpeed = 350.0f;
 
+	/** 이 거리 안에 들어온 가장 가까운 플레이어를 추격합니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Roaming", meta=(ClampMin="0.0", Units="cm"))
+	float RoamingPlayerDetectionRadius = 600.0f;
+
+	/** 추격 중인 플레이어가 이 거리 밖으로 나가면 루트로 복귀합니다. 감지 거리보다 크게 설정합니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Roaming", meta=(ClampMin="0.0", Units="cm"))
+	float RoamingChaseReleaseRadius = 900.0f;
+
+	/** 플레이어 감지와 추격 해제를 다시 판단하는 주기입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Roaming", meta=(ClampMin="0.05", Units="s"))
+	float RoamingChaseDecisionInterval = 0.2f;
 	/** 플레이어를 추격하지 않을 때 Spline을 왕복하는 속도입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Roaming", meta=(ClampMin="0.0", Units="cm/s"))
 	float RoamingPatrolSpeed = 200.0f;
 
+	/** 추격 종료 후 가장 가까운 루트 지점으로 돌아가는 속도입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Roaming", meta=(ClampMin="0.0", Units="cm/s"))
+	float RoamingRouteReturnSpeed = 250.0f;
+
+	/** 이 거리까지 루트에 접근하면 순찰을 재개합니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Roaming", meta=(ClampMin="1.0", Units="cm"))
+	float RoamingRouteReturnAcceptanceRadius = 25.0f;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ghost Follower|Roaming", meta=(ClampMin="0.0"))
 	float RoamingRotationInterpSpeed = 8.0f;
 
@@ -136,9 +157,13 @@ private:
 	void ApplyRoamingGhostConsumedState();
 	void CheckRoamingPlayerContacts();
 	void TryHandleRoamingPlayerContact(ANPStablePhysicsPawn* PlayerPawn);
+	void EvaluateRoamingChaseTarget();
+	ANPStablePhysicsPawn* FindNearestChaseTarget(float DetectionRadius) const;
+	void BeginReturnToPatrolRoute();
 	void UpdateFollow(float DeltaSeconds, bool bSnap);
 	void UpdateRoamingChase(float DeltaSeconds);
 	void UpdateRoamingPatrol(float DeltaSeconds);
+	void UpdateRoamingRouteReturn(float DeltaSeconds);
 	void InitializeFadeMaterials();
 	void ApplyGhostOpacity(float Opacity);
 	void UpdateFade(float DeltaSeconds);
@@ -159,6 +184,10 @@ private:
 	TWeakObjectPtr<ANPGhostPatrolRoute> RoamingPatrolRoute;
 	float RoamingPatrolDistance = 0.0f;
 	float RoamingPatrolDirection = 1.0f;
+	float RoamingRouteReturnDistance = 0.0f;
+	double NextRoamingChaseDecisionTime = 0.0;
+	bool bRoamingChaseActive = false;
+	bool bReturningToPatrolRoute = false;
 	FVector LastHorizontalForward = FVector::ForwardVector;
 
 	UPROPERTY(Replicated)

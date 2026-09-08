@@ -26,6 +26,7 @@ public:
 	UFUNCTION(BlueprintPure, Category="Ghost Patrol Route")
 	bool IsUsableRoute() const;
 
+	float FindDistanceClosestToWorldLocation(const FVector& WorldLocation) const;
 	FVector GetWorldLocationAtDistance(float Distance) const;
 	FVector GetWorldDirectionAtDistance(float Distance) const;
 

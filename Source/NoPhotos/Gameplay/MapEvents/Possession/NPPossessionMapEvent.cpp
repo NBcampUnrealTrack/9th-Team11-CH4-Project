@@ -23,7 +23,8 @@ ANPPossessionMapEvent::ANPPossessionMapEvent()
 	RoamingGhostRouteGroup = FGameplayTag::RequestGameplayTag(FName(TEXT("Possession")), false);
 }
 
-void ANPPossessionMapEvent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+void ANPPossessionMapEvent::GetLifetimeReplicatedProps(
+	TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ANPPossessionMapEvent, AffectedPlayers);
@@ -103,7 +104,7 @@ void ANPPossessionMapEvent::ScheduleRoamingSpawnRetry()
 		RoamingSpawnRetryTimer, RetryDelegate, RetryDelay, false);
 }
 
-ANPGhostPatrolRoute* ANPPossessionMapEvent::FindPatrolRoute() const
+ANPGhostPatrolRoute* ANPPossessionMapEvent::FindAvailablePatrolRoute() const
 {
 	UWorld* World = GetWorld();
 	if (!World || !RoamingGhostRouteGroup.IsValid())
@@ -111,12 +112,24 @@ ANPGhostPatrolRoute* ANPPossessionMapEvent::FindPatrolRoute() const
 		return nullptr;
 	}
 
+	TSet<const ANPGhostPatrolRoute*> AssignedRoutes;
+	for (const ANPGhostFollowerActor* Ghost : SpawnedRoamingGhosts)
+	{
+		if (IsValid(Ghost))
+		{
+			if (const ANPGhostPatrolRoute* AssignedRoute = Ghost->GetRoamingPatrolRoute())
+			{
+				AssignedRoutes.Add(AssignedRoute);
+			}
+		}
+	}
+
 	TArray<ANPGhostPatrolRoute*> Candidates;
 	for (TActorIterator<ANPGhostPatrolRoute> It(World); It; ++It)
 	{
 		ANPGhostPatrolRoute* Route = *It;
 		if (IsValid(Route) && Route->SupportsRouteGroup(RoamingGhostRouteGroup)
-			&& Route->IsUsableRoute())
+			&& Route->IsUsableRoute() && !AssignedRoutes.Contains(Route))
 		{
 			Candidates.Add(Route);
 		}
@@ -138,13 +151,14 @@ bool ANPPossessionMapEvent::SpawnRoamingGhost(
 
 	const TSubclassOf<ANPGhostFollowerActor> SelectedGhostClass = RoamingGhostClass
 		? RoamingGhostClass : GhostClass;
-	ANPGhostPatrolRoute* PatrolRoute = FindPatrolRoute();
+	ANPGhostPatrolRoute* PatrolRoute = FindAvailablePatrolRoute();
 	if (!SelectedGhostClass || !RoamingGhostRouteGroup.IsValid() || !PatrolRoute)
 	{
 		UE_LOG(LogNPPossessionEvent, Warning,
-			TEXT("빙의 유령 순찰 생성 대기: Class=%s RouteGroup=%s Route=%s"),
+			TEXT("빙의 유령 순찰 생성 대기: Class=%s RouteGroup=%s AvailableRoute=%s ActiveGhosts=%d RequestedGhosts=%d. 한 루트에는 한 마리만 배정합니다."),
 			*GetNameSafe(SelectedGhostClass.Get()), *RoamingGhostRouteGroup.ToString(),
-			*GetNameSafe(PatrolRoute));
+			*GetNameSafe(PatrolRoute), SpawnedRoamingGhosts.Num(),
+			FMath::Clamp(RoamingGhostCount, 1, 50));
 		return false;
 	}
 
@@ -252,6 +266,14 @@ void ANPPossessionMapEvent::HandleRoamingGhostContact(
 		SafePossessionDuration);
 }
 
+bool ANPPossessionMapEvent::CanRoamingGhostTarget(
+	const ANPStablePhysicsPawn* PlayerPawn) const
+{
+	return HasAuthority() && IsEventActive() && !IsActorBeingDestroyed()
+		&& IsValid(PlayerPawn) && !PlayerPawn->IsActorBeingDestroyed()
+		&& PlayerPawn->IsPlayerControlled() && !AffectedPlayers.Contains(PlayerPawn);
+}
+
 void ANPPossessionMapEvent::FinishPossession(
 	const TWeakObjectPtr<ANPStablePhysicsPawn> PlayerKey)
 {
@@ -335,7 +357,9 @@ void ANPPossessionMapEvent::RefreshPlayersAndGhosts()
 		&& (!GhostClass || GhostClass->HasAnyClassFlags(CLASS_Abstract))
 		&& !bWarnedMissingGhostClass)
 	{
-		UE_LOG(LogNPPossessionEvent, Warning, TEXT("빙의 유령 클래스 없음: Event=%s. 이벤트 BP의 GhostClass에 NPGhostFollowerActor 자식 BP를 지정하세요."), *GetName());
+		UE_LOG(LogNPPossessionEvent, Warning,
+			TEXT("빙의 추적 유령 생성 대기: Event=%s GhostClass가 비어 있거나 추상 클래스입니다."),
+			*GetName());
 		bWarnedMissingGhostClass = true;
 	}
 	if (HasAuthority())
@@ -541,15 +565,16 @@ void ANPPossessionMapEvent::RefreshLocalGhosts()
 		ClearLocalGhosts();
 		return;
 	}
+
 	TSet<TWeakObjectPtr<ANPStablePhysicsPawn>> DesiredPlayers;
 	for (ANPStablePhysicsPawn* Pawn : AffectedPlayers)
 	{
-		// 타깃 NetGUID가 아직 해결되지 않았거나 Pawn이 초기화 중이면 다음 갱신에서 재시도합니다.
 		if (IsValid(Pawn) && !Pawn->IsActorBeingDestroyed() && Pawn->HasActorBegunPlay())
 		{
 			DesiredPlayers.Add(Pawn);
 		}
 	}
+
 	TArray<TWeakObjectPtr<ANPGhostFollowerActor>> GhostsToRemove;
 	for (auto It = LocalGhosts.CreateIterator(); It; ++It)
 	{
@@ -566,6 +591,7 @@ void ANPPossessionMapEvent::RefreshLocalGhosts()
 			Ghost->RequestFadeOut();
 		}
 	}
+
 	if (!IsEventActive() || IsActorBeingDestroyed())
 	{
 		return;
@@ -575,6 +601,7 @@ void ANPPossessionMapEvent::RefreshLocalGhosts()
 		ClearLocalGhosts();
 		return;
 	}
+
 	for (const TWeakObjectPtr<ANPStablePhysicsPawn>& TargetKey : DesiredPlayers)
 	{
 		if (LocalGhosts.Contains(TargetKey))
@@ -586,17 +613,18 @@ void ANPPossessionMapEvent::RefreshLocalGhosts()
 		{
 			continue;
 		}
+
 		FActorSpawnParameters Params;
 		Params.Owner = this;
 		Params.OverrideLevel = GetWorld()->PersistentLevel;
 		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 		Params.bDeferConstruction = true;
 		const FTransform SpawnTransform(Target->GetVisualFacingRotation(), Target->GetActorLocation());
-		ANPGhostFollowerActor* Ghost = GetWorld()->SpawnActor<ANPGhostFollowerActor>(GhostClass, SpawnTransform, Params);
+		ANPGhostFollowerActor* Ghost = GetWorld()->SpawnActor<ANPGhostFollowerActor>(
+			GhostClass, SpawnTransform, Params);
 		if (IsValid(Ghost) && Ghost->InitializeFollower(Target))
 		{
 			UGameplayStatics::FinishSpawningActor(Ghost, Ghost->GetActorTransform());
-			// BP Construction 이후에도 서버의 화면용 Follower가 클라이언트로 복제되지 않게 보장합니다.
 			if (IsValid(Ghost))
 			{
 				Ghost->SetReplicates(false);
@@ -608,6 +636,7 @@ void ANPPossessionMapEvent::RefreshLocalGhosts()
 				continue;
 			}
 		}
+
 		if (IsValid(Ghost))
 		{
 			Ghost->Destroy();
@@ -618,16 +647,16 @@ void ANPPossessionMapEvent::RefreshLocalGhosts()
 		}
 		if (!bWarnedSpawnFailure)
 		{
-			UE_LOG(LogNPPossessionEvent, Warning, TEXT("빙의 유령 생성 실패: Event=%s Class=%s. 유령 BP의 Construction/BeginPlay 설정을 확인하세요."),
+			UE_LOG(LogNPPossessionEvent, Warning,
+				TEXT("빙의 유령 생성 실패: Event=%s Class=%s. 유령 BP의 Construction/BeginPlay 설정을 확인하세요."),
 				*GetName(), *GetNameSafe(GhostClass.Get()));
 			bWarnedSpawnFailure = true;
 		}
 	}
 }
 
-void ANPPossessionMapEvent::ClearLocalGhosts(bool bImmediately)
+void ANPPossessionMapEvent::ClearLocalGhosts(const bool bImmediately)
 {
-	// 유령 BP의 종료 콜백이 이벤트 상태를 바꾸더라도 순회 중인 컨테이너는 유지합니다.
 	const auto GhostsToDestroy = MoveTemp(LocalGhosts);
 	LocalGhosts.Reset();
 	for (const auto& Entry : GhostsToDestroy)
@@ -654,7 +683,6 @@ void ANPPossessionMapEvent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	RemoveTemporaryCaseUnlocks();
 	RemoveAppliedEffects();
 	DestroyRoamingGhosts();
-	// 게임 중 이벤트 액터 파괴는 페이드, 레벨/PIE 종료는 지연 없이 정리합니다.
 	ClearLocalGhosts(EndPlayReason != EEndPlayReason::Destroyed);
 	AffectedPlayers.Reset();
 	Super::EndPlay(EndPlayReason);

@@ -25,12 +25,15 @@ public:
 	/** 서버 Roaming 유령이 플레이어와 접촉했을 때 해당 플레이어에게만 빙의를 적용합니다. */
 	void HandleRoamingGhostContact(ANPGhostFollowerActor* Ghost, ANPStablePhysicsPawn* PlayerPawn);
 
+	/** 이미 빙의 중이지 않은 유효한 플레이어인지 서버 추격 고스트가 확인할 때 사용합니다. */
+	bool CanRoamingGhostTarget(const ANPStablePhysicsPawn* PlayerPawn) const;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void ApplyEventState_Implementation(bool bNewActive) override;
 
-	/** NPGhostFollowerActor 자식 BP에 외형을 지정한 후 연결합니다. */
+	/** RoamingGhostClass가 비어 있을 때 사용할 순찰 유령 BP입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Possession Event")
 	TSubclassOf<ANPGhostFollowerActor> GhostClass;
 
@@ -59,7 +62,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Possession Event|Roaming Ghost", meta=(ClampMin="0.1", Units="s"))
 	float PatrolSpawnRetryInterval = 2.0f;
 
-	/** 플레이어와 접촉한 순간부터 등 뒤 유령과 입력 반전을 유지할 시간입니다. */
+	/** 플레이어와 접촉한 순간부터 GameplayCue 연출과 입력 반전을 유지할 시간입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Possession Event|Roaming Ghost", meta=(ClampMin="0.1", Units="s"))
 	float PossessionDuration = 5.0f;
 
@@ -67,7 +70,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Possession Event|Roaming Ghost", meta=(ClampMin="0.0", Units="s"))
 	float PostPossessionContactDelay = 1.5f;
 
-	/** 서버 대상 목록과 로컬 표시 갱신 주기. 중도 접속/리스폰/복제 지연도 함께 처리합니다. */
+	/** 서버 대상 목록과 효과 갱신 주기입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Possession Event", meta=(ClampMin="0.05", Units="s"))
 	float PlayerRefreshInterval = 0.2f;
 
@@ -85,7 +88,7 @@ private:
 	void ScheduleRoamingSpawnRetry();
 	void FinishPossession(TWeakObjectPtr<ANPStablePhysicsPawn> PlayerKey);
 	void ClearPossessionTimers();
-	ANPGhostPatrolRoute* FindPatrolRoute() const;
+	ANPGhostPatrolRoute* FindAvailablePatrolRoute() const;
 	void DestroyRoamingGhosts();
 
 	UFUNCTION()
@@ -94,7 +97,7 @@ private:
 	UFUNCTION()
 	void OnRep_AffectedPlayers();
 
-	/** 클라이언트에는 타인의 PlayerController가 없으므로 서버가 선정한 Pawn 목록을 복제합니다. */
+	/** 서버가 선정한 빙의 대상입니다. 클라이언트는 이 목록으로 등 뒤 Follower를 표시합니다. */
 	UPROPERTY(ReplicatedUsing=OnRep_AffectedPlayers)
 	TArray<TObjectPtr<ANPStablePhysicsPawn>> AffectedPlayers;
 

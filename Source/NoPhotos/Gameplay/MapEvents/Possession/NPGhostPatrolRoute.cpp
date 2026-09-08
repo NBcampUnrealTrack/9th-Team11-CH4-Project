@@ -27,6 +27,18 @@ bool ANPGhostPatrolRoute::IsUsableRoute() const
 		&& PatrolSpline->GetSplineLength() > KINDA_SMALL_NUMBER;
 }
 
+float ANPGhostPatrolRoute::FindDistanceClosestToWorldLocation(
+	const FVector& WorldLocation) const
+{
+	if (!IsUsableRoute() || WorldLocation.ContainsNaN())
+	{
+		return 0.0f;
+	}
+
+	const float InputKey = PatrolSpline->FindInputKeyClosestToWorldLocation(WorldLocation);
+	return PatrolSpline->GetDistanceAlongSplineAtSplineInputKey(InputKey);
+}
+
 FVector ANPGhostPatrolRoute::GetWorldLocationAtDistance(const float Distance) const
 {
 	if (!IsUsableRoute())
