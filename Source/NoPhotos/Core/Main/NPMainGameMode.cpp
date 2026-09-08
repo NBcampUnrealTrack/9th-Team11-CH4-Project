@@ -1,5 +1,7 @@
 #include "NPMainGameMode.h"
 
+#include "AbilitySystemComponent.h"
+#include "Core/GameplayTag/NPGameplayTags.h"
 #include "Core/Main/NPMainPlayerController.h"
 #include "Core/NPPlayerState.h"
 #include "Core/Room/NPRoomSubsystem.h"
@@ -152,11 +154,21 @@ void ANPMainGameMode::PlayPhotoWorldFeedback(
 
 	if (IsValid(PhotographerPawn))
 	{
-		PhotographerPawn->MulticastPlayPhotographerFeedback();
+		if (UAbilitySystemComponent* AbilitySystem =
+			PhotographerPawn->GetAbilitySystemComponent())
+		{
+			AbilitySystem->ExecuteGameplayCue(
+				NPGameplayTags::GameplayCue_Photo_WorldFeedback_Photographer);
+		}
 	}
 	if (IsValid(PhotographedPawn))
 	{
-		PhotographedPawn->MulticastPlayPhotographedFeedback();
+		if (UAbilitySystemComponent* AbilitySystem =
+			PhotographedPawn->GetAbilitySystemComponent())
+		{
+			AbilitySystem->ExecuteGameplayCue(
+				NPGameplayTags::GameplayCue_Photo_WorldFeedback_Photographed);
+		}
 		if (ANPMainPlayerController* PhotographedController =
 			Cast<ANPMainPlayerController>(PhotographedPawn->GetController()))
 		{
@@ -167,7 +179,7 @@ void ANPMainGameMode::PlayPhotoWorldFeedback(
 	UE_LOG(
 		LogNPPhoto,
 		Log,
-		TEXT("[PhotoWorldFeedback] Multicast requested. PhotographerPawn=%s PhotographedPawn=%s"),
+		TEXT("[PhotoWorldFeedback] GameplayCues requested. PhotographerPawn=%s PhotographedPawn=%s"),
 		*GetNameSafe(PhotographerPawn),
 		*GetNameSafe(PhotographedPawn));
 }

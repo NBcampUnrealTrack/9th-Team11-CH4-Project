@@ -33,5 +33,7 @@ namespace NPGameplayTags
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Status_ControlReversal);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Status_LavaBurning);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Status_PhotoStun);
+	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Photo_WorldFeedback_Photographer);
+	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Photo_WorldFeedback_Photographed);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Knockback_Magnitude);
 }

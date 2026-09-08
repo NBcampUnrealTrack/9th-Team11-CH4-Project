@@ -6,7 +6,7 @@
 
 class USceneComponent;
 
-/** 캐릭터 상태에 붙는 지속형 Gameplay Cue의 공통 기반입니다. */
+/** 캐릭터에 붙는 Gameplay Cue의 공통 기반입니다. */
 UCLASS(Abstract, Blueprintable)
 class NOPHOTOS_API ANPAttachedGameplayCueActor : public AGameplayCueNotify_Actor
 {

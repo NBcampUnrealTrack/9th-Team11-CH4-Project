@@ -19,7 +19,6 @@ class UNPControlReversalComponent;
 class UNPStatusVisualComponent;
 class UNPVisionRestrictionComponent;
 class UNPStablePhysicsNetworkPredictionComponent;
-class UNPPhotoWorldFeedbackComponent;
 class UNPPhotoCapturePenaltyComponent;
 class UNPScoreFeedbackWidgetComponent;
 class ANPBaseRelic;
@@ -91,14 +90,6 @@ public:
 	void ServerRequestAimableRelicFire(
 		FVector_NetQuantize10 CameraLocation,
 		FVector_NetQuantizeNormal CameraForward);
-
-	/** 서버가 확정한 촬영자 표시를 현재 관련된 모든 클라이언트에서 재생합니다. */
-	UFUNCTION(NetMulticast, Reliable)
-	void MulticastPlayPhotographerFeedback();
-
-	/** 서버가 확정한 피촬영자 표시를 현재 관련된 모든 클라이언트에서 재생합니다. */
-	UFUNCTION(NetMulticast, Reliable)
-	void MulticastPlayPhotographedFeedback();
 
 protected:
 	virtual void BeginPlay() override;
@@ -240,10 +231,6 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category="Input")
 	TObjectPtr<UInputAction> RelicUseAction;
-
-	/** 사진 촬영/피촬영 상태를 발밑 데칼로 표시합니다. */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Photo|World Feedback", meta=(AllowPrivateAccess="true"))
-	TObjectPtr<UNPPhotoWorldFeedbackComponent> PhotoWorldFeedback;
 
 	/** 유물 증거 사진에 찍혔을 때 Drop과 일시적인 조작 차단을 처리합니다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Photo|Penalty", meta=(AllowPrivateAccess="true"))
