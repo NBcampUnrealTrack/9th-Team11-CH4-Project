@@ -5,6 +5,7 @@
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
 #include "NoPhotos.h"
+#include "TimerManager.h"
 
 ANPAimableRelicVisualProjectile::ANPAimableRelicVisualProjectile()
 {
@@ -41,6 +42,17 @@ void ANPAimableRelicVisualProjectile::OnConstruction(
 	TrailEffectComponent->SetAsset(TrailEffect);
 	TrailEffectComponent->SetRelativeRotation(TrailRelativeRotation);
 	TrailEffectComponent->SetRelativeScale3D(FVector(FMath::Max(0.0f, TrailScale)));
+}
+
+void ANPAimableRelicVisualProjectile::EndPlay(
+	const EEndPlayReason::Type EndPlayReason)
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(ArrivalTimer);
+	}
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void ANPAimableRelicVisualProjectile::InitializeVisualProjectile(
@@ -92,6 +104,7 @@ void ANPAimableRelicVisualProjectile::InitializeVisualProjectile(
 		false,
 		nullptr,
 		ETeleportType::TeleportPhysics);
+	DestinationLocation = EndLocation;
 
 	const float SafeTravelSpeed = FMath::Max(1.0f, TravelSpeed);
 	const float NaturalTravelTime = TravelDistance / SafeTravelSpeed;
@@ -121,7 +134,20 @@ void ANPAimableRelicVisualProjectile::InitializeVisualProjectile(
 			*GetNameSafe(GetClass()));
 	}
 
-	SetLifeSpan(TravelTime);
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			ArrivalTimer,
+			this,
+			&ThisClass::HandleReachedDestination,
+			TravelTime,
+			false);
+	}
+	else
+	{
+		Destroy();
+		return;
+	}
 	UE_LOG(
 		LogNoPhotos,
 		Warning,
@@ -133,4 +159,35 @@ void ANPAimableRelicVisualProjectile::InitializeVisualProjectile(
 		*GetNameSafe(TrailEffectComponent->GetAsset()),
 		TrailEffectComponent->IsActive() ? TEXT("true") : TEXT("false"),
 		*GetActorLocation().ToCompactString());
+}
+
+void ANPAimableRelicVisualProjectile::HandleReachedDestination()
+{
+	SetActorLocation(
+		DestinationLocation,
+		false,
+		nullptr,
+		ETeleportType::TeleportPhysics);
+	ProjectileMovement->StopMovementImmediately();
+	ProjectileMovement->Deactivate();
+
+	const float SafePostArrivalLifeTime = FMath::Max(
+		0.0f,
+		PostArrivalLifeTime);
+	UE_LOG(
+		LogNoPhotos,
+		Warning,
+		TEXT("[VisualProjectile][Arrival] Actor=%s Destination=%s HoldTime=%.2f NiagaraActive=%s"),
+		*GetNameSafe(this),
+		*DestinationLocation.ToCompactString(),
+		SafePostArrivalLifeTime,
+		TrailEffectComponent->IsActive() ? TEXT("true") : TEXT("false"));
+
+	if (SafePostArrivalLifeTime <= UE_SMALL_NUMBER)
+	{
+		Destroy();
+		return;
+	}
+
+	SetLifeSpan(SafePostArrivalLifeTime);
 }

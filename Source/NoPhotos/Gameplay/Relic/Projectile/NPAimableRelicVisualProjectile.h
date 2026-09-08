@@ -8,6 +8,7 @@ class UNiagaraComponent;
 class UNiagaraSystem;
 class UProjectileMovementComponent;
 class USceneComponent;
+struct FTimerHandle;
 
 /**
  * 조준 유물의 서버 Trace 결과를 시각적으로 보여주기 위한 로컬 전용 투사체입니다.
@@ -28,6 +29,7 @@ public:
 
 protected:
 	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<USceneComponent> SceneRoot;
@@ -52,7 +54,7 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Visual Projectile|Movement",
 		meta=(ClampMin="1.0", Units="cm/s"))
-	float TravelSpeed = 2000.0f;
+	float TravelSpeed = 12000.0f;
 
 	/** 너무 가까운 사격도 최소한 이 시간 동안 보이도록 실제 속도를 조절합니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Visual Projectile|Movement",
@@ -62,4 +64,15 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Visual Projectile|Movement",
 		meta=(ClampMin="0.01", Units="s"))
 	float MaximumLifeTime = 1.0f;
+
+	/** 목표 지점에서 이동을 멈춘 뒤 시각 효과를 유지할 시간입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Visual Projectile|Movement",
+		meta=(ClampMin="0.0", Units="s"))
+	float PostArrivalLifeTime = 3.0f;
+
+private:
+	void HandleReachedDestination();
+
+	FVector DestinationLocation = FVector::ZeroVector;
+	FTimerHandle ArrivalTimer;
 };
