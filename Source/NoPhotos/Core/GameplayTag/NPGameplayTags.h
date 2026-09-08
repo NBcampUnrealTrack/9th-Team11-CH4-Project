@@ -18,6 +18,8 @@ namespace NPGameplayTags
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Photo_Aim);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Photo_Shot);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Relic_Aiming);
+	/** 하나 이상의 유물을 현재 운반 중인 상태입니다. */
+	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Relic_Carrying);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Photo_Aiming);
 	/** 사진 촬영 Ability를 다시 사용할 수 없는 상태입니다. */
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Photo_Shot);

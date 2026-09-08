@@ -65,6 +65,25 @@ void UNPAbilitySystemComponent::SetHeldRelic(AActor* Relic)
 		return;
 	}
 
+	const bool bWasCarryingRelic = HasMatchingGameplayTag(
+		NPGameplayTags::State_Relic_Carrying);
+	const bool bIsCarryingRelic = IsValid(Relic);
+	if (bWasCarryingRelic != bIsCarryingRelic)
+	{
+		if (bIsCarryingRelic)
+		{
+			AddLooseGameplayTag(NPGameplayTags::State_Relic_Carrying);
+			AddReplicatedLooseGameplayTag(
+				NPGameplayTags::State_Relic_Carrying);
+		}
+		else
+		{
+			RemoveReplicatedLooseGameplayTag(
+				NPGameplayTags::State_Relic_Carrying);
+			RemoveLooseGameplayTag(NPGameplayTags::State_Relic_Carrying);
+		}
+	}
+
 	ClearHeldRelicAbilities();
 	if (!IsValid(Relic))
 	{

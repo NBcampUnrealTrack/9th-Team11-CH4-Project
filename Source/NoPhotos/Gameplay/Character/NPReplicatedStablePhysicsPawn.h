@@ -170,6 +170,7 @@ private:
 	void OnRep_ExternallyGrabbed();
 
 	void HandleGrabbedComponentChanged(UPrimitiveComponent* NewGrabbedComponent);
+	void HandleRelicCarryingTagChanged(FGameplayTag Tag, int32 NewCount);
 	void HandleGrabConstraintBroken();
 	void UpdateBlueprintGrabState(UPrimitiveComponent* NewGrabbedComponent);
 	void AddExternalGrabber();
@@ -277,6 +278,13 @@ private:
 	/** 서버에서 RightHandGrab을 소유자로 등록한 현재 Relic입니다. */
 	UPROPERTY(Transient)
 	TObjectPtr<ANPBaseRelic> RegisteredGrabbedRelic = nullptr;
+
+	/** State.Relic.Carrying이 활성화된 동안 기본 이동 속도에 적용할 배율입니다. */
+	UPROPERTY(EditDefaultsOnly, Category="Movement|Relic",
+		meta=(ClampMin="0.0", ClampMax="1.0"))
+	float RelicCarryMoveSpeedMultiplier = 0.9f;
+
+	FDelegateHandle RelicCarryingTagChangedHandle;
 
 	UPROPERTY(EditAnywhere, Category="Network|Grab Prediction", meta=(ClampMin="0.0"))
 	float LocalGrabPredictionTimeout = 0.35f;

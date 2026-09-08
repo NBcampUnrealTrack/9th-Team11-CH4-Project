@@ -2,6 +2,7 @@
 
 #include "Components/PrimitiveComponent.h"
 #include "Components/ChildActorComponent.h"
+#include "Core/GameplayTag/NPGameplayTags.h"
 #include "Core/Main/NPMainGameState.h"
 #include "Gameplay/AbilitySystem/Effects/NPLeaderGameplayEffect.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -89,6 +90,14 @@ void ANPReplicatedStablePhysicsPawn::BeginPlay()
 {
 	Super::BeginPlay();
 	AbilitySystem->InitializeForOwner();
+	RelicCarryingTagChangedHandle = AbilitySystem->RegisterGameplayTagEvent(
+		NPGameplayTags::State_Relic_Carrying,
+		EGameplayTagEventType::NewOrRemoved).AddUObject(
+			this,
+			&ANPReplicatedStablePhysicsPawn::HandleRelicCarryingTagChanged);
+	HandleRelicCarryingTagChanged(
+		NPGameplayTags::State_Relic_Carrying,
+		AbilitySystem->GetTagCount(NPGameplayTags::State_Relic_Carrying));
 	StatusVisual->Initialize(AbilitySystem, LeaderCrown, ControlReversalVisual, LavaFireLeft, LavaFireRight);
 	if (HasAuthority())
 	{
@@ -174,6 +183,15 @@ void ANPReplicatedStablePhysicsPawn::MulticastPlayPhotographedFeedback_Implement
 
 void ANPReplicatedStablePhysicsPawn::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (IsValid(AbilitySystem) && RelicCarryingTagChangedHandle.IsValid())
+	{
+		AbilitySystem->RegisterGameplayTagEvent(
+			NPGameplayTags::State_Relic_Carrying,
+			EGameplayTagEventType::NewOrRemoved).Remove(
+				RelicCarryingTagChangedHandle);
+		RelicCarryingTagChangedHandle.Reset();
+	}
+
 	if (HasAuthority() && IsValid(RegisteredGrabbedRelic))
 	{
 		if (UNPRelicOwnershipComponent* Ownership =
@@ -905,6 +923,28 @@ void ANPReplicatedStablePhysicsPawn::HandleGrabbedComponentChanged(
 	}
 	UpdateBlueprintGrabState(NewGrabbedComponent);
 	ForceNetUpdate();
+}
+
+void ANPReplicatedStablePhysicsPawn::HandleRelicCarryingTagChanged(
+	FGameplayTag,
+	const int32 NewCount)
+{
+	static const FName RelicCarrySpeedSource(TEXT("RelicCarry"));
+	if (!IsValid(PhysicsMovement))
+	{
+		return;
+	}
+
+	if (NewCount > 0)
+	{
+		PhysicsMovement->SetMoveSpeedMultiplier(
+			RelicCarrySpeedSource,
+			RelicCarryMoveSpeedMultiplier);
+	}
+	else
+	{
+		PhysicsMovement->ClearMoveSpeedMultiplier(RelicCarrySpeedSource);
+	}
 }
 
 void ANPReplicatedStablePhysicsPawn::HandleGrabConstraintBroken()
