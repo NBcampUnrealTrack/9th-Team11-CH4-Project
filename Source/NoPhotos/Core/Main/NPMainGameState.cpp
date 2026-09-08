@@ -2,6 +2,7 @@
 
 #include "Core/Main/NPMainPlayerController.h"
 #include "Core/NPPlayerState.h"
+#include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Gameplay/MapEvents/NPMapEvent.h"
@@ -207,6 +208,19 @@ void ANPMainGameState::ConfirmPictureSelection(APlayerController* PlayerControll
 	}
 }
 
+void ANPMainGameState::RemovePlayerState(APlayerState* PlayerState)
+{
+	if (HasAuthority() && IsValid(PlayerState))
+	{
+		if (ANPReplicatedStablePhysicsPawn* Pawn = Cast<ANPReplicatedStablePhysicsPawn>(PlayerState->GetPawn()))
+		{
+			Pawn->SetRankingLeader(false);
+		}
+	}
+	Super::RemovePlayerState(PlayerState);
+	RefreshPlayerRankings();
+}
+
 void ANPMainGameState::RefreshPlayerRankings()
 {
 	if (!HasAuthority())
@@ -245,6 +259,15 @@ void ANPMainGameState::RefreshPlayerRankings()
 			const int32 RightPlayerId = Right.PlayerState ? Right.PlayerState->GetPlayerId() : INDEX_NONE;
 			return LeftPlayerId < RightPlayerId;
 		});
+
+	const int32 HighestScore = PlayerRankings.IsEmpty() ? 0 : PlayerRankings[0].Score;
+	for (const FNPPlayerRanking& Ranking : PlayerRankings)
+	{
+		if (ANPReplicatedStablePhysicsPawn* Pawn = Cast<ANPReplicatedStablePhysicsPawn>(Ranking.PlayerState->GetPawn()))
+		{
+			Pawn->SetRankingLeader(bMainGameActive && HighestScore > 0 && Ranking.Score == HighestScore);
+		}
+	}
 
 	ForceNetUpdate();
 	OnPlayerRankingsChanged.Broadcast();

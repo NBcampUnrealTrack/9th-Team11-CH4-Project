@@ -1,8 +1,13 @@
 #include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 
 #include "Components/PrimitiveComponent.h"
+#include "Components/ChildActorComponent.h"
+#include "Core/GameplayTag/NPGameplayTags.h"
+#include "Core/Main/NPMainGameState.h"
+#include "Gameplay/AbilitySystem/Effects/NPLeaderGameplayEffect.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "EnhancedInputComponent.h"
+#include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
 #include "PhysicsEngine/BodyInstance.h"
 #include "Gameplay/AbilitySystem/NPAbilitySystemComponent.h"
@@ -54,6 +59,12 @@ ANPReplicatedStablePhysicsPawn::ANPReplicatedStablePhysicsPawn()
 
 	AbilitySystem = CreateDefaultSubobject<UNPAbilitySystemComponent>(
 		TEXT("AbilitySystem"));
+	LeaderCrown = CreateDefaultSubobject<UChildActorComponent>(TEXT("LeaderCrown"));
+	LeaderCrown->SetupAttachment(PhysicsMesh);
+	LeaderCrown->SetRelativeLocation(FVector(0.0f, 0.0f, 190.0f));
+	LeaderCrown->SetAbsolute(false, true, false);
+	LeaderCrown->SetVisibility(false, true);
+	LeaderCrown->SetHiddenInGame(true, true);
 	Invisibility = CreateDefaultSubobject<UNPInvisibilityComponent>(TEXT("Invisibility"));
 	VisionRestriction = CreateDefaultSubobject<UNPVisionRestrictionComponent>(TEXT("VisionRestriction"));
 	ControlReversal = CreateDefaultSubobject<UNPControlReversalComponent>(TEXT("ControlReversal"));
@@ -63,6 +74,18 @@ void ANPReplicatedStablePhysicsPawn::BeginPlay()
 {
 	Super::BeginPlay();
 	AbilitySystem->InitializeForOwner();
+	LeaderTagHandle = AbilitySystem->RegisterGameplayTagEvent(
+		NPGameplayTags::State_Ranking_Leader, EGameplayTagEventType::NewOrRemoved).AddUObject(
+			this, &ThisClass::HandleLeaderTagChanged);
+	HandleLeaderTagChanged(NPGameplayTags::State_Ranking_Leader,
+		AbilitySystem->GetTagCount(NPGameplayTags::State_Ranking_Leader));
+	if (HasAuthority())
+	{
+		if (ANPMainGameState* MainGameState = GetWorld()->GetGameState<ANPMainGameState>())
+		{
+			MainGameState->RefreshPlayerRankings();
+		}
+	}
 
 	const bool bServerAuthority = HasAuthority();
 	const bool bRunsMovementPhysics = bServerAuthority || IsLocallyControlled();
@@ -104,6 +127,16 @@ void ANPReplicatedStablePhysicsPawn::PossessedBy(AController* NewController)
 	Super::PossessedBy(NewController);
 
 	AbilitySystem->InitializeForOwner();
+	if (ANPMainGameState* MainGameState = GetWorld()->GetGameState<ANPMainGameState>())
+	{
+		MainGameState->RefreshPlayerRankings();
+	}
+}
+
+void ANPReplicatedStablePhysicsPawn::UnPossessed()
+{
+	SetRankingLeader(false);
+	Super::UnPossessed();
 }
 
 void ANPReplicatedStablePhysicsPawn::OnRep_Controller()
@@ -130,6 +163,8 @@ void ANPReplicatedStablePhysicsPawn::MulticastPlayPhotographedFeedback_Implement
 
 void ANPReplicatedStablePhysicsPawn::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	AbilitySystem->RegisterGameplayTagEvent(
+		NPGameplayTags::State_Ranking_Leader, EGameplayTagEventType::NewOrRemoved).Remove(LeaderTagHandle);
 	if (HasAuthority() && IsValid(RegisteredGrabbedRelic))
 	{
 		if (UNPRelicOwnershipComponent* Ownership =
@@ -175,6 +210,38 @@ void ANPReplicatedStablePhysicsPawn::GetLifetimeReplicatedProps(
 UAbilitySystemComponent* ANPReplicatedStablePhysicsPawn::GetAbilitySystemComponent() const
 {
 	return AbilitySystem;
+}
+
+void ANPReplicatedStablePhysicsPawn::SetRankingLeader(bool bLeader)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	if (bLeader && !AbilitySystem->GetActiveGameplayEffect(LeaderEffectHandle))
+	{
+		LeaderEffectHandle = AbilitySystem->ApplyGameplayEffectToSelf(
+			GetDefault<UNPLeaderGameplayEffect>(), 1.0f, AbilitySystem->MakeEffectContext());
+		ForceNetUpdate();
+	}
+	else if (!bLeader && LeaderEffectHandle.IsValid())
+	{
+		AbilitySystem->RemoveActiveGameplayEffect(LeaderEffectHandle);
+		LeaderEffectHandle.Invalidate();
+		ForceNetUpdate();
+	}
+}
+
+void ANPReplicatedStablePhysicsPawn::HandleLeaderTagChanged(FGameplayTag Tag, int32 NewCount)
+{
+	const bool bShowCrown = NewCount > 0 && GetNetMode() != NM_DedicatedServer;
+	LeaderCrown->SetVisibility(bShowCrown, true);
+	LeaderCrown->SetHiddenInGame(!bShowCrown, true);
+	if (AActor* Crown = LeaderCrown->GetChildActor())
+	{
+		Crown->SetActorHiddenInGame(!bShowCrown);
+		Crown->SetActorTickEnabled(bShowCrown);
+	}
 }
 
 void ANPReplicatedStablePhysicsPawn::AddExternalVelocityChange(

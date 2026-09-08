@@ -42,6 +42,7 @@ class NOPHOTOS_API ANPMainGameState : public AGameState
 	GENERATED_BODY()
 
 public:
+	virtual void RemovePlayerState(APlayerState* PlayerState) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	UFUNCTION(BlueprintPure, Category = "Main Game")

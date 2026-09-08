@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AbilitySystemInterface.h"
+#include "GameplayEffectTypes.h"
 #include "CoreMinimal.h"
 #include "Engine/EngineTypes.h"
 #include "Gameplay/Character/NPStablePhysicsPawn.h"
@@ -8,6 +9,7 @@
 #include "NPReplicatedStablePhysicsPawn.generated.h"
 
 class UPrimitiveComponent;
+class UChildActorComponent;
 class UAbilitySystemComponent;
 class AController;
 class FLifetimeProperty;
@@ -63,6 +65,7 @@ public:
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	void SetRankingLeader(bool bLeader);
 	virtual void AddExternalVelocityChange(
 		const FVector& VelocityChange) override;
 	virtual void SetExternalVerticalVelocity(float VerticalVelocity) override;
@@ -101,6 +104,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void CompleteTemporaryRagdollRecovery() override;
 	virtual void PossessedBy(AController* NewController) override;
+	virtual void UnPossessed() override;
 	virtual void OnRep_Controller() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
@@ -120,6 +124,14 @@ protected:
 	void OnGrabConstraintBroken();
 
 private:
+	void HandleLeaderTagChanged(FGameplayTag Tag, int32 NewCount);
+	FDelegateHandle LeaderTagHandle;
+	FActiveGameplayEffectHandle LeaderEffectHandle;
+
+	/** Child Actor Class에 NPLeaderCrown 기반 Blueprint를 지정합니다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Ranking", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UChildActorComponent> LeaderCrown;
+
 	static constexpr float ViewRotationSendInterval = 0.05f;
 
 	/** 현재 카메라 회전을 서버 권한 캐릭터 제어에 전달합니다. */
