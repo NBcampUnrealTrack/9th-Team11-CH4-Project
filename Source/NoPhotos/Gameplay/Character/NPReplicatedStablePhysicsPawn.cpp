@@ -66,7 +66,6 @@ void ANPReplicatedStablePhysicsPawn::BeginPlay()
 {
 	Super::BeginPlay();
 	AbilitySystem->InitializeForOwner();
-<<<<<<< HEAD
 	RelicCarryingTagChangedHandle = AbilitySystem->RegisterGameplayTagEvent(
 		NPGameplayTags::State_Relic_Carrying,
 		EGameplayTagEventType::NewOrRemoved).AddUObject(
@@ -75,10 +74,7 @@ void ANPReplicatedStablePhysicsPawn::BeginPlay()
 	HandleRelicCarryingTagChanged(
 		NPGameplayTags::State_Relic_Carrying,
 		AbilitySystem->GetTagCount(NPGameplayTags::State_Relic_Carrying));
-	StatusVisual->Initialize(AbilitySystem, LeaderCrown, ControlReversalVisual, LavaFireLeft, LavaFireRight);
-=======
 	StatusVisual->Initialize(AbilitySystem, LeaderCrown);
->>>>>>> dev
 	if (HasAuthority())
 	{
 		if (ANPMainGameState* MainGameState = GetWorld()->GetGameState<ANPMainGameState>())
