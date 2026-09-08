@@ -953,6 +953,15 @@ void ANPStablePhysicsPawn::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 
 void ANPStablePhysicsPawn::HandleScanPressed()
 {
+	if (const UAbilitySystemComponent* AbilitySystem =
+		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(this);
+		AbilitySystem &&
+		(AbilitySystem->HasMatchingGameplayTag(NPGameplayTags::State_Photo_Aiming) ||
+		 AbilitySystem->HasMatchingGameplayTag(NPGameplayTags::State_Relic_Aiming)))
+	{
+		return;
+	}
+
 	EventPressScan();
 }
 

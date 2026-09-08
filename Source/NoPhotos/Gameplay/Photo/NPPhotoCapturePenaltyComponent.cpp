@@ -6,7 +6,6 @@
 #include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 #include "Gameplay/Interaction/Components/GrabbableComponent.h"
 #include "Gameplay/Photo/NPRelicHolderInterface.h"
-#include "Gameplay/Photo/NPPhotoStunVisualComponent.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "NoPhotos.h"
 #include "Gameplay/Photo/NPPhotoLog.h"
@@ -210,20 +209,6 @@ void UNPPhotoCapturePenaltyComponent::ApplyStunStateLocally(const bool bStunned)
 			AbilitySystem->CancelRelicAimAbility();
 			AbilitySystem->CancelPhotoAimAbility();
 		}
-	}
-
-	UNPPhotoStunVisualComponent* StunVisual =
-		Pawn->FindComponentByClass<UNPPhotoStunVisualComponent>();
-	UE_LOG(
-		LogNPPhoto,
-		Warning,
-		TEXT("[PhotoStun][VisualLookup] Pawn=%s Active=%s Visual=%s"),
-		*GetNameSafe(Pawn),
-		bStunned ? TEXT("true") : TEXT("false"),
-		*GetNameSafe(StunVisual));
-	if (StunVisual)
-	{
-		StunVisual->SetStunVisualActive(bStunned);
 	}
 }
 

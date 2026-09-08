@@ -14,4 +14,5 @@ UNPPossessionGameplayEffect::UNPPossessionGameplayEffect(const FObjectInitialize
 	FInheritedTagContainer GrantedTags;
 	GrantedTags.AddTag(NPGameplayTags::State_ControlsMirrored);
 	TargetTags->SetAndApplyTargetTagChanges(GrantedTags);
+	GameplayCues.Emplace(NPGameplayTags::GameplayCue_Status_ControlReversal, 0.0f, 1.0f);
 }

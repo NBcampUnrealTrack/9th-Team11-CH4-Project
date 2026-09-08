@@ -21,4 +21,5 @@ UNPPhotoStunGameplayEffect::UNPPhotoStunGameplayEffect(
 	FInheritedTagContainer GrantedTags;
 	GrantedTags.AddTag(NPGameplayTags::State_CrowdControl_Stunned);
 	TargetTags->SetAndApplyTargetTagChanges(GrantedTags);
+	GameplayCues.Emplace(NPGameplayTags::GameplayCue_Status_PhotoStun, 0.0f, 1.0f);
 }

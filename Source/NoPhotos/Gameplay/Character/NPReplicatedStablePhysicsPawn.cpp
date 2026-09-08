@@ -9,12 +9,10 @@
 #include "EnhancedInputComponent.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
-#include "NiagaraComponent.h"
 #include "PhysicsEngine/BodyInstance.h"
 #include "Gameplay/AbilitySystem/NPAbilitySystemComponent.h"
 #include "Gameplay/Character/Component/NPInvisibilityComponent.h"
 #include "Gameplay/Character/Component/NPControlReversalComponent.h"
-#include "Gameplay/Character/Component/NPControlReversalVisualComponent.h"
 #include "Gameplay/Character/Component/NPStatusVisualComponent.h"
 #include "Gameplay/Character/Component/NPVisionRestrictionComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
@@ -23,9 +21,7 @@
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Gameplay/Relic/Components/NPRelicOwnershipComponent.h"
 #include "Gameplay/Relic/Components/NPAimableRelicComponent.h"
-#include "Gameplay/Photo/NPPhotoWorldFeedbackComponent.h"
 #include "Gameplay/Photo/NPPhotoCapturePenaltyComponent.h"
-#include "Gameplay/Photo/NPPhotoStunVisualComponent.h"
 #include "UI/GameScreen/NPScoreFeedbackWidgetComponent.h"
 #include "Core/NPPlayerState.h"
 #include "Gameplay/Character/Component/NPStablePhysicsMovementComponent.h"
@@ -43,16 +39,8 @@ ANPReplicatedStablePhysicsPawn::ANPReplicatedStablePhysicsPawn()
 	NetworkPrediction = CreateDefaultSubobject<
 		UNPStablePhysicsNetworkPredictionComponent>(TEXT("NetworkPrediction"));
 
-	PhotoWorldFeedback = CreateDefaultSubobject<
-		UNPPhotoWorldFeedbackComponent>(TEXT("PhotoWorldFeedback"));
-	PhotoWorldFeedback->SetupAttachment(GetRootComponent());
-
 	PhotoCapturePenalty = CreateDefaultSubobject<
 		UNPPhotoCapturePenaltyComponent>(TEXT("PhotoCapturePenalty"));
-	PhotoStunVisual = CreateDefaultSubobject<UNPPhotoStunVisualComponent>(
-		TEXT("PhotoStunVisual"));
-	PhotoStunVisual->SetupAttachment(PhysicsMesh);
-	PhotoStunVisual->SetRelativeLocation(FVector(0.0f, 0.0f, 190.0f));
 
 	// 기존 Blueprint의 네이티브 컴포넌트 설정을 보존하기 위해
 	// 서브오브젝트 이름은 클래스 이름 변경 전 값을 유지합니다.
@@ -71,25 +59,14 @@ ANPReplicatedStablePhysicsPawn::ANPReplicatedStablePhysicsPawn()
 	Invisibility = CreateDefaultSubobject<UNPInvisibilityComponent>(TEXT("Invisibility"));
 	VisionRestriction = CreateDefaultSubobject<UNPVisionRestrictionComponent>(TEXT("VisionRestriction"));
 	ControlReversal = CreateDefaultSubobject<UNPControlReversalComponent>(TEXT("ControlReversal"));
-	ControlReversalVisual = CreateDefaultSubobject<UNPControlReversalVisualComponent>(TEXT("ControlReversalVisual"));
-	ControlReversalVisual->SetupAttachment(PhysicsMesh);
 	StatusVisual = CreateDefaultSubobject<UNPStatusVisualComponent>(TEXT("StatusVisual"));
-	LavaFireLeft = CreateDefaultSubobject<UNiagaraComponent>(TEXT("LavaFireLeft"));
-	LavaFireLeft->SetupAttachment(PhysicsMesh);
-	LavaFireLeft->SetRelativeLocation(FVector(0.0f, -25.0f, 100.0f));
-	LavaFireLeft->SetAutoActivate(false);
-	LavaFireLeft->SetHiddenInGame(true);
-	LavaFireRight = CreateDefaultSubobject<UNiagaraComponent>(TEXT("LavaFireRight"));
-	LavaFireRight->SetupAttachment(PhysicsMesh);
-	LavaFireRight->SetRelativeLocation(FVector(0.0f, 25.0f, 100.0f));
-	LavaFireRight->SetAutoActivate(false);
-	LavaFireRight->SetHiddenInGame(true);
 }
 
 void ANPReplicatedStablePhysicsPawn::BeginPlay()
 {
 	Super::BeginPlay();
 	AbilitySystem->InitializeForOwner();
+<<<<<<< HEAD
 	RelicCarryingTagChangedHandle = AbilitySystem->RegisterGameplayTagEvent(
 		NPGameplayTags::State_Relic_Carrying,
 		EGameplayTagEventType::NewOrRemoved).AddUObject(
@@ -99,6 +76,9 @@ void ANPReplicatedStablePhysicsPawn::BeginPlay()
 		NPGameplayTags::State_Relic_Carrying,
 		AbilitySystem->GetTagCount(NPGameplayTags::State_Relic_Carrying));
 	StatusVisual->Initialize(AbilitySystem, LeaderCrown, ControlReversalVisual, LavaFireLeft, LavaFireRight);
+=======
+	StatusVisual->Initialize(AbilitySystem, LeaderCrown);
+>>>>>>> dev
 	if (HasAuthority())
 	{
 		if (ANPMainGameState* MainGameState = GetWorld()->GetGameState<ANPMainGameState>())
@@ -163,22 +143,6 @@ void ANPReplicatedStablePhysicsPawn::OnRep_Controller()
 {
 	Super::OnRep_Controller();
 	AbilitySystem->InitializeForOwner();
-}
-
-void ANPReplicatedStablePhysicsPawn::MulticastPlayPhotographerFeedback_Implementation()
-{
-	if (IsValid(PhotoWorldFeedback))
-	{
-		PhotoWorldFeedback->PlayPhotographerEffect();
-	}
-}
-
-void ANPReplicatedStablePhysicsPawn::MulticastPlayPhotographedFeedback_Implementation()
-{
-	if (IsValid(PhotoWorldFeedback))
-	{
-		PhotoWorldFeedback->PlayPhotographedEffect();
-	}
 }
 
 void ANPReplicatedStablePhysicsPawn::EndPlay(const EEndPlayReason::Type EndPlayReason)
