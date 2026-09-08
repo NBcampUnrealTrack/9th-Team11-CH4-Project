@@ -17,4 +17,5 @@ UNPLavaGameplayEffect::UNPLavaGameplayEffect()
 	FInheritedTagContainer GrantedTags;
 	GrantedTags.AddTag(NPGameplayTags::State_LavaBurning);
 	TargetTags->SetAndApplyTargetTagChanges(GrantedTags);
+	GameplayCues.Emplace(NPGameplayTags::GameplayCue_Status_LavaBurning, 0.0f, 1.0f);
 }

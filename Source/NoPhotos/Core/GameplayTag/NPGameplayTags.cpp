@@ -26,6 +26,12 @@ namespace NPGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(State_VisionRestricted, "State.VisionRestricted");
 	UE_DEFINE_GAMEPLAY_TAG(State_ControlsMirrored, "State.ControlsMirrored");
 	UE_DEFINE_GAMEPLAY_TAG(
+		GameplayCue_Status_ControlReversal,
+		"GameplayCue.Status.ControlReversal");
+	UE_DEFINE_GAMEPLAY_TAG(
+		GameplayCue_Status_LavaBurning,
+		"GameplayCue.Status.LavaBurning");
+	UE_DEFINE_GAMEPLAY_TAG(
 		Data_Knockback_Magnitude,
 		"Data.Knockback.Magnitude");
 }
