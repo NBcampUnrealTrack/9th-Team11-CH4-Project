@@ -154,6 +154,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Aim")
 	TSubclassOf<UNPAimCrosshairWidget> AimCrosshairWidgetClass;
 
+	/** State.Photo.Aiming 태그가 활성화된 동안 로컬 화면에 표시할 사진 조준 UI입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Aim")
+	TSubclassOf<UNPAimCrosshairWidget> PhotoAimWidgetClass;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Room")
 	TSoftObjectPtr<UWorld> MainMenuLevel;
 
@@ -180,7 +184,9 @@ private:
 	void BindAimCrosshairToAbilitySystem();
 	void UnbindAimCrosshairFromAbilitySystem();
 	void HandleRelicAimingTagChanged(const FGameplayTag Tag, int32 NewCount);
+	void HandlePhotoAimingTagChanged(const FGameplayTag Tag, int32 NewCount);
 	void SetAimCrosshairActive(bool bActive);
+	void SetPhotoAimWidgetActive(bool bActive);
 	bool IsHoldingAimableRelic() const;
 	UNPAbilitySystemComponent* ResolveAbilitySystem() const;
 	bool ShouldUseTouchControls() const;
@@ -206,8 +212,12 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UNPAimCrosshairWidget> AimCrosshairWidget;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UNPAimCrosshairWidget> PhotoAimWidget;
+
 	TWeakObjectPtr<UNPAbilitySystemComponent> AimCrosshairAbilitySystem;
 	FDelegateHandle RelicAimingTagChangedHandle;
+	FDelegateHandle PhotoAimingTagChangedHandle;
 
 	bool bReportedMainWorldReady = false;
 	double MainWorldLoadingShownAtRealTime = -1.0;

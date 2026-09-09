@@ -202,6 +202,18 @@ void ANPMainPlayerController::BeginPlay()
 				AimCrosshairWidget->SetAimActive(false);
 			}
 		}
+
+		if (PhotoAimWidgetClass)
+		{
+			PhotoAimWidget = CreateWidget<UNPAimCrosshairWidget>(
+				this,
+				PhotoAimWidgetClass);
+			if (IsValid(PhotoAimWidget))
+			{
+				PhotoAimWidget->AddToPlayerScreen(50);
+				PhotoAimWidget->SetAimActive(false);
+			}
+		}
 		BindAimCrosshairToAbilitySystem();
 
 		if (PhotoFlashWidgetClass)
@@ -650,6 +662,7 @@ void ANPMainPlayerController::BindAimCrosshairToAbilitySystem()
 	{
 		UnbindAimCrosshairFromAbilitySystem();
 		SetAimCrosshairActive(false);
+		SetPhotoAimWidgetActive(false);
 		return;
 	}
 
@@ -662,10 +675,17 @@ void ANPMainPlayerController::BindAimCrosshairToAbilitySystem()
 			EGameplayTagEventType::NewOrRemoved).AddUObject(
 				this,
 				&ThisClass::HandleRelicAimingTagChanged);
+		PhotoAimingTagChangedHandle = AbilitySystem->RegisterGameplayTagEvent(
+			NPGameplayTags::State_Photo_Aiming,
+			EGameplayTagEventType::NewOrRemoved).AddUObject(
+				this,
+				&ThisClass::HandlePhotoAimingTagChanged);
 	}
 
 	SetAimCrosshairActive(AbilitySystem->HasMatchingGameplayTag(
 		NPGameplayTags::State_Relic_Aiming));
+	SetPhotoAimWidgetActive(AbilitySystem->HasMatchingGameplayTag(
+		NPGameplayTags::State_Photo_Aiming));
 }
 
 void ANPMainPlayerController::UnbindAimCrosshairFromAbilitySystem()
@@ -679,9 +699,17 @@ void ANPMainPlayerController::UnbindAimCrosshairFromAbilitySystem()
 				EGameplayTagEventType::NewOrRemoved).Remove(
 					RelicAimingTagChangedHandle);
 		}
+		if (PhotoAimingTagChangedHandle.IsValid())
+		{
+			AbilitySystem->RegisterGameplayTagEvent(
+				NPGameplayTags::State_Photo_Aiming,
+				EGameplayTagEventType::NewOrRemoved).Remove(
+					PhotoAimingTagChangedHandle);
+		}
 	}
 
 	RelicAimingTagChangedHandle.Reset();
+	PhotoAimingTagChangedHandle.Reset();
 	AimCrosshairAbilitySystem.Reset();
 }
 
@@ -692,11 +720,26 @@ void ANPMainPlayerController::HandleRelicAimingTagChanged(
 	SetAimCrosshairActive(NewCount > 0);
 }
 
+void ANPMainPlayerController::HandlePhotoAimingTagChanged(
+	const FGameplayTag Tag,
+	const int32 NewCount)
+{
+	SetPhotoAimWidgetActive(NewCount > 0);
+}
+
 void ANPMainPlayerController::SetAimCrosshairActive(const bool bActive)
 {
 	if (IsLocalController() && IsValid(AimCrosshairWidget))
 	{
 		AimCrosshairWidget->SetAimActive(bActive);
+	}
+}
+
+void ANPMainPlayerController::SetPhotoAimWidgetActive(const bool bActive)
+{
+	if (IsLocalController() && IsValid(PhotoAimWidget))
+	{
+		PhotoAimWidget->SetAimActive(bActive);
 	}
 }
 
