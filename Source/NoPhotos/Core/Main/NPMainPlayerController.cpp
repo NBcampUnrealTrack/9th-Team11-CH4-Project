@@ -30,6 +30,7 @@
 #include "SubSystem/NPUIManagerSubsystem.h"
 #include "SubSystem/Room/NPRoomGenerateSubsystem.h"
 #include "UI/GameScreen/Event/NPNoticeEventWidget.h"
+#include "UI/GameScreen/NPAimCrosshairWidget.h"
 #include "UI/Loading/NPMainWorldLoadingWidget.h"
 #include "UI/NPUserWidget.h"
 #include "UObject/ConstructorHelpers.h"
@@ -190,6 +191,19 @@ void ANPMainPlayerController::BeginPlay()
 	{
 		BeginLocalMainWorldPreparation();
 
+		if (AimCrosshairWidgetClass)
+		{
+			AimCrosshairWidget = CreateWidget<UNPAimCrosshairWidget>(
+				this,
+				AimCrosshairWidgetClass);
+			if (IsValid(AimCrosshairWidget))
+			{
+				AimCrosshairWidget->AddToPlayerScreen(50);
+				AimCrosshairWidget->SetAimActive(false);
+			}
+		}
+		BindAimCrosshairToAbilitySystem();
+
 		if (PhotoFlashWidgetClass)
 		{
 			PhotoFlashWidget = CreateWidget<UNPPhotoFlashWidget>(this, PhotoFlashWidgetClass);
@@ -218,6 +232,24 @@ void ANPMainPlayerController::BeginPlay()
 			UE_LOG(LogNoPhotos, Error, TEXT("Could not spawn mobile controls widget."));
 		}
 	}
+}
+
+void ANPMainPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	UnbindAimCrosshairFromAbilitySystem();
+	Super::EndPlay(EndPlayReason);
+}
+
+void ANPMainPlayerController::OnPossess(APawn* InPawn)
+{
+	Super::OnPossess(InPawn);
+	BindAimCrosshairToAbilitySystem();
+}
+
+void ANPMainPlayerController::OnRep_Pawn()
+{
+	Super::OnRep_Pawn();
+	BindAimCrosshairToAbilitySystem();
 }
 
 void ANPMainPlayerController::ClientBeginMainWorldPreparation_Implementation()
@@ -603,6 +635,68 @@ void ANPMainPlayerController::HandleFireStarted()
 		NPGameplayTags::State_Photo_Aiming))
 	{
 		AbilitySystem->ActivatePhotoShotAbility();
+	}
+}
+
+void ANPMainPlayerController::BindAimCrosshairToAbilitySystem()
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	UNPAbilitySystemComponent* AbilitySystem = ResolveAbilitySystem();
+	if (!IsValid(AbilitySystem))
+	{
+		UnbindAimCrosshairFromAbilitySystem();
+		SetAimCrosshairActive(false);
+		return;
+	}
+
+	if (AimCrosshairAbilitySystem.Get() != AbilitySystem)
+	{
+		UnbindAimCrosshairFromAbilitySystem();
+		AimCrosshairAbilitySystem = AbilitySystem;
+		RelicAimingTagChangedHandle = AbilitySystem->RegisterGameplayTagEvent(
+			NPGameplayTags::State_Relic_Aiming,
+			EGameplayTagEventType::NewOrRemoved).AddUObject(
+				this,
+				&ThisClass::HandleRelicAimingTagChanged);
+	}
+
+	SetAimCrosshairActive(AbilitySystem->HasMatchingGameplayTag(
+		NPGameplayTags::State_Relic_Aiming));
+}
+
+void ANPMainPlayerController::UnbindAimCrosshairFromAbilitySystem()
+{
+	if (UNPAbilitySystemComponent* AbilitySystem = AimCrosshairAbilitySystem.Get())
+	{
+		if (RelicAimingTagChangedHandle.IsValid())
+		{
+			AbilitySystem->RegisterGameplayTagEvent(
+				NPGameplayTags::State_Relic_Aiming,
+				EGameplayTagEventType::NewOrRemoved).Remove(
+					RelicAimingTagChangedHandle);
+		}
+	}
+
+	RelicAimingTagChangedHandle.Reset();
+	AimCrosshairAbilitySystem.Reset();
+}
+
+void ANPMainPlayerController::HandleRelicAimingTagChanged(
+	const FGameplayTag Tag,
+	const int32 NewCount)
+{
+	SetAimCrosshairActive(NewCount > 0);
+}
+
+void ANPMainPlayerController::SetAimCrosshairActive(const bool bActive)
+{
+	if (IsLocalController() && IsValid(AimCrosshairWidget))
+	{
+		AimCrosshairWidget->SetAimActive(bActive);
 	}
 }
 

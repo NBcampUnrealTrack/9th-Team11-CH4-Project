@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "GameplayTagContainer.h"
 #include "NPMainPlayerController.generated.h"
 
 class UInputAction;
@@ -12,6 +13,7 @@ class UNPPhotoFlashWidget;
 class UNPPhotoTransferComponent;
 class UNPNoticeEventWidget;
 class UNPMainWorldLoadingWidget;
+class UNPAimCrosshairWidget;
 class UNPUserWidget;
 class UUserWidget;
 class UNPChatComponent;
@@ -98,6 +100,9 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void OnPossess(APawn* InPawn) override;
+	virtual void OnRep_Pawn() override;
 	virtual void SetupInputComponent() override;
 	virtual bool InputKey(const FInputKeyEventArgs& Params) override;
 
@@ -145,6 +150,10 @@ protected:
 		meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
 	float MinimumMainWorldLoadingDisplaySeconds = 1.0f;
 
+	/** State.Relic.Aiming 태그가 활성화된 동안 로컬 화면에 표시할 조준점 위젯입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Aim")
+	TSubclassOf<UNPAimCrosshairWidget> AimCrosshairWidgetClass;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Room")
 	TSoftObjectPtr<UWorld> MainMenuLevel;
 
@@ -168,6 +177,10 @@ private:
 	void HandleAimStarted();
 	void HandleAimReleased();
 	void HandleFireStarted();
+	void BindAimCrosshairToAbilitySystem();
+	void UnbindAimCrosshairFromAbilitySystem();
+	void HandleRelicAimingTagChanged(const FGameplayTag Tag, int32 NewCount);
+	void SetAimCrosshairActive(bool bActive);
 	bool IsHoldingAimableRelic() const;
 	UNPAbilitySystemComponent* ResolveAbilitySystem() const;
 	bool ShouldUseTouchControls() const;
@@ -189,6 +202,12 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNPMainWorldLoadingWidget> MainWorldLoadingWidget;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNPAimCrosshairWidget> AimCrosshairWidget;
+
+	TWeakObjectPtr<UNPAbilitySystemComponent> AimCrosshairAbilitySystem;
+	FDelegateHandle RelicAimingTagChangedHandle;
 
 	bool bReportedMainWorldReady = false;
 	double MainWorldLoadingShownAtRealTime = -1.0;

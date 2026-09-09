@@ -68,7 +68,7 @@ protected:
 	/** 목표 지점에서 이동을 멈춘 뒤 시각 효과를 유지할 시간입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Visual Projectile|Movement",
 		meta=(ClampMin="0.0", Units="s"))
-	float PostArrivalLifeTime = 3.0f;
+	float PostArrivalLifeTime = 1.0f;
 
 private:
 	void HandleReachedDestination();
