@@ -64,6 +64,47 @@ void UNPRoomGenerateSubsystem::Deinitialize()
 	Super::Deinitialize();
 }
 
+float UNPRoomGenerateSubsystem::GetGenerationProgress() const
+{
+	if (bGenerationComplete)
+	{
+		return 1.0f;
+	}
+
+	if (!bGenerationStarted || bGenerationFailed || ExpectedRoomCount <= 0)
+	{
+		return 0.0f;
+	}
+
+	constexpr float AssetPreloadWeight = 0.3f;
+	if (AssetLoadRequestId.IsValid())
+	{
+		const UGameInstance* GameInstance = GetWorld()
+			? GetWorld()->GetGameInstance()
+			: nullptr;
+		const UNPAssetLoadSubsystem* AssetLoader = GameInstance
+			? GameInstance->GetSubsystem<UNPAssetLoadSubsystem>()
+			: nullptr;
+		return AssetLoader
+			? AssetPreloadWeight * AssetLoader->GetSoftPathRequestProgress(AssetLoadRequestId)
+			: 0.0f;
+	}
+
+	int32 VisibleRoomCount = 0;
+	for (const FNPRoomInstanceInfo& RoomInfo : GeneratedRooms)
+	{
+		if (IsValid(RoomInfo.StreamingLevel)
+			&& RoomInfo.StreamingLevel->IsLevelVisible())
+		{
+			++VisibleRoomCount;
+		}
+	}
+
+	const float StreamingProgress = static_cast<float>(VisibleRoomCount)
+		/ static_cast<float>(ExpectedRoomCount);
+	return AssetPreloadWeight + (1.0f - AssetPreloadWeight) * StreamingProgress;
+}
+
 bool UNPRoomGenerateSubsystem::GenerateRooms(
 	const TArray<TSoftObjectPtr<UWorld>>& Rooms,
 	const TArray<FTransform>& SlotTransforms,

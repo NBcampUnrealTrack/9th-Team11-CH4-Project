@@ -305,6 +305,18 @@ bool UNPAssetLoadSubsystem::IsSoftPathRequestActive(const FNPAssetLoadRequestId 
 	return ActiveSoftPathRequests.Contains(RequestId);
 }
 
+float UNPAssetLoadSubsystem::GetSoftPathRequestProgress(
+	const FNPAssetLoadRequestId RequestId) const
+{
+	const FSoftPathRequest* Request = ActiveSoftPathRequests.Find(RequestId);
+	if (!Request || !Request->Handle.IsValid())
+	{
+		return 0.0f;
+	}
+
+	return FMath::Clamp(Request->Handle->GetProgress(), 0.0f, 1.0f);
+}
+
 void UNPAssetLoadSubsystem::AdvanceWorldGeneration()
 {
 	const uint32 PreviousGeneration = WorldGeneration;
