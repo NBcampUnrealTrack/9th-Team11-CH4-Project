@@ -6,6 +6,7 @@
 
 class UEnhancedInputComponent;
 class UInputAction;
+class UNPScanAbility;
 
 UCLASS(ClassGroup=(Abilities), meta=(BlueprintSpawnableComponent))
 class NOPHOTOS_API UNPAbilitySystemComponent : public UAbilitySystemComponent
@@ -28,9 +29,14 @@ public:
 	void TogglePhotoAimAbility();
 	void CancelPhotoAimAbility();
 	void ActivatePhotoShotAbility();
+	void ActivateScanAbility();
 	float GetLavaBurnDuration() const { return LavaBurnDuration; }
 
 protected:
+	/** 기본 지급할 Scan Ability입니다. Blueprint 자식에서 쿨다운을 설정할 수 있습니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Abilities|Scan")
+	TSubclassOf<UNPScanAbility> ScanAbilityClass;
+
 	/** 용암 접촉 시 설정할 월드 Z축 속도입니다. 수평 속도는 유지합니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Lava", meta=(ClampMin="0.0", Units="cm/s"))
 	float LavaJumpVelocity = 1000.0f;
@@ -49,7 +55,7 @@ private:
 	void HandleKnockbackEffect(const FGameplayEffectSpec& EffectSpec);
 
 	TArray<FGameplayAbilitySpecHandle> HeldRelicAbilityHandles;
-	TArray<FGameplayAbilitySpecHandle> DefaultPhotoAbilityHandles;
+	TArray<FGameplayAbilitySpecHandle> DefaultAbilityHandles;
 	bool bGameplayEffectDelegateBound = false;
-	bool bDefaultPhotoAbilitiesGranted = false;
+	bool bDefaultAbilitiesGranted = false;
 };

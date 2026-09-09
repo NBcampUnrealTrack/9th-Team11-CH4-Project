@@ -3,6 +3,7 @@
 #include "Core/GameplayTag/NPGameplayTags.h"
 #include "EnhancedInputComponent.h"
 #include "GameplayAbilitySpec.h"
+#include "Gameplay/Character/Abilities/NPScanAbility.h"
 #include "Gameplay/Character/NPStablePhysicsPawn.h"
 #include "Gameplay/Photo/Abilities/NPPhotoAimAbility.h"
 #include "Gameplay/Photo/Abilities/NPPhotoShotAbility.h"
@@ -14,6 +15,7 @@ UNPAbilitySystemComponent::UNPAbilitySystemComponent()
 {
 	SetIsReplicatedByDefault(true);
 	SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
+	ScanAbilityClass = UNPScanAbility::StaticClass();
 }
 
 void UNPAbilitySystemComponent::InitializeForOwner()
@@ -30,13 +32,18 @@ void UNPAbilitySystemComponent::InitializeForOwner()
 			bGameplayEffectDelegateBound = true;
 		}
 
-		if (OwningActor->HasAuthority() && !bDefaultPhotoAbilitiesGranted)
+		if (OwningActor->HasAuthority() && !bDefaultAbilitiesGranted)
 		{
-			DefaultPhotoAbilityHandles.Add(GiveAbility(
+			DefaultAbilityHandles.Add(GiveAbility(
 				FGameplayAbilitySpec(UNPPhotoAimAbility::StaticClass(), 1)));
-			DefaultPhotoAbilityHandles.Add(GiveAbility(
+			DefaultAbilityHandles.Add(GiveAbility(
 				FGameplayAbilitySpec(UNPPhotoShotAbility::StaticClass(), 1)));
-			bDefaultPhotoAbilitiesGranted = true;
+			if (ScanAbilityClass)
+			{
+				DefaultAbilityHandles.Add(GiveAbility(
+					FGameplayAbilitySpec(ScanAbilityClass, 1)));
+			}
+			bDefaultAbilitiesGranted = true;
 		}
 	}
 }
@@ -68,6 +75,12 @@ void UNPAbilitySystemComponent::SetHeldRelic(AActor* Relic)
 	const bool bWasCarryingRelic = HasMatchingGameplayTag(
 		NPGameplayTags::State_Relic_Carrying);
 	const bool bIsCarryingRelic = IsValid(Relic);
+	const UNPUsableRelicComponent* UsableRelic = bIsCarryingRelic
+		? Relic->FindComponentByClass<UNPUsableRelicComponent>()
+		: nullptr;
+	const bool bWasCarryingUsableRelic = HasMatchingGameplayTag(
+		NPGameplayTags::State_Relic_Carrying_Usable);
+	const bool bIsCarryingUsableRelic = IsValid(UsableRelic);
 	if (bWasCarryingRelic != bIsCarryingRelic)
 	{
 		if (bIsCarryingRelic)
@@ -85,15 +98,25 @@ void UNPAbilitySystemComponent::SetHeldRelic(AActor* Relic)
 				EGameplayTagReplicationState::TagOnly);
 		}
 	}
-
-	ClearHeldRelicAbilities();
-	if (!IsValid(Relic))
+	if (bWasCarryingUsableRelic != bIsCarryingUsableRelic)
 	{
-		return;
+		if (bIsCarryingUsableRelic)
+		{
+			AddLooseGameplayTag(
+				NPGameplayTags::State_Relic_Carrying_Usable,
+				1,
+				EGameplayTagReplicationState::TagOnly);
+		}
+		else
+		{
+			RemoveLooseGameplayTag(
+				NPGameplayTags::State_Relic_Carrying_Usable,
+				1,
+				EGameplayTagReplicationState::TagOnly);
+		}
 	}
 
-	const UNPUsableRelicComponent* UsableRelic =
-		Relic->FindComponentByClass<UNPUsableRelicComponent>();
+	ClearHeldRelicAbilities();
 	if (!UsableRelic)
 	{
 		return;
@@ -168,6 +191,13 @@ void UNPAbilitySystemComponent::ActivatePhotoShotAbility()
 {
 	FGameplayTagContainer AbilityTags;
 	AbilityTags.AddTag(NPGameplayTags::Input_Photo_Shot);
+	TryActivateAbilitiesByTag(AbilityTags);
+}
+
+void UNPAbilitySystemComponent::ActivateScanAbility()
+{
+	FGameplayTagContainer AbilityTags;
+	AbilityTags.AddTag(NPGameplayTags::Input_Scan);
 	TryActivateAbilitiesByTag(AbilityTags);
 }
 

@@ -32,12 +32,15 @@ public class NoPhotos : ModuleRules
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] {
+			"CoreOnline",
 			"OnlineSubsystemUtils",
 			"ImageCore",
 			"GeometryCollectionEngine",
 			"PhysicsCore",
 			"NavigationSystem"
 		});
+
+		AddEngineThirdPartyPrivateStaticDependencies(Target, "Steamworks");
 
 		PublicIncludePaths.Add(ModuleDirectory);
 

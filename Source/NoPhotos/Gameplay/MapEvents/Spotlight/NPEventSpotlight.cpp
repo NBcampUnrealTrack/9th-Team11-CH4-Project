@@ -8,6 +8,7 @@
 #include "Engine/World.h"
 #include "GameFramework/GameStateBase.h"
 #include "Gameplay/Character/NPStablePhysicsPawn.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "NPSpotlightMapEvent.h"
 #include "UObject/ConstructorHelpers.h"
@@ -98,9 +99,19 @@ void ANPEventSpotlight::BeginPlay()
 {
 	Super::BeginPlay();
 	InitialLightRotation = Spotlight->GetRelativeRotation().Quaternion();
+	InitialLightIntensity = Spotlight->Intensity;
 	Spotlight->SetVolumetricScatteringIntensity(0.0f);
+	Spotlight->SetIntensity(0.0f);
 	Spotlight->SetVisibility(false);
 	BeamMesh->SetVisibility(false);
+	if (GetNetMode() != NM_DedicatedServer)
+	{
+		BeamMaterial = BeamMesh->CreateAndSetMaterialInstanceDynamic(0);
+		if (BeamMaterial)
+		{
+			BeamMaterial->SetScalarParameterValue(TEXT("Opacity"), 0.0f);
+		}
+	}
 	InitialBeamScale = BeamMesh->GetRelativeScale3D();
 	BeamMesh->SetRelativeScale3D(InitialBeamScale * BeamScaleMultiplier);
 	UpdateBeamGeometry();
@@ -122,16 +133,34 @@ void ANPEventSpotlight::Tick(const float DeltaSeconds)
 	const bool bActive = IsValid(Event) && Event->IsEventActive()
 		&& Event->GetSpotlightCycle().ActiveSpotlight == this
 		&& Now < Event->GetSpotlightCycle().EndServerWorldTime;
-	UpdateBeam(bActive ? Now - Event->GetSpotlightCycle().StartServerWorldTime : 0.0f, bActive);
+	UpdateBeam(
+		bActive ? Now - Event->GetSpotlightCycle().StartServerWorldTime : 0.0f,
+		bActive ? Event->GetSpotlightCycle().EndServerWorldTime - Now : 0.0f,
+		bActive);
 }
 
-void ANPEventSpotlight::UpdateBeam(const float ElapsedSeconds, const bool bActive)
+void ANPEventSpotlight::UpdateBeam(
+	const float ElapsedSeconds, const float RemainingSeconds, const bool bActive)
 {
 	Spotlight->SetVisibility(bActive);
 	BeamMesh->SetVisibility(bActive && GetNetMode() != NM_DedicatedServer);
 	if (!bActive)
 	{
+		Spotlight->SetIntensity(0.0f);
+		if (BeamMaterial)
+		{
+			BeamMaterial->SetScalarParameterValue(TEXT("Opacity"), 0.0f);
+		}
 		return;
+	}
+
+	const float FadeAlpha = FadeDuration > 0.0f
+		? FMath::SmoothStep(0.0f, 1.0f, FMath::Min(ElapsedSeconds, RemainingSeconds) / FadeDuration)
+		: 1.0f;
+	Spotlight->SetIntensity(InitialLightIntensity * FadeAlpha);
+	if (BeamMaterial)
+	{
+		BeamMaterial->SetScalarParameterValue(TEXT("Opacity"), FadeAlpha);
 	}
 
 	const float Angle = FMath::DegreesToRadians(SweepAngle)

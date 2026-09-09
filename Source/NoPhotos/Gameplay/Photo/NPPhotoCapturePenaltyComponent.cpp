@@ -200,6 +200,7 @@ void UNPPhotoCapturePenaltyComponent::ApplyStunStateLocally(const bool bStunned)
 	if (bStunned)
 	{
 		Pawn->StopMovementInput();
+		Pawn->CancelGrabForPhotoStun();
 	}
 
 	if (bStunned)

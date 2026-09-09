@@ -199,7 +199,7 @@ void ANPSpotlightMapEvent::Tick(const float DeltaSeconds)
 		UpdatePriceBonuses(FMath::Min(Now, SpotlightCycle.EndServerWorldTime));
 		if (Now >= SpotlightCycle.EndServerWorldTime)
 		{
-			SpotlightCycle.ActiveSpotlight->UpdateBeam(0.0f, false);
+			SpotlightCycle.ActiveSpotlight->UpdateBeam(0.0f, 0.0f, false);
 			SpotlightCycle.ActiveSpotlight = nullptr;
 			SpotlightCycle.StartServerWorldTime = Now;
 			SpotlightCycle.EndServerWorldTime = Now + FMath::Max(0.1f, DarkDuration);
@@ -220,7 +220,10 @@ void ANPSpotlightMapEvent::UpdatePriceBonuses(const float Now)
 	{
 		return;
 	}
-	Light->UpdateBeam(Now - SpotlightCycle.StartServerWorldTime, true);
+	Light->UpdateBeam(
+		Now - SpotlightCycle.StartServerWorldTime,
+		SpotlightCycle.EndServerWorldTime - Now,
+		true);
 	const float Interval = FMath::Max(0.1f, BonusInterval);
 	TSet<TWeakObjectPtr<ANPStablePhysicsPawn>> EligiblePawns;
 	for (FConstPlayerControllerIterator Iterator = GetWorld()->GetPlayerControllerIterator(); Iterator; ++Iterator)

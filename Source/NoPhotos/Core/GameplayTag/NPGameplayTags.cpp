@@ -9,14 +9,19 @@ namespace NPGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Input_Relic_Fire, "Input.Relic.Fire");
 	UE_DEFINE_GAMEPLAY_TAG(Input_Photo_Aim, "Input.Photo.Aim");
 	UE_DEFINE_GAMEPLAY_TAG(Input_Photo_Shot, "Input.Photo.Shot");
+	UE_DEFINE_GAMEPLAY_TAG(Input_Scan, "Input.Scan");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Relic, "Ability.Relic");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Relic_Aim, "Ability.Relic.Aim");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Relic_Fire, "Ability.Relic.Fire");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Photo, "Ability.Photo");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Photo_Aim, "Ability.Photo.Aim");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Photo_Shot, "Ability.Photo.Shot");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Scan, "Ability.Scan");
 	UE_DEFINE_GAMEPLAY_TAG(State_Relic_Aiming, "State.Relic.Aiming");
 	UE_DEFINE_GAMEPLAY_TAG(State_Relic_Carrying, "State.Relic.Carrying");
+	UE_DEFINE_GAMEPLAY_TAG(
+		State_Relic_Carrying_Usable,
+		"State.Relic.Carrying.Usable");
 	UE_DEFINE_GAMEPLAY_TAG(State_Photo_Aiming, "State.Photo.Aiming");
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Photo_Shot, "Cooldown.Photo.Shot");
 	UE_DEFINE_GAMEPLAY_TAG(
@@ -36,6 +41,9 @@ namespace NPGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(
 		GameplayCue_Status_ControlReversal,
 		"GameplayCue.Status.ControlReversal");
+	UE_DEFINE_GAMEPLAY_TAG(
+		GameplayCue_Status_Leader,
+		"GameplayCue.Status.Leader");
 	UE_DEFINE_GAMEPLAY_TAG(
 		GameplayCue_Status_LavaBurning,
 		"GameplayCue.Status.LavaBurning");

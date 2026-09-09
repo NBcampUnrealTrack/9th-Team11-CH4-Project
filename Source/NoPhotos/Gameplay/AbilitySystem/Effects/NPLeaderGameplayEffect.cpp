@@ -12,4 +12,5 @@ UNPLeaderGameplayEffect::UNPLeaderGameplayEffect()
 	FInheritedTagContainer GrantedTags;
 	GrantedTags.AddTag(NPGameplayTags::State_Ranking_Leader);
 	TargetTags->SetAndApplyTargetTagChanges(GrantedTags);
+	GameplayCues.Emplace(NPGameplayTags::GameplayCue_Status_Leader, 0.0f, 1.0f);
 }

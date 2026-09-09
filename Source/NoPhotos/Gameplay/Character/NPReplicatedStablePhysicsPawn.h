@@ -9,20 +9,17 @@
 #include "NPReplicatedStablePhysicsPawn.generated.h"
 
 class UPrimitiveComponent;
-class UChildActorComponent;
 class UAbilitySystemComponent;
 class AController;
 class FLifetimeProperty;
 class UNPAbilitySystemComponent;
 class UNPInvisibilityComponent;
 class UNPControlReversalComponent;
-class UNPStatusVisualComponent;
 class UNPVisionRestrictionComponent;
 class UNPStablePhysicsNetworkPredictionComponent;
 class UNPPhotoCapturePenaltyComponent;
 class UNPScoreFeedbackWidgetComponent;
 class ANPBaseRelic;
-class ANPStatusVisualManager;
 
 USTRUCT()
 struct FReplicatedStableGrabState
@@ -62,11 +59,13 @@ public:
 	UFUNCTION(BlueprintPure, Category="Photo|Penalty")
 	bool IsPhotoStunned() const;
 
+	/** 스턴 진입 시 누르고 있던 Grab 요청과 로컬 예측 상태를 즉시 해제합니다. */
+	void CancelGrabForPhotoStun();
+
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 	void SetRankingLeader(bool bLeader);
-	ANPStatusVisualManager* GetStatusVisualManager() const;
 	virtual void AddExternalVelocityChange(
 		const FVector& VelocityChange) override;
 	virtual void SetExternalVerticalVelocity(float VerticalVelocity) override;
@@ -118,14 +117,6 @@ protected:
 
 private:
 	FActiveGameplayEffectHandle LeaderEffectHandle;
-
-	/** Child Actor Class에 NPLeaderCrown 기반 Blueprint를 지정합니다. */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Ranking", meta=(AllowPrivateAccess="true"))
-	TObjectPtr<UChildActorComponent> LeaderCrown;
-
-	/** 세 상태 연출의 등장과 퇴장 커브를 통합 관리합니다. */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Status Visual", meta=(AllowPrivateAccess="true"))
-	TObjectPtr<UChildActorComponent> StatusVisualManagerActor;
 
 	static constexpr float ViewRotationSendInterval = 0.05f;
 
@@ -232,9 +223,6 @@ private:
 	/** GAS 상태에 따라 원본 이동 입력의 전후/좌우 성분을 반전합니다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Control Reversal", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UNPControlReversalComponent> ControlReversal;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Status Visual", meta=(AllowPrivateAccess="true"))
-	TObjectPtr<UNPStatusVisualComponent> StatusVisual;
 
 	UPROPERTY(EditDefaultsOnly, Category="Input")
 	TObjectPtr<UInputAction> RelicUseAction;

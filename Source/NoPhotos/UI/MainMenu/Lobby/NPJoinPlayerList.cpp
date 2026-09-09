@@ -114,7 +114,7 @@ void UNPJoinPlayerList::RefreshPlayerList()
 
 		if (UNPJoinPlayer* ExistingPlayerWidget = PlayerWidgets.FindRef(PlayerState))
 		{
-			ExistingPlayerWidget->SetupResult(PlayerName);
+			ExistingPlayerWidget->SetupResult(PlayerName, PlayerState);
 			continue;
 		}
 
@@ -124,7 +124,7 @@ void UNPJoinPlayerList::RefreshPlayerList()
             continue;
         }
 
-        JoinPlayerWidget->SetupResult(PlayerName);
+		JoinPlayerWidget->SetupResult(PlayerName, PlayerState);
         JoinPlayerWidget->SetRenderTransformAngle(FMath::FRandRange(-4.0f, 4.0f));
 
         UHorizontalBoxSlot* PlayerSlot = PlayerList->AddChildToHorizontalBox(JoinPlayerWidget);

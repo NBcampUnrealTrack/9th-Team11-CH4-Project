@@ -5,6 +5,7 @@
 #include "NPEventSpotlight.generated.h"
 
 class ANPStablePhysicsPawn;
+class UMaterialInstanceDynamic;
 class USpotLightComponent;
 class UStaticMeshComponent;
 
@@ -22,7 +23,7 @@ public:
 
 	/** 포인트 스케일은 조명 대신 빛기둥 메시의 기본 크기에만 곱합니다. */
 	void SetBeamScaleMultiplier(const FVector& Multiplier);
-	void UpdateBeam(float ElapsedSeconds, bool bActive);
+	void UpdateBeam(float ElapsedSeconds, float RemainingSeconds, bool bActive);
 	bool IsIlluminatingPawn(const ANPStablePhysicsPawn* Pawn, const AActor* HeldRelic) const;
 
 protected:
@@ -41,6 +42,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Spotlight", meta = (ClampMin = "0.1", Units = "s"))
 	float SweepPeriod = 8.0f;
 
+	/** 조명과 빛기둥이 켜지고 꺼질 때 밝기가 전환되는 시간입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Spotlight", meta = (ClampMin = "0.0", Units = "s"))
+	float FadeDuration = 0.5f;
+
 private:
 	void UpdateBeamGeometry();
 
@@ -50,6 +55,10 @@ private:
 	UPROPERTY(ReplicatedUsing = OnRep_BeamScaleMultiplier)
 	FVector BeamScaleMultiplier = FVector::OneVector;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> BeamMaterial;
+
 	FVector InitialBeamScale = FVector::OneVector;
 	FQuat InitialLightRotation = FQuat::Identity;
+	float InitialLightIntensity = 0.0f;
 };

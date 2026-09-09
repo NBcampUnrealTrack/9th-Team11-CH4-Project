@@ -5,8 +5,11 @@
 #include "NPJoinPlayer.generated.h"
 
 class UTextBlock;
+class UImage;
+class UTexture2D;
 class UWidgetAnimation;
 class UNPJoinPlayer;
+class APlayerState;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FNPOnJoinPlayerLeaveAnimationFinished, UNPJoinPlayer*);
 
@@ -16,7 +19,7 @@ class NOPHOTOS_API UNPJoinPlayer : public UNPUserWidget
 	GENERATED_BODY()
 	
 public:
-	void SetupResult(const FString& InPlayerName);
+	void SetupResult(const FString& InPlayerName, APlayerState* InPlayerState);
 	void PlayJoinAnimation(float Delay);
 	void PlayLeaveAnimation();
 	bool IsLeaving() const { return bIsLeaving; }
@@ -29,12 +32,18 @@ protected:
 
 private:
 	void StartJoinAnimation();
+	void TryLoadSteamAvatar();
+	void ScheduleAvatarLoadRetry();
 
 	UFUNCTION()
 	void HandleLeaveAnimationFinished();
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> PlayerNameText;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UImage> PlayerAvatarImage;
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> PlayerAvatarTexture;
 
 	UPROPERTY(Transient, meta = (BindWidgetAnim))
 	TObjectPtr<UWidgetAnimation> JoinPoster;
@@ -42,5 +51,8 @@ private:
 	TObjectPtr<UWidgetAnimation> LeavePoster;
 
 	FTimerHandle JoinAnimationTimer;
+	FTimerHandle AvatarLoadTimer;
+	TWeakObjectPtr<APlayerState> TargetPlayerState;
+	int32 AvatarLoadAttemptCount = 0;
 	bool bIsLeaving = false;
 };
