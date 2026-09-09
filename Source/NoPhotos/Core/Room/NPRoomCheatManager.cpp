@@ -2,6 +2,7 @@
 
 #include "NPRoomLog.h"
 #include "Core/Component/NPRoomPlayerComponent.h"
+#include "Core/Main/NPMainPlayerController.h"
 #include "GameFramework/PlayerController.h"
 
 void UNPRoomCheatManager::Create()
@@ -101,6 +102,42 @@ void UNPRoomCheatManager::Out(const FString& Command)
 	}
 
 	NPRoomLog::Warning(this, TEXT("out game 실패: RoomComponent를 찾지 못했습니다."));
+}
+
+void UNPRoomCheatManager::Add(const FString& Command)
+{
+	if (!Command.Equals(TEXT("point"), ESearchCase::IgnoreCase))
+	{
+		NPRoomLog::Warning(this, TEXT("add 실패: add point 형식으로 입력해 주세요."));
+		return;
+	}
+
+	if (ANPMainPlayerController* PlayerController =
+		Cast<ANPMainPlayerController>(GetPlayerController()))
+	{
+		PlayerController->ServerAddCheatPoint();
+		return;
+	}
+
+	NPRoomLog::Warning(this, TEXT("add point 실패: 메인 게임 PlayerController가 아닙니다."));
+}
+
+void UNPRoomCheatManager::Remove(const FString& Command)
+{
+	if (!Command.Equals(TEXT("point"), ESearchCase::IgnoreCase))
+	{
+		NPRoomLog::Warning(this, TEXT("remove 실패: remove point 형식으로 입력해 주세요."));
+		return;
+	}
+
+	if (ANPMainPlayerController* PlayerController =
+		Cast<ANPMainPlayerController>(GetPlayerController()))
+	{
+		PlayerController->ServerRemoveCheatPoint();
+		return;
+	}
+
+	NPRoomLog::Warning(this, TEXT("remove point 실패: 메인 게임 PlayerController가 아닙니다."));
 }
 
 UNPRoomPlayerComponent* UNPRoomCheatManager::GetRoomComponent() const

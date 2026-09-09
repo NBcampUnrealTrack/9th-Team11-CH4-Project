@@ -3,6 +3,7 @@
 #include "AbilitySystemComponent.h"
 #include "Components/ChildActorComponent.h"
 #include "Core/GameplayTag/NPGameplayTags.h"
+#include "Gameplay/Character/NPStatusVisualManager.h"
 
 UNPStatusVisualComponent::UNPStatusVisualComponent()
 {
@@ -10,10 +11,15 @@ UNPStatusVisualComponent::UNPStatusVisualComponent()
 }
 
 void UNPStatusVisualComponent::Initialize(UAbilitySystemComponent* InAbilitySystem,
-	UChildActorComponent* InLeaderCrown)
+	UChildActorComponent* InLeaderCrown, ANPStatusVisualManager* InVisualManager)
 {
 	AbilitySystem = InAbilitySystem;
 	LeaderCrown = InLeaderCrown;
+	VisualManager = InVisualManager;
+	if (IsValid(VisualManager))
+	{
+		VisualManager->InitializeLeaderCrown(LeaderCrown);
+	}
 	if (!IsValid(AbilitySystem))
 	{
 		return;
@@ -32,6 +38,11 @@ void UNPStatusVisualComponent::HandleLeaderTagChanged(FGameplayTag Tag, int32 Ne
 		return;
 	}
 	const bool bShowCrown = NewCount > 0 && GetNetMode() != NM_DedicatedServer;
+	if (IsValid(VisualManager))
+	{
+		VisualManager->RequestVisual(ENPStatusVisualType::Leader, bShowCrown);
+		return;
+	}
 	LeaderCrown->SetVisibility(bShowCrown, true);
 	LeaderCrown->SetHiddenInGame(!bShowCrown, true);
 	if (AActor* Crown = LeaderCrown->GetChildActor())
@@ -48,6 +59,15 @@ void UNPStatusVisualComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		AbilitySystem->RegisterGameplayTagEvent(NPGameplayTags::State_Ranking_Leader,
 			EGameplayTagEventType::NewOrRemoved).Remove(LeaderTagHandle);
 	}
-	HandleLeaderTagChanged(NPGameplayTags::State_Ranking_Leader, 0);
+	if (IsValid(LeaderCrown))
+	{
+		LeaderCrown->SetVisibility(false, true);
+		LeaderCrown->SetHiddenInGame(true, true);
+		if (AActor* Crown = LeaderCrown->GetChildActor())
+		{
+			Crown->SetActorHiddenInGame(true);
+			Crown->SetActorTickEnabled(false);
+		}
+	}
 	Super::EndPlay(EndPlayReason);
 }

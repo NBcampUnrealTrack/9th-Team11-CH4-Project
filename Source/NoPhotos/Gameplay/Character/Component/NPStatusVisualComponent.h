@@ -7,6 +7,7 @@
 
 class UAbilitySystemComponent;
 class UChildActorComponent;
+class ANPStatusVisualManager;
 
 /** GAS 리더 상태에 따른 왕관 표시를 관리합니다. */
 UCLASS(ClassGroup=(Effects))
@@ -16,7 +17,8 @@ class NOPHOTOS_API UNPStatusVisualComponent : public UActorComponent
 
 public:
 	UNPStatusVisualComponent();
-	void Initialize(UAbilitySystemComponent* InAbilitySystem, UChildActorComponent* InLeaderCrown);
+	void Initialize(UAbilitySystemComponent* InAbilitySystem, UChildActorComponent* InLeaderCrown,
+		ANPStatusVisualManager* InVisualManager);
 
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -29,6 +31,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UChildActorComponent> LeaderCrown;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ANPStatusVisualManager> VisualManager;
 
 	FDelegateHandle LeaderTagHandle;
 };

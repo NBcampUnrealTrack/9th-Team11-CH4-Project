@@ -22,6 +22,7 @@ class UNPStablePhysicsNetworkPredictionComponent;
 class UNPPhotoCapturePenaltyComponent;
 class UNPScoreFeedbackWidgetComponent;
 class ANPBaseRelic;
+class ANPStatusVisualManager;
 
 USTRUCT()
 struct FReplicatedStableGrabState
@@ -65,6 +66,7 @@ public:
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 	void SetRankingLeader(bool bLeader);
+	ANPStatusVisualManager* GetStatusVisualManager() const;
 	virtual void AddExternalVelocityChange(
 		const FVector& VelocityChange) override;
 	virtual void SetExternalVerticalVelocity(float VerticalVelocity) override;
@@ -120,6 +122,10 @@ private:
 	/** Child Actor Class에 NPLeaderCrown 기반 Blueprint를 지정합니다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Ranking", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UChildActorComponent> LeaderCrown;
+
+	/** 세 상태 연출의 등장과 퇴장 커브를 통합 관리합니다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Status Visual", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UChildActorComponent> StatusVisualManagerActor;
 
 	static constexpr float ViewRotationSendInterval = 0.05f;
 

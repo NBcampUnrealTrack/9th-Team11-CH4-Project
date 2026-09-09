@@ -19,6 +19,8 @@ public:
 	UFUNCTION(BlueprintSetter, Category="Crown")
 	void SetVisibleToOwner(bool bNewVisibleToOwner);
 
+	void SetVisualScaleMultiplier(float ScaleMultiplier);
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -31,4 +33,8 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Crown", meta=(Units="deg/s"))
 	float RotationSpeed = 30.0f;
+
+private:
+	FVector BaseCrownScale = FVector::OneVector;
+	bool bBaseCrownScaleInitialized = false;
 };
