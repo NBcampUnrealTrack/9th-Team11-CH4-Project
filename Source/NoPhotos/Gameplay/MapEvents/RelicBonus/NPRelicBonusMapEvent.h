@@ -7,12 +7,8 @@
 
 class ANPRelicReturnZone;
 class ANPRelicBonusCountdownActor;
-class ANPRopeAnchorActor;
-class ANPRopeSegmentActor;
-class UCurveFloat;
 class UNiagaraComponent;
 class UNiagaraSystem;
-class USceneComponent;
 
 /**
  * 유물 보너스 이벤트의 생성물과 수명을 관리합니다.
@@ -32,11 +28,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Relic Bonus Event")
 	int32 GetSpawnedHelicopterCount() const { return SpawnedHelicopters.Num(); }
 
-	UFUNCTION(BlueprintPure, Category = "Relic Bonus Event")
-	int32 GetSpawnedRopeCount() const { return SpawnedRopes.Num(); }
-
 protected:
-	virtual void Tick(float DeltaSeconds) override;
 	virtual void ApplyEventState_Implementation(bool bNewActive) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
@@ -102,44 +94,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Helicopter|Cycle", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
 	float MaximumCycleRespawnDelay = 5.0f;
 
-	/** 이벤트 연출에 사용할 RopeSegment BP 클래스입니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Rope")
-	TSubclassOf<ANPRopeSegmentActor> RopeClass;
-
-	/** 로프 끝을 아래로 이동시키는 가벼운 복제 Actor 클래스입니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Rope")
-	TSubclassOf<ANPRopeAnchorActor> RopeTipClass;
-
-	/** 헬리콥터 BP에서 로프가 시작될 SceneComponent에 지정할 Component Tag입니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Rope")
-	FName RopeStartComponentTag = TEXT("RopeStart");
-
-	/** 반환 존 BP에서 로프가 도착할 SceneComponent에 지정할 Component Tag입니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Rope")
-	FName RopeEndComponentTag = TEXT("RopeEnd");
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Rope", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
-	float RopeLoweringDuration = 3.0f;
-
-	/** 지정하지 않으면 Ease In/Out 보간을 사용합니다. X=진행도(0~1), Y=이동 비율을 권장합니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Rope")
-	TObjectPtr<UCurveFloat> RopeLoweringCurve;
-
-	/** RopeEnd 컴포넌트가 없을 때 지면 기준 도착 높이입니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Rope", meta = (Units = "cm"))
-	float RopeEndHeightOffset = 0.0f;
-
-	/** 이벤트 종료 후 운반체가 사라지기까지 상승하는 시간입니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Departure", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
-	float DepartureDuration = 4.0f;
-
-	/** 이벤트 종료 위치에서 추가로 상승할 Z 높이입니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Departure", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
-	float DepartureHeight = 2500.0f;
-
-	/** 지정하지 않으면 Ease In 보간을 사용합니다. X=진행도(0~1), Y=이동 비율을 권장합니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Departure")
-	TObjectPtr<UCurveFloat> DepartureCurve;
+	/** 퇴장 신호를 보낸 뒤 헬리콥터를 실제로 제거하기까지 기다리는 시간입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Helicopter|Departure", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
+	float HelicopterDepartureDuration = 2.0f;
 
 	/** 운반체가 도착했을 때 지면에 생성할 지속형 바람 Niagara System입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Ground Wind")
@@ -150,22 +107,6 @@ protected:
 	float GroundWindHeightOffset = 10.0f;
 
 private:
-	struct FActiveRopeDeployment
-	{
-		TWeakObjectPtr<ANPRopeAnchorActor> RopeTip;
-		FVector StartLocation = FVector::ZeroVector;
-		FVector TargetLocation = FVector::ZeroVector;
-		float ElapsedTime = 0.0f;
-	};
-
-	struct FActiveDeparture
-	{
-		TWeakObjectPtr<AActor> Carrier;
-		FVector StartLocation = FVector::ZeroVector;
-		FVector TargetLocation = FVector::ZeroVector;
-		float ElapsedTime = 0.0f;
-	};
-
 	void SpawnReturnZones();
 	void StartNextHelicopterCycle();
 	void ScheduleHelicopterDeparture();
@@ -174,10 +115,6 @@ private:
 	ANPRelicReturnZone* SpawnReturnZoneAt(const FTransform& GroundTransform);
 	ANPRelicBonusCountdownActor* SpawnCountdownAt(const FTransform& GroundTransform);
 	AActor* SpawnHelicopterAt(const FTransform& GroundTransform);
-	bool BeginRopeDeployment(
-		AActor* Helicopter,
-		ANPRelicReturnZone* ReturnZone,
-		const FTransform& GroundTransform);
 	void BeginDeparture(bool bShouldRespawn);
 
 	UFUNCTION(NetMulticast, Reliable)
@@ -186,8 +123,13 @@ private:
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastFadeGroundWind();
 
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastBeginHelicopterDeparture(
+		const TArray<AActor*>& Helicopters,
+		float DepartureDuration);
+
 	void StopGroundWindImmediately();
-	USceneComponent* FindTaggedSceneComponent(AActor* Actor, FName ComponentTag) const;
+	void DestroyReturnZonesAndCountdowns();
 	void DestroySpawnedActors();
 	FVector GetReturnZoneHalfExtent() const;
 	bool IsFarEnoughFromSpawnedZones(
@@ -203,20 +145,12 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AActor>> SpawnedHelicopters;
 
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<ANPRopeSegmentActor>> SpawnedRopes;
-
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<ANPRopeAnchorActor>> SpawnedRopeTips;
-
 	/** 각 머신에 로컬로 생성된 Niagara 컴포넌트입니다. */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UNiagaraComponent>> GroundWindComponents;
 
-	TArray<FActiveRopeDeployment> ActiveRopeDeployments;
-	TArray<FActiveDeparture> ActiveDepartures;
 	FTimerHandle HelicopterStayTimer;
+	FTimerHandle HelicopterDepartureTimer;
 	FTimerHandle NextCycleTimer;
-	bool bDepartureInProgress = false;
 	bool bRespawnAfterDeparture = false;
 };

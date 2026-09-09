@@ -24,13 +24,6 @@ ANPSantaGiftActor::ANPSantaGiftActor()
 	CollisionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionBox"));
 	SetRootComponent(CollisionBox);
 	CollisionBox->InitBoxExtent(FVector(35.0));
-	CollisionBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	// 선물끼리/유물/플레이어와 충돌하지 않고 월드 바닥과 건물을 검사합니다.
-	CollisionBox->SetCollisionObjectType(ECC_PhysicsBody);
-	CollisionBox->SetCollisionResponseToAllChannels(ECR_Ignore);
-	CollisionBox->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
-	CollisionBox->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
-	CollisionBox->SetGenerateOverlapEvents(false);
 	CollisionBox->SetCanEverAffectNavigation(false);
 	GrabbableComponent = CreateDefaultSubobject<UGrabbableComponent>(TEXT("GrabbableComponent"));
 	GrabbableComponent->SetGrabEnabled(false);
@@ -44,12 +37,9 @@ ANPSantaGiftActor::ANPSantaGiftActor()
 	LidPivot->SetupAttachment(VisualRoot);
 	LidMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("LidMesh"));
 	LidMesh->SetupAttachment(LidPivot);
-	for (UStaticMeshComponent* Mesh : {ClosedBoxMesh.Get(), OpenBoxMesh.Get(), LidMesh.Get()})
-	{
-		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		Mesh->SetGenerateOverlapEvents(false);
-		Mesh->SetCanEverAffectNavigation(false);
-	}
+	ClosedBoxMesh->SetCanEverAffectNavigation(false);
+	OpenBoxMesh->SetCanEverAffectNavigation(false);
+	LidMesh->SetCanEverAffectNavigation(false);
 
 	FallingMovement = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("FallingMovement"));
 	FallingMovement->SetUpdatedComponent(CollisionBox);
@@ -103,7 +93,6 @@ void ANPSantaGiftActor::BeginPlay()
 		// 클라이언트에는 서버 위치 복제만 적용합니다. 중력을 이중 계산하지 않습니다.
 		FallingMovement->Deactivate();
 		FallingMovement->SetComponentTickEnabled(false);
-		CollisionBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 	ApplyLandingState();
 }
@@ -197,11 +186,6 @@ void ANPSantaGiftActor::ApplyLandingState()
 	{
 		FallingMovement->Deactivate();
 		FallingMovement->SetComponentTickEnabled(false);
-		// 기존 잡기 시스템은 PhysicsBody 검색 및 물리 제약을 사용합니다.
-		// 상자는 시뮬레이션 없이 착지 위치에 고정하고, 개봉 시 잡기/충돌을 해제합니다.
-		CollisionBox->SetSimulatePhysics(false);
-		CollisionBox->SetCollisionEnabled(LandingState.bOpening
-			? ECollisionEnabled::NoCollision : ECollisionEnabled::QueryAndPhysics);
 		SetActorLocationAndRotation(LandingState.Location, LandingState.Rotation);
 	}
 	UpdateOpeningVisuals();

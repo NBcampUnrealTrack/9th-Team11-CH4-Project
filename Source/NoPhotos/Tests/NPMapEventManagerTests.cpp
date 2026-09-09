@@ -43,7 +43,7 @@ bool FNPMapEventSchedulingTest::RunTest(const FString& Parameters)
 		FindFProperty<FNameProperty>(Definition->GetClass(), TEXT("EventId"))->SetPropertyValue_InContainer(Definition, Id);
 		FindFProperty<FFloatProperty>(Definition->GetClass(), TEXT("Duration"))->SetPropertyValue_InContainer(Definition, Duration);
 		FindFProperty<FFloatProperty>(Definition->GetClass(), TEXT("Delay"))->SetPropertyValue_InContainer(Definition, Delay);
-		Event->InitializeEvent(Definition, 1.0f);
+		Event->InitializeEvent(Definition);
 		if (Manager) { Manager->RegisterManagedEvent(Event); }
 		return static_cast<ANPMapEvent*>(Event);
 	};

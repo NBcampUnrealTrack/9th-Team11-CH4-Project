@@ -330,7 +330,6 @@ ANPMapEvent* UNPMapEventManagerComponent::SelectRandomEvent(
 	const ENPMapEventType* EventType, const bool bRequireReady, const bool bExcludePlanned) const
 {
 	TArray<ANPMapEvent*> Candidates;
-	float TotalWeight = 0.0f;
 	for (ANPMapEvent* EventInstance : EventInstances)
 	{
 		if (!IsValid(EventInstance))
@@ -349,39 +348,24 @@ ANPMapEvent* UNPMapEventManagerComponent::SelectRandomEvent(
 		if (IsValid(EventInstance)
 			&& (!EventType || EventInstance->CanRunAtEventTime(*EventType))
 			&& !EventInstance->RequiresStandaloneExecution()
-			&& EventInstance->GetSelectionWeight() > 0.0f
 			&& (!bRequireReady || EventInstance->CanStartEvent()))
 		{
 			Candidates.Add(EventInstance);
-			TotalWeight += EventInstance->GetSelectionWeight();
 		}
 	}
 
-	if (Candidates.IsEmpty() || TotalWeight <= 0.0f)
+	if (Candidates.IsEmpty())
 	{
 		return nullptr;
 	}
 
-	float Selection = FMath::FRandRange(0.0f, TotalWeight);
-	for (ANPMapEvent* Candidate : Candidates)
-	{
-		Selection -= Candidate->GetSelectionWeight();
-		if (Selection <= 0.0f)
-		{
-			UE_LOG(LogNPMapEventManager, Display,
-				TEXT("[MapEventTrace] 랜덤 이벤트 선택: Type=%d Event=%s Class=%s EventId=%s Weight=%.2f"),
-				EventType ? static_cast<int32>(*EventType) : -1, *GetNameSafe(Candidate),
-				*GetNameSafe(Candidate->GetClass()), *Candidate->GetEventId().ToString(),
-				Candidate->GetSelectionWeight());
-			return Candidate;
-		}
-	}
-
+	ANPMapEvent* SelectedEvent = Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
 	UE_LOG(LogNPMapEventManager, Display,
-		TEXT("[MapEventTrace] 랜덤 이벤트 최종 후보 선택: Type=%d Event=%s Class=%s EventId=%s"),
-		EventType ? static_cast<int32>(*EventType) : -1, *GetNameSafe(Candidates.Last()),
-		*GetNameSafe(Candidates.Last()->GetClass()), *Candidates.Last()->GetEventId().ToString());
-	return Candidates.Last();
+		TEXT("[MapEventTrace] 균등 랜덤 이벤트 선택: Type=%d Event=%s Class=%s EventId=%s CandidateCount=%d Probability=%.4f"),
+		EventType ? static_cast<int32>(*EventType) : -1, *GetNameSafe(SelectedEvent),
+		*GetNameSafe(SelectedEvent->GetClass()), *SelectedEvent->GetEventId().ToString(),
+		Candidates.Num(), 1.0 / static_cast<double>(Candidates.Num()));
+	return SelectedEvent;
 }
 
 void UNPMapEventManagerComponent::RegisterLocationCollector(
@@ -660,6 +644,14 @@ void UNPMapEventManagerComponent::CreateEventInstances()
 	const FTransform SpawnTransform = Owner->GetActorTransform();
 	for (const FNPMapEventCatalogEntry& Entry : EventCatalog->GetEventEntries())
 	{
+		if (!Entry.bEnabled)
+		{
+			UE_LOG(LogNPMapEventManager, Display,
+				TEXT("[MapEventTrace] 비활성 카탈로그 이벤트 제외: Definition=%s"),
+				*GetNameSafe(Entry.EventDefinition));
+			continue;
+		}
+
 		UNPMapEventDefinition* Definition = Entry.EventDefinition;
 		const TSubclassOf<ANPMapEvent> EventClass = Definition
 			? Definition->GetEventClass()
@@ -677,14 +669,13 @@ void UNPMapEventManagerComponent::CreateEventInstances()
 			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 		if (EventInstance)
 		{
-			EventInstance->InitializeEvent(Definition, Entry.SelectionWeight);
+			EventInstance->InitializeEvent(Definition);
 			RegisterManagedEvent(EventInstance);
 			EventInstance->FinishSpawning(SpawnTransform);
 			UE_LOG(LogNPMapEventManager, Display,
-				TEXT("[MapEventTrace] 카탈로그 이벤트 인스턴스 생성: Definition=%s EventId=%s Actor=%s Class=%s Weight=%.2f (아직 시작되지 않음)"),
+				TEXT("[MapEventTrace] 활성 카탈로그 이벤트 인스턴스 생성: Definition=%s EventId=%s Actor=%s Class=%s (아직 시작되지 않음)"),
 				*GetNameSafe(Definition), *EventInstance->GetEventId().ToString(),
-				*GetNameSafe(EventInstance), *GetNameSafe(EventInstance->GetClass()),
-				Entry.SelectionWeight);
+				*GetNameSafe(EventInstance), *GetNameSafe(EventInstance->GetClass()));
 			if (!Entry.LocationLevelInstance.IsNull())
 			{
 				EventLocationLevels.Add(EventInstance, Entry.LocationLevelInstance);

@@ -28,7 +28,7 @@
    - `Event Id`: 다른 이벤트와 겹치지 않는 ID(예: Spotlight)
    - 이름과 설명, **전체 이벤트의 Duration과 종료 후 Delay**를 설정한다.
    - 10초 점등과 2초 소등을 반복하려면 전체 Duration을 충분히 길게 설정한다. 예를 들어 60초로 설정할 수 있다. Definition 기본값 8초는 첫 점등 도중 이벤트를 종료시킨다.
-5. 현재 사용하는 `NPMapEventCatalog`의 `Event Entries`에 정의와 추첨 가중치를 추가한다.
+5. 현재 사용하는 `NPMapEventCatalog`의 `Event Entries`에 정의를 추가하고 `Enabled`를 켠다.
    - 위치 전용 레벨을 사용하면 `Location Level Instance`와 `Location Level Transform`도 지정한다.
    - 이벤트별 알림 UI를 사용하면 해당 UI 데이터 테이블에도 동일한 Event Id 행을 추가한다.
 

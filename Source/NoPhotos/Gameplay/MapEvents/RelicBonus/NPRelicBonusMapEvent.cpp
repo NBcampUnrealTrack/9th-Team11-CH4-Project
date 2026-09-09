@@ -2,13 +2,10 @@
 
 #include "Gameplay/MapEvents/NPMapEventManager.h"
 #include "NPRelicBonusCountdownActor.h"
+#include "NPRelicBonusHelicopterInterface.h"
 #include "Components/BoxComponent.h"
-#include "Components/SceneComponent.h"
-#include "Curves/CurveFloat.h"
 #include "Engine/World.h"
 #include "Gameplay/Relic/NPRelicReturnZone.h"
-#include "Gameplay/Rope/NPRopeAnchorActor.h"
-#include "Gameplay/Rope/NPRopeSegmentActor.h"
 #include "Kismet/GameplayStatics.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
@@ -19,9 +16,6 @@ DEFINE_LOG_CATEGORY_STATIC(LogNPRelicBonus, Log, All);
 
 ANPRelicBonusMapEvent::ANPRelicBonusMapEvent()
 {
-	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.bStartWithTickEnabled = false;
-
 	EventId = TEXT("RelicBonus");
 	EventDisplayName = NSLOCTEXT("MapEvent", "RelicBonusEventName", "유물 보너스");
 	EventType = ENPMapEventType::TypeA;
@@ -31,101 +25,10 @@ ANPRelicBonusMapEvent::ANPRelicBonusMapEvent()
 	ReturnZoneClass = ANPRelicReturnZone::StaticClass();
 	CountdownActorClass = ANPRelicBonusCountdownActor::StaticClass();
 	ReturnZoneSpawnGroup = FGameplayTag::RequestGameplayTag(FName(TEXT("RelicBonus")), false);
-	RopeClass = ANPRopeSegmentActor::StaticClass();
-	RopeTipClass = ANPRopeAnchorActor::StaticClass();
 
 	// Do not load Niagara's WindForce/ChaosNiagara dependencies during native CDO construction.
 	GroundWindSystem = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(
 		TEXT("/Game/NoPhotos/Blueprints/MapEvent/NS_RelicBonus_GroundWind.NS_RelicBonus_GroundWind")));
-}
-
-void ANPRelicBonusMapEvent::Tick(const float DeltaSeconds)
-{
-	Super::Tick(DeltaSeconds);
-
-	if (!HasAuthority())
-	{
-		SetActorTickEnabled(false);
-		return;
-	}
-
-	for (int32 Index = ActiveRopeDeployments.Num() - 1; Index >= 0; --Index)
-	{
-		FActiveRopeDeployment& Deployment = ActiveRopeDeployments[Index];
-		ANPRopeAnchorActor* RopeTip = Deployment.RopeTip.Get();
-		if (!IsValid(RopeTip))
-		{
-			ActiveRopeDeployments.RemoveAtSwap(Index);
-			continue;
-		}
-
-		Deployment.ElapsedTime += DeltaSeconds;
-		const float NormalizedTime = RopeLoweringDuration <= KINDA_SMALL_NUMBER
-			? 1.0f
-			: FMath::Clamp(Deployment.ElapsedTime / RopeLoweringDuration, 0.0f, 1.0f);
-		const float MoveAlpha = RopeLoweringCurve
-			? FMath::Clamp(RopeLoweringCurve->GetFloatValue(NormalizedTime), 0.0f, 1.0f)
-			: FMath::InterpEaseInOut(0.0f, 1.0f, NormalizedTime, 2.0f);
-		RopeTip->SetActorLocation(
-			FMath::Lerp(Deployment.StartLocation, Deployment.TargetLocation, MoveAlpha),
-			false,
-			nullptr,
-			ETeleportType::TeleportPhysics);
-
-		if (NormalizedTime >= 1.0f)
-		{
-			RopeTip->SetActorLocation(
-				Deployment.TargetLocation,
-				false,
-				nullptr,
-				ETeleportType::TeleportPhysics);
-			ActiveRopeDeployments.RemoveAtSwap(Index);
-		}
-	}
-
-	for (int32 Index = ActiveDepartures.Num() - 1; Index >= 0; --Index)
-	{
-		FActiveDeparture& Departure = ActiveDepartures[Index];
-		AActor* Carrier = Departure.Carrier.Get();
-		if (!IsValid(Carrier))
-		{
-			ActiveDepartures.RemoveAtSwap(Index);
-			continue;
-		}
-
-		Departure.ElapsedTime += DeltaSeconds;
-		const float NormalizedTime = DepartureDuration <= KINDA_SMALL_NUMBER
-			? 1.0f
-			: FMath::Clamp(Departure.ElapsedTime / DepartureDuration, 0.0f, 1.0f);
-		const float MoveAlpha = DepartureCurve
-			? FMath::Clamp(DepartureCurve->GetFloatValue(NormalizedTime), 0.0f, 1.0f)
-			: FMath::InterpEaseIn(0.0f, 1.0f, NormalizedTime, 2.0f);
-		Carrier->SetActorLocation(
-			FMath::Lerp(Departure.StartLocation, Departure.TargetLocation, MoveAlpha),
-			false,
-			nullptr,
-			ETeleportType::TeleportPhysics);
-
-		if (NormalizedTime >= 1.0f)
-		{
-			Carrier->SetActorLocation(
-				Departure.TargetLocation,
-				false,
-				nullptr,
-				ETeleportType::TeleportPhysics);
-			ActiveDepartures.RemoveAtSwap(Index);
-		}
-	}
-
-	if (ActiveRopeDeployments.IsEmpty() && ActiveDepartures.IsEmpty())
-	{
-		if (bDepartureInProgress)
-		{
-			FinishDepartureCycle();
-			return;
-		}
-		SetActorTickEnabled(false);
-	}
 }
 
 void ANPRelicBonusMapEvent::ApplyEventState_Implementation(const bool bNewActive)
@@ -146,8 +49,8 @@ void ANPRelicBonusMapEvent::ApplyEventState_Implementation(const bool bNewActive
 	if (bNewActive)
 	{
 		GetWorldTimerManager().ClearTimer(HelicopterStayTimer);
+		GetWorldTimerManager().ClearTimer(HelicopterDepartureTimer);
 		GetWorldTimerManager().ClearTimer(NextCycleTimer);
-		bDepartureInProgress = false;
 		bRespawnAfterDeparture = false;
 		StartNextHelicopterCycle();
 		return;
@@ -163,6 +66,7 @@ void ANPRelicBonusMapEvent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (HasAuthority())
 	{
 		GetWorldTimerManager().ClearTimer(HelicopterStayTimer);
+		GetWorldTimerManager().ClearTimer(HelicopterDepartureTimer);
 		GetWorldTimerManager().ClearTimer(NextCycleTimer);
 		DestroySpawnedActors();
 	}
@@ -179,7 +83,6 @@ void ANPRelicBonusMapEvent::StartNextHelicopterCycle()
 	}
 
 	GetWorldTimerManager().ClearTimer(NextCycleTimer);
-	bDepartureInProgress = false;
 	bRespawnAfterDeparture = false;
 	SpawnReturnZones();
 	if (!SpawnedHelicopters.IsEmpty())
@@ -248,7 +151,7 @@ void ANPRelicBonusMapEvent::HandleHelicopterStayFinished()
 	}
 
 	UE_LOG(LogNPRelicBonus, Log,
-		TEXT("RelicBonus 헬리콥터 체류 종료, 사이클 퇴장 시작: Remaining=%.2fs"),
+		TEXT("RelicBonus 헬리콥터 체류 종료, 현재 사이클 정리: Remaining=%.2fs"),
 		GetRemainingEventTime());
 	BeginDeparture(true);
 }
@@ -351,16 +254,6 @@ void ANPRelicBonusMapEvent::SpawnReturnZones()
 						ZoneIndex,
 						*GetNameSafe(Helicopter),
 						*Helicopter->GetActorLocation().ToCompactString());
-					if (!BeginRopeDeployment(Helicopter, ReturnZone, GroundTransform))
-					{
-						UE_LOG(
-							LogNPRelicBonus,
-							Warning,
-							TEXT("로프 하강 시작 실패: ZoneIndex=%d RopeClass=%s RopeTipClass=%s"),
-							ZoneIndex,
-							*GetNameSafe(RopeClass),
-							*GetNameSafe(RopeTipClass));
-					}
 					MulticastSpawnGroundWind(GroundTransform.GetLocation());
 				}
 				else
@@ -393,11 +286,10 @@ void ANPRelicBonusMapEvent::SpawnReturnZones()
 	UE_LOG(
 		LogNPRelicBonus,
 		Log,
-		TEXT("RelicBonus 생성 완료: Requested=%d, ReturnZones=%d, Helicopters=%d, Ropes=%d, LocationSearchFailures=%d, DistanceFailures=%d, ReturnZoneSpawnFailures=%d"),
+		TEXT("RelicBonus 생성 완료: Requested=%d, ReturnZones=%d, Helicopters=%d, LocationSearchFailures=%d, DistanceFailures=%d, ReturnZoneSpawnFailures=%d"),
 		TargetCount,
 		SpawnedReturnZones.Num(),
 		SpawnedHelicopters.Num(),
-		SpawnedRopes.Num(),
 		LocationSearchFailureCount,
 		DistanceFailureCount,
 		ReturnZoneSpawnFailureCount);
@@ -526,159 +418,60 @@ AActor* ANPRelicBonusMapEvent::SpawnHelicopterAt(
 	return Helicopter;
 }
 
-bool ANPRelicBonusMapEvent::BeginRopeDeployment(
-	AActor* Helicopter,
-	ANPRelicReturnZone* ReturnZone,
-	const FTransform& GroundTransform)
-{
-	UWorld* World = GetWorld();
-	if (!World || !IsValid(Helicopter) || !IsValid(ReturnZone)
-		|| !RopeClass || !RopeTipClass)
-	{
-		return false;
-	}
-
-	USceneComponent* RopeStartComponent = FindTaggedSceneComponent(
-		Helicopter,
-		RopeStartComponentTag);
-	if (!RopeStartComponent)
-	{
-		RopeStartComponent = Helicopter->GetRootComponent();
-	}
-	if (!RopeStartComponent)
-	{
-		return false;
-	}
-
-	const FVector StartLocation = RopeStartComponent->GetComponentLocation();
-	USceneComponent* RopeEndComponent = FindTaggedSceneComponent(
-		ReturnZone,
-		RopeEndComponentTag);
-	const FVector TargetLocation = RopeEndComponent
-		? RopeEndComponent->GetComponentLocation()
-		: GroundTransform.GetLocation() + FVector::UpVector * RopeEndHeightOffset;
-
-	FActorSpawnParameters SpawnParameters;
-	SpawnParameters.Owner = this;
-	SpawnParameters.SpawnCollisionHandlingOverride =
-		ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-	const FTransform TipTransform(FRotator::ZeroRotator, StartLocation);
-	ANPRopeAnchorActor* RopeTip = World->SpawnActor<ANPRopeAnchorActor>(
-		RopeTipClass,
-		TipTransform,
-		SpawnParameters);
-	if (!RopeTip)
-	{
-		return false;
-	}
-
-	ANPRopeSegmentActor* Rope = World->SpawnActor<ANPRopeSegmentActor>(
-		RopeClass,
-		TipTransform,
-		SpawnParameters);
-	if (!Rope)
-	{
-		RopeTip->Destroy();
-		return false;
-	}
-
-	FNPRopeEndpoint StartEndpoint;
-	StartEndpoint.TargetActor = Helicopter;
-	StartEndpoint.ComponentTag = RopeStartComponentTag;
-	FNPRopeEndpoint EndEndpoint;
-	EndEndpoint.TargetActor = RopeTip;
-	Rope->SetStartEndpoint(StartEndpoint);
-	Rope->SetEndEndpoint(EndEndpoint);
-	Rope->AttachStart();
-	Rope->AttachEnd();
-	Rope->SetRopeVisible(true);
-
-	SpawnedRopes.Add(Rope);
-	SpawnedRopeTips.Add(RopeTip);
-	FActiveRopeDeployment& Deployment = ActiveRopeDeployments.AddDefaulted_GetRef();
-	Deployment.RopeTip = RopeTip;
-	Deployment.StartLocation = StartLocation;
-	Deployment.TargetLocation = TargetLocation;
-	UE_LOG(
-		LogNPRelicBonus,
-		Log,
-		TEXT("로프 하강 시작: Rope=%s Tip=%s Start=%s Target=%s Duration=%.2f초"),
-		*GetNameSafe(Rope),
-		*GetNameSafe(RopeTip),
-		*StartLocation.ToCompactString(),
-		*TargetLocation.ToCompactString(),
-		RopeLoweringDuration);
-	SetActorTickEnabled(true);
-	return true;
-}
-
 void ANPRelicBonusMapEvent::BeginDeparture(const bool bShouldRespawn)
 {
 	GetWorldTimerManager().ClearTimer(HelicopterStayTimer);
-	ActiveRopeDeployments.Reset();
-	ActiveDepartures.Reset();
-	bDepartureInProgress = true;
 	bRespawnAfterDeparture = bShouldRespawn && IsEventActive();
 	MulticastFadeGroundWind();
+	// 판정 존과 카운트다운은 즉시 닫고, 헬리콥터만 퇴장 연출 동안 유지합니다.
+	DestroyReturnZonesAndCountdowns();
 
-	// 아래쪽 끝을 먼저 풀어 운반체에 매달린 로프가 끊어지는 연출을 만듭니다.
-	for (ANPRopeSegmentActor* Rope : SpawnedRopes)
+	// 이벤트가 종료되어 재호출되면 기존 퇴장 연출은 유지하되 다음 사이클만 막습니다.
+	if (GetWorldTimerManager().IsTimerActive(HelicopterDepartureTimer))
 	{
-		if (IsValid(Rope))
-		{
-			Rope->ReleaseEnd();
-		}
+		return;
 	}
 
-	// 이벤트 판정은 종료 시점에 즉시 제거하고 운반체와 로프만 퇴장 연출에 남깁니다.
-	for (ANPRelicReturnZone* ReturnZone : SpawnedReturnZones)
-	{
-		if (IsValid(ReturnZone))
-		{
-			ReturnZone->Destroy();
-		}
-	}
-	SpawnedReturnZones.Reset();
-
-	for (ANPRelicBonusCountdownActor* Countdown : SpawnedCountdownActors)
-	{
-		if (IsValid(Countdown))
-		{
-			Countdown->Destroy();
-		}
-	}
-	SpawnedCountdownActors.Reset();
-
-	const float ClampedDepartureHeight = FMath::Max(0.0f, DepartureHeight);
+	TArray<AActor*> ValidHelicopters;
+	ValidHelicopters.Reserve(SpawnedHelicopters.Num());
 	for (AActor* Helicopter : SpawnedHelicopters)
 	{
-		if (!IsValid(Helicopter))
+		if (IsValid(Helicopter))
 		{
-			continue;
+			ValidHelicopters.Add(Helicopter);
 		}
-
-		FActiveDeparture& Departure = ActiveDepartures.AddDefaulted_GetRef();
-		Departure.Carrier = Helicopter;
-		Departure.StartLocation = Helicopter->GetActorLocation();
-		Departure.TargetLocation = Departure.StartLocation
-			+ FVector::UpVector * ClampedDepartureHeight;
 	}
 
-	if (ActiveDepartures.IsEmpty())
+	if (ValidHelicopters.IsEmpty())
 	{
 		FinishDepartureCycle();
 		return;
 	}
 
-	SetActorTickEnabled(true);
+	const float SafeDepartureDuration = FMath::IsFinite(HelicopterDepartureDuration)
+		? FMath::Max(0.0f, HelicopterDepartureDuration)
+		: 0.0f;
+	MulticastBeginHelicopterDeparture(ValidHelicopters, SafeDepartureDuration);
+
+	if (SafeDepartureDuration <= KINDA_SMALL_NUMBER)
+	{
+		FinishDepartureCycle();
+		return;
+	}
+
+	GetWorldTimerManager().SetTimer(
+		HelicopterDepartureTimer,
+		this,
+		&ThisClass::FinishDepartureCycle,
+		SafeDepartureDuration,
+		false);
 }
 
 void ANPRelicBonusMapEvent::FinishDepartureCycle()
 {
+	GetWorldTimerManager().ClearTimer(HelicopterDepartureTimer);
 	const bool bStartAnotherCycle = bRespawnAfterDeparture
 		&& IsEventActive() && !IsActorBeingDestroyed();
-	bDepartureInProgress = false;
 	bRespawnAfterDeparture = false;
 	DestroySpawnedActors();
 
@@ -704,7 +497,7 @@ void ANPRelicBonusMapEvent::FinishDepartureCycle()
 	}
 
 	UE_LOG(LogNPRelicBonus, Log,
-		TEXT("RelicBonus 헬리콥터 퇴장 완료, 다음 사이클 예약: Delay=%.2fs Range=[%.2f, %.2f] Remaining=%.2fs"),
+		TEXT("RelicBonus 현재 사이클 정리 완료, 다음 사이클 예약: Delay=%.2fs Range=[%.2f, %.2f] Remaining=%.2fs"),
 		RespawnDelay, MinimumDelay, MaximumDelay, RemainingTime);
 	if (RespawnDelay <= KINDA_SMALL_NUMBER)
 	{
@@ -765,6 +558,23 @@ void ANPRelicBonusMapEvent::MulticastFadeGroundWind_Implementation()
 	GroundWindComponents.Reset();
 }
 
+void ANPRelicBonusMapEvent::MulticastBeginHelicopterDeparture_Implementation(
+	const TArray<AActor*>& Helicopters,
+	const float DepartureDuration)
+{
+	for (AActor* Helicopter : Helicopters)
+	{
+		if (IsValid(Helicopter)
+			&& Helicopter->GetClass()->ImplementsInterface(
+				UNPRelicBonusHelicopterInterface::StaticClass()))
+		{
+			INPRelicBonusHelicopterInterface::Execute_BeginRelicBonusDeparture(
+				Helicopter,
+				DepartureDuration);
+		}
+	}
+}
+
 void ANPRelicBonusMapEvent::StopGroundWindImmediately()
 {
 	for (UNiagaraComponent* GroundWind : GroundWindComponents)
@@ -777,54 +587,8 @@ void ANPRelicBonusMapEvent::StopGroundWindImmediately()
 	GroundWindComponents.Reset();
 }
 
-USceneComponent* ANPRelicBonusMapEvent::FindTaggedSceneComponent(
-	AActor* Actor,
-	const FName ComponentTag) const
+void ANPRelicBonusMapEvent::DestroyReturnZonesAndCountdowns()
 {
-	if (!IsValid(Actor))
-	{
-		return nullptr;
-	}
-
-	if (!ComponentTag.IsNone())
-	{
-		const TArray<UActorComponent*> TaggedComponents = Actor->GetComponentsByTag(
-			USceneComponent::StaticClass(),
-			ComponentTag);
-		if (!TaggedComponents.IsEmpty())
-		{
-			return Cast<USceneComponent>(TaggedComponents[0]);
-		}
-	}
-
-	return ComponentTag.IsNone() ? Actor->GetRootComponent() : nullptr;
-}
-
-void ANPRelicBonusMapEvent::DestroySpawnedActors()
-{
-	SetActorTickEnabled(false);
-	ActiveRopeDeployments.Reset();
-	ActiveDepartures.Reset();
-	StopGroundWindImmediately();
-
-	for (ANPRopeSegmentActor* Rope : SpawnedRopes)
-	{
-		if (IsValid(Rope))
-		{
-			Rope->Destroy();
-		}
-	}
-	SpawnedRopes.Reset();
-
-	for (ANPRopeAnchorActor* RopeTip : SpawnedRopeTips)
-	{
-		if (IsValid(RopeTip))
-		{
-			RopeTip->Destroy();
-		}
-	}
-	SpawnedRopeTips.Reset();
-
 	for (ANPRelicReturnZone* ReturnZone : SpawnedReturnZones)
 	{
 		if (IsValid(ReturnZone))
@@ -843,6 +607,12 @@ void ANPRelicBonusMapEvent::DestroySpawnedActors()
 		}
 	}
 	SpawnedCountdownActors.Reset();
+}
+
+void ANPRelicBonusMapEvent::DestroySpawnedActors()
+{
+	StopGroundWindImmediately();
+	DestroyReturnZonesAndCountdowns();
 
 	for (AActor* Helicopter : SpawnedHelicopters)
 	{

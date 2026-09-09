@@ -224,7 +224,7 @@ bool FNPSantaRepeatedFlightTest::RunTest(const FString& Parameters)
 	Gifts.StartProgress = 0.25f;
 	FindFProperty<FArrayProperty>(Definition->GetClass(), TEXT("RelicClasses"))
 		->ContainerPtrToValuePtr<TArray<TSubclassOf<ANPBaseRelic>>>(Definition)->Add(ANPPulleyPictureRelic::StaticClass());
-	Event->InitializeEvent(Definition, 1.0f);
+	Event->InitializeEvent(Definition);
 	const auto Advance = [&TestWorld](int32 Frames)
 	{
 		for (int32 Frame = 0; Frame < Frames; ++Frame)

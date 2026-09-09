@@ -63,33 +63,21 @@ bool ANPLegacyMapEventManager::TriggerRandomEvent()
 	}
 
 	TArray<ANPMapEvent*> Candidates;
-	float TotalWeight = 0.0f;
 
 	for (ANPMapEvent* EventInstance : EventInstances)
 	{
 		if (IsValid(EventInstance) && EventInstance->CanStartEvent())
 		{
 			Candidates.Add(EventInstance);
-			TotalWeight += EventInstance->GetSelectionWeight();
 		}
 	}
 
-	if (Candidates.IsEmpty() || TotalWeight <= 0.0f)
+	if (Candidates.IsEmpty())
 	{
 		return false;
 	}
 
-	float Selection = FMath::FRandRange(0.0f, TotalWeight);
-	for (ANPMapEvent* Candidate : Candidates)
-	{
-		Selection -= Candidate->GetSelectionWeight();
-		if (Selection <= 0.0f)
-		{
-			return Candidate->StartEvent();
-		}
-	}
-
-	return Candidates.Last()->StartEvent();
+	return Candidates[FMath::RandRange(0, Candidates.Num() - 1)]->StartEvent();
 }
 
 void ANPLegacyMapEventManager::CreateEventInstances()

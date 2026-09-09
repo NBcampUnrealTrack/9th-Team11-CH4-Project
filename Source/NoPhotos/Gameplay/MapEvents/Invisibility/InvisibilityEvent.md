@@ -20,7 +20,7 @@
 2. 기존 `NPMapEventDefinition` 형식의 DA를 생성합니다.
 3. `EventClass`를 `NPInvisibilityMapEvent`, `EventId`를 고유한 값(예: `Invisibility`)으로 설정합니다.
 4. `DisplayName`, `Description`, `EventType`, `EventScale`, `Duration`을 DA에서 설정합니다.
-5. 기존 카탈로그의 `EventEntries`에 이 정의와 선택 가중치를 추가합니다. 메인 맵의 영역을 사용하면 위치 레벨은 비워 두고, 이벤트 전용 영역 레벨을 사용하면 `LocationLevelInstance`와 필요시 `LocationLevelTransform`을 지정합니다.
+5. 기존 카탈로그의 `EventEntries`에 이 정의를 추가하고 `Enabled`를 켭니다. 메인 맵의 영역을 사용하면 위치 레벨은 비워 두고, 이벤트 전용 영역 레벨을 사용하면 `LocationLevelInstance`와 필요시 `LocationLevelTransform`을 지정합니다.
 
 이번 클래스는 공통 메타데이터를 C++에 중복 선언하지 않습니다. 기존 Definition DA를 사용하며, 이벤트 BP 없이 네이티브 클래스를 직접 지정할 수 있습니다. `Colossal`은 기존 매니저의 일반 추첨에서 제외되므로 일반 이벤트 테스트에는 사용하지 않습니다.
 
