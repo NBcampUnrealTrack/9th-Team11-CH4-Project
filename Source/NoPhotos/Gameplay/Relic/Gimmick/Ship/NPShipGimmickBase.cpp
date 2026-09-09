@@ -20,7 +20,7 @@ ANPShipGimmickBase::ANPShipGimmickBase()
 	GimmickMesh->SetupAttachment(SceneRoot);
 	GimmickMesh->SetMobility(EComponentMobility::Movable);
 	GimmickMesh->SetCollisionProfileName(UCollisionProfile::PhysicsActor_ProfileName);
-	GimmickMesh->SetEnableGravity(false);
+	GimmickMesh->SetEnableGravity(true);
 	GimmickMesh->SetIsReplicated(true);
 	GimmickMesh->BodyInstance.bAutoWeld = false;
 

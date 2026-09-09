@@ -11,7 +11,6 @@
 
 ANPShipAnchor::ANPShipAnchor()
 {
-	// Free-moving physics must be the actor root so movement also replicates.
 	GimmickMesh->SetupAttachment(nullptr);
 	SetRootComponent(GimmickMesh);
 	SceneRoot->SetupAttachment(GimmickMesh);
@@ -49,10 +48,8 @@ void ANPShipAnchor::BeginPlay()
 	InitialMeshTransform = GimmickMesh->GetComponentTransform();
 	Super::BeginPlay();
 
-	// The base is for constrained devices; the anchor is carried freely.
 	PhysicsConstraint->BreakConstraint();
 	ConfigureRope();
-	OnReset.AddDynamic(this, &ThisClass::HandleAnchorReset);
 	OnGrabStateChanged.AddDynamic(this, &ThisClass::HandleAnchorGrabChanged);
 
 	if (HasAuthority())
@@ -85,7 +82,6 @@ void ANPShipAnchor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		AnchorZone->OnActorBeginOverlap.RemoveDynamic(this, &ThisClass::HandleZoneOverlap);
 	}
-	OnReset.RemoveDynamic(this, &ThisClass::HandleAnchorReset);
 	OnGrabStateChanged.RemoveDynamic(this, &ThisClass::HandleAnchorGrabChanged);
 	Super::EndPlay(EndPlayReason);
 }
@@ -129,7 +125,6 @@ void ANPShipAnchor::HandleZoneOverlap(AActor* OverlappedActor, AActor* OtherActo
 	if (const USceneComponent* SnapPoint = FindZoneComponent(SnapPointComponentName))
 	{
 		FTransform SnapTransform = SnapPoint->GetComponentTransform();
-		// Snap location and rotation without shrinking the original x2 anchor mesh.
 		SnapTransform.SetScale3D(InitialMeshTransform.GetScale3D());
 		PlaceAnchor(SnapTransform);
 	}
@@ -137,7 +132,7 @@ void ANPShipAnchor::HandleZoneOverlap(AActor* OverlappedActor, AActor* OtherActo
 
 void ANPShipAnchor::PlaceAnchor(const FTransform& SnapTransform)
 {
-	if (!HasAuthority() || AnchorState.bPlaced || bChangingState || bAwaitingFreshGrab)
+	if (!HasAuthority() || AnchorState.bPlaced || bChangingState)
 	{
 		return;
 	}
@@ -152,27 +147,7 @@ void ANPShipAnchor::PlaceAnchor(const FTransform& SnapTransform)
 		ForceNetUpdate();
 	}
 
-	// This synchronously invokes ResetShipGimmick on a wrong step.
-	// Never set placed/physics state after this call: reset must win.
 	NotifyShipGimmickActivated();
-}
-
-void ANPShipAnchor::HandleAnchorReset()
-{
-	if (!HasAuthority() || bChangingState)
-	{
-		return;
-	}
-	TGuardValue<bool> StateGuard(bChangingState, true);
-	bAwaitingFreshGrab = true;
-	GrabbableComponent->SetGrabEnabled(false);
-	AnchorState.bPlaced = false;
-	AnchorState.Transform = InitialMeshTransform;
-	++AnchorState.Revision;
-	ApplyAnchorState();
-	SetTargetVisible(false);
-	ConfigureRope();
-	ForceNetUpdate();
 }
 
 void ANPShipAnchor::ApplyAnchorState()
@@ -186,7 +161,6 @@ void ANPShipAnchor::ApplyAnchorState()
 	GimmickMesh->SetSimulatePhysics(false);
 	GimmickMesh->SetWorldTransform(AnchorState.Transform, false, nullptr, ETeleportType::TeleportPhysics);
 	GimmickMesh->SetEnableGravity(true);
-	// Clients receive root-body physics through the actor's replicated movement.
 	GimmickMesh->SetSimulatePhysics(HasAuthority() && !AnchorState.bPlaced);
 	if (GimmickMesh->IsSimulatingPhysics())
 	{
@@ -202,10 +176,6 @@ void ANPShipAnchor::HandleAnchorGrabChanged(const bool bIsGrabbed)
 	if (!HasAuthority() || bChangingState)
 	{
 		return;
-	}
-	if (bIsGrabbed)
-	{
-		bAwaitingFreshGrab = false;
 	}
 	SetTargetVisible(bIsGrabbed && !AnchorState.bPlaced);
 }
@@ -230,8 +200,6 @@ void ANPShipAnchor::OnRep_AnchorState()
 	TGuardValue<bool> StateGuard(bChangingState, true);
 	GrabbableComponent->ForceReleaseAllGrabs();
 	GrabbableComponent->SetGrabEnabled(!AnchorState.bPlaced);
-	// Root movement is authoritative on clients, including late joiners. Replaying
-	// the last reset pose here could rewind an anchor that has already been carried.
 	OnRep_ReplicatedMovement();
 }
 
