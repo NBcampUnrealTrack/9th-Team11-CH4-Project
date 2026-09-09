@@ -1,14 +1,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Gameplay/AbilitySystem/GameplayCue/NPAttachedGameplayCueActor.h"
+#include "Gameplay/AbilitySystem/GameplayCue/NPStatusVisualGameplayCue.h"
 #include "NPControlReversalGameplayCue.generated.h"
 
 class UInstancedStaticMeshComponent;
 
 /** 조작 반전 상태 동안 유령 네 개가 캐릭터 주변을 선회합니다. */
 UCLASS(Blueprintable)
-class NOPHOTOS_API ANPControlReversalGameplayCue : public ANPAttachedGameplayCueActor
+class NOPHOTOS_API ANPControlReversalGameplayCue : public ANPStatusVisualGameplayCue
 {
 	GENERATED_BODY()
 
@@ -16,15 +16,11 @@ public:
 	ANPControlReversalGameplayCue();
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void Tick(float DeltaSeconds) override;
-	void SetManagedScaleMultiplier(float ScaleMultiplier);
-	void CompleteManagedRemoval();
 
 protected:
-	virtual bool WhileActive_Implementation(
-		AActor* Target, const FGameplayCueParameters& Parameters) override;
-	virtual bool OnRemove_Implementation(
-		AActor* Target, const FGameplayCueParameters& Parameters) override;
-	virtual bool Recycle() override;
+	virtual void PrepareVisual() override;
+	virtual void ResetVisual() override;
+	virtual void ApplyVisualScale() override;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Control Reversal|Visual")
 	TObjectPtr<UInstancedStaticMeshComponent> GhostMesh;
@@ -56,5 +52,4 @@ private:
 	void UpdateGhostTransforms();
 
 	float OrbitAngle = 0.0f;
-	float ScaleMultiplier = 1.0f;
 };

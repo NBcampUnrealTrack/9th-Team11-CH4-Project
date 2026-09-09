@@ -37,6 +37,9 @@ namespace NPGameplayTags
 		GameplayCue_Status_ControlReversal,
 		"GameplayCue.Status.ControlReversal");
 	UE_DEFINE_GAMEPLAY_TAG(
+		GameplayCue_Status_Leader,
+		"GameplayCue.Status.Leader");
+	UE_DEFINE_GAMEPLAY_TAG(
 		GameplayCue_Status_LavaBurning,
 		"GameplayCue.Status.LavaBurning");
 	UE_DEFINE_GAMEPLAY_TAG(

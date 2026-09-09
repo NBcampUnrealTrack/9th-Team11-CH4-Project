@@ -1,15 +1,9 @@
 #include "Gameplay/AbilitySystem/GameplayCue/NPControlReversalGameplayCue.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
-#include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
-#include "Gameplay/Character/NPStatusVisualManager.h"
 
 ANPControlReversalGameplayCue::ANPControlReversalGameplayCue()
 {
-	bAutoDestroyOnRemove = false;
-	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.bStartWithTickEnabled = false;
-	PrimaryActorTick.TickGroup = TG_PostPhysics;
 	SceneRoot->SetAbsolute(false, true, true);
 
 	GhostMesh = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("GhostMesh"));
@@ -26,80 +20,38 @@ void ANPControlReversalGameplayCue::OnConstruction(const FTransform& Transform)
 	RebuildGhostInstances();
 }
 
-bool ANPControlReversalGameplayCue::WhileActive_Implementation(
-	AActor* Target, const FGameplayCueParameters& Parameters)
+void ANPControlReversalGameplayCue::PrepareVisual()
 {
-	Super::WhileActive_Implementation(Target, Parameters);
 	SceneRoot->SetWorldRotation(FRotator::ZeroRotator);
 	OrbitAngle = 0.0f;
-	ScaleMultiplier = 0.0f;
 	RebuildGhostInstances();
-	SetActorTickEnabled(true);
-	if (const ANPReplicatedStablePhysicsPawn* Pawn = Cast<ANPReplicatedStablePhysicsPawn>(Target))
-	{
-		if (ANPStatusVisualManager* Manager = Pawn->GetStatusVisualManager())
-		{
-			Manager->RequestControlReversalVisual(this, true);
-			return true;
-		}
-	}
-	SetManagedScaleMultiplier(1.0f);
-	return true;
 }
 
-bool ANPControlReversalGameplayCue::OnRemove_Implementation(
-	AActor* Target, const FGameplayCueParameters& Parameters)
+void ANPControlReversalGameplayCue::ResetVisual()
 {
-	if (!Target)
-	{
-		GhostMesh->ClearInstances();
-		Super::OnRemove_Implementation(Target, Parameters);
-		return true;
-	}
-	if (const ANPReplicatedStablePhysicsPawn* Pawn = Cast<ANPReplicatedStablePhysicsPawn>(Target))
-	{
-		if (ANPStatusVisualManager* Manager = Pawn->GetStatusVisualManager())
-		{
-			Manager->RequestControlReversalVisual(this, false);
-			return true;
-		}
-	}
-	CompleteManagedRemoval();
-	return true;
-}
-
-bool ANPControlReversalGameplayCue::Recycle()
-{
-	SetActorTickEnabled(false);
 	OrbitAngle = 0.0f;
-	ScaleMultiplier = 0.0f;
 	if (GhostMesh)
 	{
 		GhostMesh->ClearInstances();
 	}
-	return Super::Recycle();
 }
 
 void ANPControlReversalGameplayCue::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	if (!IsActorTickEnabled())
+	{
+		return;
+	}
 	OrbitAngle = FMath::Fmod(
 		OrbitAngle - FMath::DegreesToRadians(FMath::Max(0.0f, OrbitSpeed)) * DeltaSeconds,
 		2.0f * PI);
 	UpdateGhostTransforms();
 }
 
-void ANPControlReversalGameplayCue::SetManagedScaleMultiplier(float NewScaleMultiplier)
+void ANPControlReversalGameplayCue::ApplyVisualScale()
 {
-	ScaleMultiplier = NewScaleMultiplier;
 	UpdateGhostTransforms();
-}
-
-void ANPControlReversalGameplayCue::CompleteManagedRemoval()
-{
-	SetActorTickEnabled(false);
-	GhostMesh->ClearInstances();
-	GameplayCueFinishedCallback();
 }
 
 void ANPControlReversalGameplayCue::RebuildGhostInstances()
@@ -131,7 +83,7 @@ void ANPControlReversalGameplayCue::UpdateGhostTransforms()
 			Direction.Rotation().Quaternion() * GhostRotationOffset.Quaternion();
 		GhostMesh->UpdateInstanceTransform(
 			Index,
-			FTransform(Rotation, Location, GhostScale * ScaleMultiplier),
+			FTransform(Rotation, Location, GhostScale * GetVisualScaleMultiplier()),
 			false,
 			Index == 3,
 			true);

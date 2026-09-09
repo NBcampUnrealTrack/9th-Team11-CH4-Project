@@ -39,6 +39,7 @@ namespace NPGameplayTags
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Relic_Aimable_Impact);
 	/** 빙의 중 캐릭터 주변에 표시할 지속형 GameplayCue입니다. */
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Status_ControlReversal);
+	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Status_Leader);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Status_LavaBurning);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Status_PhotoStun);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Photo_WorldFeedback_Photographer);

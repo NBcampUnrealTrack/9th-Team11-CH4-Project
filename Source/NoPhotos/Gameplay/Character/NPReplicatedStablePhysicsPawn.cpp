@@ -1,7 +1,6 @@
 #include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 
 #include "Components/PrimitiveComponent.h"
-#include "Components/ChildActorComponent.h"
 #include "Core/GameplayTag/NPGameplayTags.h"
 #include "Core/Main/NPMainGameState.h"
 #include "Gameplay/AbilitySystem/Effects/NPLeaderGameplayEffect.h"
@@ -13,8 +12,6 @@
 #include "Gameplay/AbilitySystem/NPAbilitySystemComponent.h"
 #include "Gameplay/Character/Component/NPInvisibilityComponent.h"
 #include "Gameplay/Character/Component/NPControlReversalComponent.h"
-#include "Gameplay/Character/Component/NPStatusVisualComponent.h"
-#include "Gameplay/Character/NPStatusVisualManager.h"
 #include "Gameplay/Character/Component/NPVisionRestrictionComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsNetworkPredictionComponent.h"
@@ -51,20 +48,9 @@ ANPReplicatedStablePhysicsPawn::ANPReplicatedStablePhysicsPawn()
 
 	AbilitySystem = CreateDefaultSubobject<UNPAbilitySystemComponent>(
 		TEXT("AbilitySystem"));
-	LeaderCrown = CreateDefaultSubobject<UChildActorComponent>(TEXT("LeaderCrown"));
-	LeaderCrown->SetupAttachment(PhysicsMesh);
-	LeaderCrown->SetRelativeLocation(FVector(0.0f, 0.0f, 190.0f));
-	LeaderCrown->SetAbsolute(false, true, false);
-	LeaderCrown->SetVisibility(false, true);
-	LeaderCrown->SetHiddenInGame(true, true);
-	StatusVisualManagerActor = CreateDefaultSubobject<UChildActorComponent>(
-		TEXT("StatusVisualManager"));
-	StatusVisualManagerActor->SetupAttachment(PhysicsMesh);
-	StatusVisualManagerActor->SetChildActorClass(ANPStatusVisualManager::StaticClass());
 	Invisibility = CreateDefaultSubobject<UNPInvisibilityComponent>(TEXT("Invisibility"));
 	VisionRestriction = CreateDefaultSubobject<UNPVisionRestrictionComponent>(TEXT("VisionRestriction"));
 	ControlReversal = CreateDefaultSubobject<UNPControlReversalComponent>(TEXT("ControlReversal"));
-	StatusVisual = CreateDefaultSubobject<UNPStatusVisualComponent>(TEXT("StatusVisual"));
 }
 
 void ANPReplicatedStablePhysicsPawn::BeginPlay()
@@ -79,7 +65,6 @@ void ANPReplicatedStablePhysicsPawn::BeginPlay()
 	HandleRelicCarryingTagChanged(
 		NPGameplayTags::State_Relic_Carrying,
 		AbilitySystem->GetTagCount(NPGameplayTags::State_Relic_Carrying));
-	StatusVisual->Initialize(AbilitySystem, LeaderCrown, GetStatusVisualManager());
 	if (HasAuthority())
 	{
 		if (ANPMainGameState* MainGameState = GetWorld()->GetGameState<ANPMainGameState>())
@@ -121,13 +106,6 @@ void ANPReplicatedStablePhysicsPawn::BeginPlay()
 	{
 		OnRep_GrabState();
 	}
-}
-
-ANPStatusVisualManager* ANPReplicatedStablePhysicsPawn::GetStatusVisualManager() const
-{
-	return StatusVisualManagerActor
-		? Cast<ANPStatusVisualManager>(StatusVisualManagerActor->GetChildActor())
-		: nullptr;
 }
 
 void ANPReplicatedStablePhysicsPawn::PossessedBy(AController* NewController)
