@@ -23,6 +23,7 @@
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsMovementComponent.h"
 #include "Gameplay/Character/Component/NPScanComponent.h"
+#include "Gameplay/AbilitySystem/NPAbilitySystemComponent.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Gameplay/Relic/Components/NPScanOutlineComponent.h"
 #include "Gameplay/Relic/Components/NPSwingableRelicComponent.h"
@@ -953,15 +954,20 @@ void ANPStablePhysicsPawn::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 
 void ANPStablePhysicsPawn::HandleScanPressed()
 {
-	if (const UAbilitySystemComponent* AbilitySystem =
-		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(this);
-		AbilitySystem &&
-		(AbilitySystem->HasMatchingGameplayTag(NPGameplayTags::State_Photo_Aiming) ||
-		 AbilitySystem->HasMatchingGameplayTag(NPGameplayTags::State_Relic_Aiming)))
+	UNPAbilitySystemComponent* AbilitySystem = Cast<UNPAbilitySystemComponent>(
+		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(this));
+	if (AbilitySystem)
+	{
+		AbilitySystem->ActivateScanAbility();
+	}
+}
+
+void ANPStablePhysicsPawn::TriggerScanPresentation()
+{
+	if (!IsLocallyControlled())
 	{
 		return;
 	}
-
 	EventPressScan();
 }
 

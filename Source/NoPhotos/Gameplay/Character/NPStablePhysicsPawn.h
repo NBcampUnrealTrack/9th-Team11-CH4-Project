@@ -56,6 +56,8 @@ public:
 	void SetPhotoViewActive(bool bActive);
 	/** 로컬 플레이어의 조준 유물 카메라 전환을 시작하거나 종료합니다. */
 	void SetRelicAimViewActive(bool bActive);
+	/** Scan Ability가 기존 Blueprint 스캔 연출을 시작할 때 호출합니다. */
+	void TriggerScanPresentation();
 
 	UFUNCTION(BlueprintPure, Category="Photo")
 	bool IsPhotoViewActive() const { return bPhotoViewActive; }
