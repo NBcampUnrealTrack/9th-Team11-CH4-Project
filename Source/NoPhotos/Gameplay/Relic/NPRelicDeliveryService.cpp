@@ -57,9 +57,7 @@ int32 UNPRelicDeliveryService::CalculateReturnScore(const ANPBaseRelic* Relic) c
 		return 0;
 	}
 
-	return FMath::Max(
-		0,
-		Relic->GetBasePrice() - Relic->GetAccumulatedPhotoPenalty());
+	return Relic->GetCurrentPrice();
 }
 
 bool UNPRelicDeliveryService::TryDeliverRelic(

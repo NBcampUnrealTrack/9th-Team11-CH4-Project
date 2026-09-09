@@ -173,6 +173,12 @@ public:
 	void RegisterLocationCollector(ANPMapEventLocationCollector* Collector);
 	void UnregisterLocationCollector(ANPMapEventLocationCollector* Collector);
 
+	/** 등록된 Collector에서 그룹에 속한 유효 Point 전체를 중복 없이 조회합니다. */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Map Event|Locations")
+	void GetSpawnPointsForGroup(
+		FGameplayTag SpawnGroup,
+		TArray<ANPMapEventSpawnPoint*>& OutSpawnPoints) const;
+
 	/** 등록된 Collector에서 그룹에 속한 유효 Volume 전체를 중복 없이 조회합니다. */
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Map Event|Locations")
 	void GetSpawnVolumesForGroup(
