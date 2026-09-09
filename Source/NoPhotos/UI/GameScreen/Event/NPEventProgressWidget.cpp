@@ -240,6 +240,11 @@ void UNPEventProgressWidget::RebuildEventMarkers()
 		}
 
 		UWidget* Marker = nullptr;
+		const bool bIsUpcomingEvent = Event.State == ENPScheduledMapEventState::Pending
+			|| Event.State == ENPScheduledMapEventState::Loading;
+		const FLinearColor MarkerColor = bIsUpcomingEvent
+			? FLinearColor::White
+			: FLinearColor::Black;
 		if (IsValid(EventMarkerImage))
 		{
 			USizeBox* ImageSizeBox = NewObject<USizeBox>(this);
@@ -248,6 +253,7 @@ void UNPEventProgressWidget::RebuildEventMarkers()
 
 			UImage* ImageMarker = NewObject<UImage>(ImageSizeBox);
 			ImageMarker->SetBrushFromTexture(EventMarkerImage);
+			ImageMarker->SetColorAndOpacity(MarkerColor);
 			ImageMarker->SetToolTipText(Event.Title);
 			ImageSizeBox->SetContent(ImageMarker);
 			Marker = ImageSizeBox;
@@ -256,13 +262,12 @@ void UNPEventProgressWidget::RebuildEventMarkers()
 		{
 			UTextBlock* TextMarker = NewObject<UTextBlock>(this);
 			TextMarker->SetText(DefaultMarkerText);
+			TextMarker->SetColorAndOpacity(MarkerColor);
 			TextMarker->SetToolTipText(Event.Title);
 			TextMarker->SetJustification(ETextJustify::Center);
 			Marker = TextMarker;
 		}
-		const bool bShowMarker = Event.State == ENPScheduledMapEventState::Pending
-			|| Event.State == ENPScheduledMapEventState::Loading;
-		Marker->SetRenderOpacity(bShowMarker ? 1.0f : 0.0f);
+		Marker->SetRenderOpacity(1.0f);
 
 		if (UHorizontalBoxSlot* MarkerSlot = EventMarkerBox->AddChildToHorizontalBox(Marker))
 		{

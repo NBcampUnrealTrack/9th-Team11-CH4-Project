@@ -106,7 +106,7 @@ void ANPShipGimmickBase::SetGimmickPhysicsEnabled(const bool bEnabled)
 	if (bEnabled)
 	{
 		ConfigurePhysicsConstraint();
-		GimmickMesh->SetEnableGravity(false);
+		GimmickMesh->SetEnableGravity(true);
 		GimmickMesh->SetSimulatePhysics(true);
 		GimmickMesh->WakeAllRigidBodies();
 	}
