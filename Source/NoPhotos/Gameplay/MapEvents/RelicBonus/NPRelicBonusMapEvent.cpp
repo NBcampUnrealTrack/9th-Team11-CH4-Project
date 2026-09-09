@@ -439,6 +439,7 @@ ANPRelicReturnZone* ANPRelicBonusMapEvent::SpawnReturnZoneAt(
 
 	ReturnZone->SetReplicates(true);
 	ReturnZone->SetReplicateMovement(false);
+	ReturnZone->SetDeliveryEffectEnabled(true);
 	UGameplayStatics::FinishSpawningActor(ReturnZone, SpawnTransform);
 	return ReturnZone;
 }
