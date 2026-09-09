@@ -107,15 +107,14 @@ void UNPPullGimmickComponent::HandleGrabForceUpdated(
 	const FVector&,
 	float IntentForceAlignment)
 {
-	if (IsCompleted() || PullDirection.IsNearlyZero())
+	if (IsCompleted())
 	{
 		return;
 	}
 
-	const FVector WorldPullDirection = PullDirection.GetSafeNormal();
-	const float PullForce = FVector::DotProduct(
-		LinearForce,
-		WorldPullDirection);
+	const float PullForce = PullDirection.IsNearlyZero()
+		? LinearForce.Size()
+		: FVector::DotProduct(LinearForce, PullDirection.GetSafeNormal());
 	CurrentAttemptMaxPullForce = FMath::Max(
 		CurrentAttemptMaxPullForce,
 		PullForce);
