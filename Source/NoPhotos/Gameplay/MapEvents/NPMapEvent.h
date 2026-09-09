@@ -32,8 +32,8 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Map Event")
 	bool IsEventActive() const { return bIsActive; }
 
-	/** 카탈로그가 이벤트 액터를 생성할 때 정의와 해당 목록의 가중치를 주입합니다. */
-	void InitializeEvent(UNPMapEventDefinition* InEventDefinition, float InSelectionWeight);
+	/** 카탈로그가 이벤트 액터를 생성할 때 정의를 주입합니다. */
+	void InitializeEvent(UNPMapEventDefinition* InEventDefinition);
 
 	UFUNCTION(BlueprintPure, Category = "Map Event|Metadata")
 	UNPMapEventDefinition* GetEventDefinition() const { return EventDefinition; }
@@ -77,9 +77,6 @@ public:
 	bool RequiresStandaloneExecution() const { return GetEventScale() == ENPMapEventScale::Colossal; }
 
 	bool CanStartEvent() const;
-
-	UFUNCTION(BlueprintPure, Category = "Map Event|Selection")
-	float GetSelectionWeight() const { return RuntimeSelectionWeight; }
 
 	/** 서버와 클라이언트 각각에서 이벤트 상태가 적용된 직후 호출됩니다. */
 	UPROPERTY(BlueprintAssignable, Category = "Map Event|Lifecycle")
@@ -131,9 +128,6 @@ private:
 	/** GameState의 서버 동기화 시간 기준 이벤트 종료 시각입니다. */
 	UPROPERTY(Replicated)
 	float EventEndServerWorldTime = 0.0f;
-
-	/** 카탈로그 엔트리에서 주입된 서버 런타임 선택 가중치입니다. */
-	float RuntimeSelectionWeight = 1.0f;
 
 	FTimerHandle DurationTimer;
 };

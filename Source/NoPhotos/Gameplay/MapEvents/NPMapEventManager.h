@@ -208,7 +208,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	/** 이 GameState에서 사용할 이벤트 정의와 가중치 목록입니다. */
+	/** 이 GameState에서 사용할 이벤트 정의와 활성 여부 목록입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Map Event")
 	TObjectPtr<UNPMapEventCatalog> EventCatalog;
 

@@ -62,7 +62,7 @@ BP/DA/레벨 에셋은 이 변경에서 수정하지 않습니다. 새 C++ 클�
 3. `Santa Class` = 위에서 만든 **BP_SantaFlight**, `Route Group` = **Santa**.
 4. 기존처럼 Event Id, Display Name, Type, Scale 등 메타데이터를 설정합니다.
 5. `Duration`은 **대기 시간을 포함한 전체 이벤트 시간**입니다. 예: **60초**. 0초/무제한은 지원하지 않으며 최소 0.01초입니다. `Santa Event → Flight → Flight Schedule`의 `Flight Duration`은 **1회 비행 시간**(기본 8초), `Respawn Delay Min/Max`는 **비행 종료 후 재등장까지 대기 범위**(기본 3~7초)입니다. 12000cm / 8초이면 속도는 1500cm/s입니다.
-6. 기존 `DA_EventCatalog`의 `Event Entries`에 이 DA와 이벤트 선택 가중치를 넣습니다.
+6. 기존 `DA_EventCatalog`의 `Event Entries`에 이 DA를 넣고 `Enabled`를 켭니다.
 7. 별도 위치 레벨을 사용한다면 해당 엔트리의 `Location Level Instance`에 경로 액터가 있는 레벨을 지정합니다. 메인 레벨에 이미 경로가 있으면 비워도 됩니다.
 8. 선물 투하를 쓰려면 DA의 `Gift Class`, `Relic Classes`, `Gift Drops`를 설정합니다. 상세는 `SantaGift.md`를 참고하세요. `Gift Drops.Count = 0`이면 비행만 합니다.
 

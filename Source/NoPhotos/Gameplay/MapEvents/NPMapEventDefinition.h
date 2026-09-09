@@ -7,7 +7,7 @@
 
 /**
  * 맵 이벤트 하나의 고유한 정의입니다.
- * 출현 가중치는 이벤트 자체의 속성이 아니므로 이벤트 카탈로그에서 별도로 설정합니다.
+ * 이벤트 사용 여부는 이벤트 카탈로그에서 별도로 설정합니다.
  */
 UCLASS(BlueprintType)
 class NOPHOTOS_API UNPMapEventDefinition : public UPrimaryDataAsset

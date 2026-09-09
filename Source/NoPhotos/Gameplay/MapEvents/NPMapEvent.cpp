@@ -23,9 +23,7 @@ void ANPMapEvent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(ANPMapEvent, EventEndServerWorldTime);
 }
 
-void ANPMapEvent::InitializeEvent(
-	UNPMapEventDefinition* InEventDefinition,
-	const float InSelectionWeight)
+void ANPMapEvent::InitializeEvent(UNPMapEventDefinition* InEventDefinition)
 {
 	if (!HasAuthority() || bIsActive)
 	{
@@ -33,7 +31,6 @@ void ANPMapEvent::InitializeEvent(
 	}
 
 	EventDefinition = InEventDefinition;
-	RuntimeSelectionWeight = FMath::Max(0.0f, InSelectionWeight);
 }
 
 FName ANPMapEvent::GetEventId() const
@@ -137,8 +134,7 @@ bool ANPMapEvent::CanStartEvent() const
 	const ANPMainGameState* MainState = GetWorld() ? GetWorld()->GetGameState<ANPMainGameState>() : nullptr;
 	return HasAuthority()
 		&& (!MainState || !MainState->IsMainGameEnded())
-		&& !bIsActive
-		&& RuntimeSelectionWeight > 0.0f;
+		&& !bIsActive;
 }
 
 void ANPMapEvent::ApplyEventState_Implementation(const bool bNewActive)

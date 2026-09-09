@@ -102,7 +102,7 @@ Roaming Ghost Class와 Ghost Class가 모두 비어 있거나 추상 클래스�
 1. **일반 NPMapEventDefinition** 타입의 DA를 만듭니다. 이번에는 별도 Possession 전용 DA 클래스가 없습니다.
 2. Event Class에 `BP_PossessionEvent`를 지정하고, Event Id(예: `Possession`), 표시 이름(예: `빙의`), Type, Scale을 설정합니다.
 3. Duration을 예를 들어 **30초**로 설정합니다. 0이면 기존 공통 이벤트 규칙대로 수동 종료 전까지 유지됩니다.
-4. 기존 `DA_EventCatalog → Event Entries`에 해당 DA와 선택 가중치를 넣습니다.
+4. 기존 `DA_EventCatalog → Event Entries`에 해당 DA를 넣고 `Enabled`를 켭니다.
 5. SpawnVolume, Collector, NavMesh는 필요 없습니다. `Possession` 태그는 이미 등록되어 있으므로 새 Gameplay Tag를 만들 필요가 없고, 고스트 이벤트가 로드되는 레벨에는 위의 `NPGhostPatrolRoute`가 있어야 합니다.
 
 메타데이터/기간은 DA, 유령 외형 클래스는 이벤트 BP, 외형·추적 거리·높이는 유령 BP가 관리합니다.

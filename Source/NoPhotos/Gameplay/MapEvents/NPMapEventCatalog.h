@@ -8,7 +8,7 @@ class ANPMapEvent;
 class UNPMapEventDefinition;
 class UWorld;
 
-/** 한 이벤트 목록 안에서 사용할 이벤트 정의와 상대 가중치입니다. */
+/** 한 이벤트 목록 안에서 사용할 이벤트 정의와 활성 여부입니다. */
 USTRUCT(BlueprintType)
 struct FNPMapEventCatalogEntry
 {
@@ -17,9 +17,9 @@ struct FNPMapEventCatalogEntry
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Map Event")
 	TObjectPtr<UNPMapEventDefinition> EventDefinition;
 
-	/** 동일 타입 후보 사이에서 사용할 상대 가중치입니다. 0이면 선택되지 않습니다. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Map Event", meta = (ClampMin = "0.0", UIMin = "0.0"))
-	float SelectionWeight = 1.0f;
+	/** false이면 인스턴스를 생성하지 않으며 이번 게임의 이벤트 후보에서 제외합니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Map Event")
+	bool bEnabled = true;
 
 	/**
 	 * 이 이벤트의 Point/Volume 세트를 담은 선택적 위치 레벨 원본(.umap)입니다.
