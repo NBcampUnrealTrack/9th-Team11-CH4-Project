@@ -10,6 +10,7 @@
 #include "Gameplay/AbilitySystem/Effects/NPKnockbackGameplayEffect.h"
 #include "Gameplay/Relic/Abilities/NPRelicUseAbility.h"
 #include "GameplayEffect.h"
+#include "NoPhotos.h"
 #include "PhysicsEngine/BodyInstance.h"
 
 UNPSwingableRelicComponent::UNPSwingableRelicComponent()
@@ -172,6 +173,31 @@ void UNPSwingableRelicComponent::HandleRelicHit(
 		*EffectSpec.Data.Get(),
 		TargetASC);
 	LastHitTimes.FindOrAdd(TargetKey) = CurrentTime;
+
+	if (Settings.ImpactCueTag.IsValid())
+	{
+		UE_LOG(
+			LogNoPhotos,
+			Warning,
+			TEXT("[SwingImpactCue] Execute requested. Relic=%s Target=%s TargetASC=%s Tag=%s Location=%s"),
+			*GetNameSafe(OwnerActor),
+			*GetNameSafe(OtherActor),
+			*GetNameSafe(TargetASC),
+			*Settings.ImpactCueTag.ToString(),
+			*Hit.ImpactPoint.ToCompactString());
+		FGameplayCueParameters CueParameters(EffectContext);
+		CueParameters.Location = Hit.ImpactPoint;
+		CueParameters.Normal = Hit.ImpactNormal;
+		TargetASC->ExecuteGameplayCue(Settings.ImpactCueTag, CueParameters);
+	}
+	else
+	{
+		UE_LOG(
+			LogNoPhotos,
+			Warning,
+			TEXT("[SwingImpactCue] ImpactCueTag is empty. Relic=%s"),
+			*GetNameSafe(OwnerActor));
+	}
 
 #if ENABLE_DRAW_DEBUG
 	if (Settings.bDrawKnockbackDirection)
