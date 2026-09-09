@@ -34,11 +34,9 @@ public:
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Ship Gimmick|Sequence", meta=(TitleProperty="GetName"))
 	TArray<TObjectPtr<ANPShipGimmickBase>> GimmickSequence;
 
-	/** Actor spawned once after the entire sequence is completed. Assign the high-value relic Blueprint here. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Ship Gimmick|Reward")
 	TSubclassOf<AActor> TreasureClass;
 
-	/** Relative to this manager actor. Z = 100 makes the reward visibly drop into the room. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Ship Gimmick|Reward")
 	FVector TreasureSpawnOffset = FVector(0.0, 0.0, 100.0);
 
@@ -68,8 +66,9 @@ protected:
 private:
 	UFUNCTION()
 	void HandleGimmickActivated(ANPShipGimmickBase* ActivatedGimmick);
-
 	void SpawnSequenceTreasure();
+
+	TSet<TObjectPtr<ANPShipGimmickBase>> CompletedGimmicks;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Replicated, Category="Ship Gimmick|Sequence", meta=(AllowPrivateAccess="true"))
 	int32 CurrentStep = 0;

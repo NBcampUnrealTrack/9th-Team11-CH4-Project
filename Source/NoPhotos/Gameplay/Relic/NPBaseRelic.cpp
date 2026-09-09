@@ -156,11 +156,11 @@ bool ANPBaseRelic::AddPhotoPenaltyCapture(
 	return true;
 }
 
-void ANPBaseRelic::AddPriceBonus(const double BonusRate)
+bool ANPBaseRelic::AddPriceBonus(const double BonusRate)
 {
 	if (!HasAuthority() || bIsReturned || !FMath::IsFinite(BonusRate) || BonusRate <= 0.0)
 	{
-		return;
+		return false;
 	}
 
 	const double NewBonus = FMath::Min(
@@ -168,13 +168,14 @@ void ANPBaseRelic::AddPriceBonus(const double BonusRate)
 		static_cast<double>(MAX_int32));
 	if (NewBonus == AccumulatedPriceBonus)
 	{
-		return;
+		return false;
 	}
 
 	FlushNetDormancy();
 	AccumulatedPriceBonus = NewBonus;
 	OnRep_AccumulatedPriceBonus();
 	ForceNetUpdate();
+	return true;
 }
 
 bool ANPBaseRelic::TryMarkReturned()

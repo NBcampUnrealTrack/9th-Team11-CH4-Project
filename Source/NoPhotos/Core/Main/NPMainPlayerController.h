@@ -90,6 +90,12 @@ public:
 	UFUNCTION(Exec)
 	void NPTestPrintGrabState();
 
+	UFUNCTION(Server, Reliable)
+	void ServerAddCheatPoint();
+
+	UFUNCTION(Server, Reliable)
+	void ServerRemoveCheatPoint();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;

@@ -43,6 +43,9 @@ namespace NPGameplayTags
 		GameplayCue_Photo_WorldFeedback_Photographed,
 		"GameplayCue.Photo.WorldFeedback.Photographed");
 	UE_DEFINE_GAMEPLAY_TAG(
+		GameplayCue_MapEvent_Spotlight_PriceBonus,
+		"GameplayCue.MapEvent.Spotlight.PriceBonus");
+	UE_DEFINE_GAMEPLAY_TAG(
 		Data_Knockback_Magnitude,
 		"Data.Knockback.Magnitude");
 }

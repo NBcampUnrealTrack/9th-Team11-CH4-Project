@@ -16,6 +16,8 @@ public:
 	ANPPhotoStunGameplayCue();
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void Tick(float DeltaSeconds) override;
+	void SetManagedScaleMultiplier(float ScaleMultiplier);
+	void CompleteManagedRemoval();
 
 protected:
 	virtual bool WhileActive_Implementation(
@@ -42,4 +44,7 @@ protected:
 
 private:
 	void RebuildMarkerInstances();
+	void UpdateMarkerInstances();
+
+	float ScaleMultiplier = 1.0f;
 };

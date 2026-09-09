@@ -78,8 +78,8 @@ public:
 	void SetUnlocked(bool bUnlocked);
 	/** 성공 촬영 횟수를 증가시키고 기본 가격에 대한 누적 비율로 감점을 다시 계산합니다. */
 	bool AddPhotoPenaltyCapture(float PenaltyRatePerCapture);
-	/** 기본 가격의 지정 비율을 현재 가격에 누적합니다. 서버에서만 적용합니다. */
-	void AddPriceBonus(double BonusRate);
+	/** 기본 가격의 지정 비율을 현재 가격에 누적하고 실제 변경 여부를 반환합니다. 서버에서만 적용합니다. */
+	bool AddPriceBonus(double BonusRate);
 	bool TryMarkReturned();
 
 	/** 서버에서 전시 상태를 해제하고 물리를 활성화한 뒤 질량과 무관한 속도 충격을 적용합니다. */

@@ -2,10 +2,13 @@
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
+#include "Gameplay/Character/NPStatusVisualManager.h"
 #include "UObject/ConstructorHelpers.h"
 
 ANPPhotoStunGameplayCue::ANPPhotoStunGameplayCue()
 {
+	bAutoDestroyOnRemove = false;
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = false;
 	PrimaryActorTick.TickGroup = TG_PostPhysics;
@@ -38,23 +41,46 @@ bool ANPPhotoStunGameplayCue::WhileActive_Implementation(
 	Super::WhileActive_Implementation(Target, Parameters);
 	SceneRoot->SetWorldRotation(FRotator::ZeroRotator);
 	MarkerMesh->SetRelativeRotation(FRotator::ZeroRotator);
+	ScaleMultiplier = 0.0f;
 	RebuildMarkerInstances();
 	SetActorTickEnabled(true);
+	if (const ANPReplicatedStablePhysicsPawn* Pawn = Cast<ANPReplicatedStablePhysicsPawn>(Target))
+	{
+		if (ANPStatusVisualManager* Manager = Pawn->GetStatusVisualManager())
+		{
+			Manager->RequestPhotoStunVisual(this, true);
+			return true;
+		}
+	}
+	SetManagedScaleMultiplier(1.0f);
 	return true;
 }
 
 bool ANPPhotoStunGameplayCue::OnRemove_Implementation(
 	AActor* Target, const FGameplayCueParameters& Parameters)
 {
-	SetActorTickEnabled(false);
-	MarkerMesh->ClearInstances();
-	Super::OnRemove_Implementation(Target, Parameters);
+	if (!Target)
+	{
+		MarkerMesh->ClearInstances();
+		Super::OnRemove_Implementation(Target, Parameters);
+		return true;
+	}
+	if (const ANPReplicatedStablePhysicsPawn* Pawn = Cast<ANPReplicatedStablePhysicsPawn>(Target))
+	{
+		if (ANPStatusVisualManager* Manager = Pawn->GetStatusVisualManager())
+		{
+			Manager->RequestPhotoStunVisual(this, false);
+			return true;
+		}
+	}
+	CompleteManagedRemoval();
 	return true;
 }
 
 bool ANPPhotoStunGameplayCue::Recycle()
 {
 	SetActorTickEnabled(false);
+	ScaleMultiplier = 0.0f;
 	if (MarkerMesh)
 	{
 		MarkerMesh->SetRelativeRotation(FRotator::ZeroRotator);
@@ -72,6 +98,19 @@ void ANPPhotoStunGameplayCue::Tick(float DeltaSeconds)
 		0.0f));
 }
 
+void ANPPhotoStunGameplayCue::SetManagedScaleMultiplier(float NewScaleMultiplier)
+{
+	ScaleMultiplier = NewScaleMultiplier;
+	UpdateMarkerInstances();
+}
+
+void ANPPhotoStunGameplayCue::CompleteManagedRemoval()
+{
+	SetActorTickEnabled(false);
+	MarkerMesh->ClearInstances();
+	GameplayCueFinishedCallback();
+}
+
 void ANPPhotoStunGameplayCue::RebuildMarkerInstances()
 {
 	MarkerMesh->ClearInstances();
@@ -85,6 +124,25 @@ void ANPPhotoStunGameplayCue::RebuildMarkerInstances()
 			FMath::Sin(AngleRadians) * OrbitRadius,
 			0.0f);
 		MarkerMesh->AddInstance(
-			FTransform(FRotator::ZeroRotator, Location, MarkerScale));
+			FTransform(FRotator::ZeroRotator, Location, MarkerScale * ScaleMultiplier));
+	}
+}
+
+void ANPPhotoStunGameplayCue::UpdateMarkerInstances()
+{
+	for (int32 MarkerIndex = 0; MarkerIndex < 3; ++MarkerIndex)
+	{
+		const float AngleRadians = FMath::DegreesToRadians(
+			120.0f * static_cast<float>(MarkerIndex));
+		const FVector Location(
+			FMath::Cos(AngleRadians) * OrbitRadius,
+			FMath::Sin(AngleRadians) * OrbitRadius,
+			0.0f);
+		MarkerMesh->UpdateInstanceTransform(
+			MarkerIndex,
+			FTransform(FRotator::ZeroRotator, Location, MarkerScale * ScaleMultiplier),
+			false,
+			MarkerIndex == 2,
+			true);
 	}
 }
