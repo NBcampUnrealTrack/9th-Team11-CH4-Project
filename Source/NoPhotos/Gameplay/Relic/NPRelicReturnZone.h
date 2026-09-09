@@ -16,6 +16,13 @@ class NOPHOTOS_API ANPRelicReturnZone : public AActor
 public:
 	ANPRelicReturnZone();
 
+	/** RelicBonus 이벤트가 생성한 반환 존에서만 제출 성공 연출을 허용합니다. */
+	void SetDeliveryEffectEnabled(bool bEnabled) { bDeliveryEffectEnabled = bEnabled; }
+
+	/** 이 반환 존에 제출할 때 최종 반환 점수에 적용할 배율입니다. */
+	UFUNCTION(BlueprintPure, Category="Relic|Delivery")
+	float GetReturnScoreMultiplier() const { return ReturnScoreMultiplier; }
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -28,6 +35,20 @@ protected:
 		bool bFromSweep,
 		const FHitResult& SweepResult);
 
+	/** 서버에서 유물 제출이 실제로 성공했을 때 각 클라이언트에서 호출됩니다. */
+	UFUNCTION(BlueprintImplementableEvent, Category="Relic|Delivery", meta=(DisplayName="On Relic Delivered"))
+	void BP_OnRelicDelivered(FVector DeliveryLocation);
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<UBoxComponent> ReturnVolume;
+
+	/** 1.0은 일반 점수, 1.5는 50% 추가, 2.0은 두 배 점수입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic|Delivery", meta=(ClampMin="0.0", UIMin="0.0"))
+	float ReturnScoreMultiplier = 1.0f;
+
+private:
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastNotifyRelicDelivered(FVector_NetQuantize10 DeliveryLocation);
+
+	bool bDeliveryEffectEnabled = false;
 };

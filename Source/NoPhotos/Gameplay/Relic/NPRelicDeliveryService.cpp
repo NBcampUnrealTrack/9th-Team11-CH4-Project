@@ -100,7 +100,14 @@ bool UNPRelicDeliveryService::TryDeliverRelic(
 		return false;
 	}
 
-	const int32 AwardedScore = CalculateReturnScore(Relic);
+	const int32 BaseReturnScore = CalculateReturnScore(Relic);
+	const double ScoreMultiplier = FMath::Max(
+		0.0,
+		static_cast<double>(ReturnZone->GetReturnScoreMultiplier()));
+	const int32 AwardedScore = static_cast<int32>(FMath::Clamp<int64>(
+		FMath::RoundToInt64(static_cast<double>(BaseReturnScore) * ScoreMultiplier),
+		0,
+		MAX_int32));
 	const int32 ScorePerOwner = AwardedScore / Owners.Num();
 	const int32 ScoreRemainder = AwardedScore % Owners.Num();
 	Ownership->ReleaseAllGrabbers();
@@ -134,11 +141,13 @@ bool UNPRelicDeliveryService::TryDeliverRelic(
 	UE_LOG(
 		LogNoPhotos,
 		Log,
-		TEXT("[RelicDelivery] Relic returned. Relic=%s OwnerCount=%d BasePrice=%d PhotoPenalty=%d TotalScore=%d"),
+		TEXT("[RelicDelivery] Relic returned. Relic=%s OwnerCount=%d BasePrice=%d PhotoPenalty=%d ReturnScore=%d ZoneMultiplier=%.2f TotalScore=%d"),
 		*GetNameSafe(Relic),
 		Owners.Num(),
 		Relic->GetBasePrice(),
 		Relic->GetAccumulatedPhotoPenalty(),
+		BaseReturnScore,
+		ScoreMultiplier,
 		AwardedScore);
 	return true;
 }
