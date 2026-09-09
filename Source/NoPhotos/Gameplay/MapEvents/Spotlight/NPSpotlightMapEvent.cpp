@@ -147,9 +147,12 @@ void ANPSpotlightMapEvent::SpawnSpotlights()
 	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	for (const ANPMapEventSpawnPoint* Point : Points)
 	{
+		FTransform SpawnTransform = Point->GetActorTransform();
+		SpawnTransform.SetScale3D(FVector::OneVector);
 		if (ANPEventSpotlight* Light = GetWorld()->SpawnActor<ANPEventSpotlight>(
-			SpotlightClass, Point->GetActorTransform(), SpawnParameters))
+			SpotlightClass, SpawnTransform, SpawnParameters))
 		{
+			Light->SetBeamScaleMultiplier(Point->GetActorScale3D());
 			SpawnedSpotlights.Add(Light);
 		}
 	}

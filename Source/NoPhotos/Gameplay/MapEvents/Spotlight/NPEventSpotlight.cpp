@@ -3,10 +3,14 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SpotLightComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/GameStateBase.h"
 #include "Gameplay/Character/NPStablePhysicsPawn.h"
+#include "Net/UnrealNetwork.h"
 #include "NPSpotlightMapEvent.h"
+#include "UObject/ConstructorHelpers.h"
 
 ANPEventSpotlight::ANPEventSpotlight()
 {
@@ -24,14 +28,82 @@ ANPEventSpotlight::ANPEventSpotlight()
 	Spotlight->SetInnerConeAngle(18.0f);
 	Spotlight->SetOuterConeAngle(22.0f);
 	Spotlight->SetIntensity(100000.0f);
+	Spotlight->SetVolumetricScatteringIntensity(0.0f);
 	Spotlight->SetVisibility(false);
+
+	BeamMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BeamMesh"));
+	BeamMesh->SetupAttachment(Spotlight);
+	BeamMesh->SetRelativeScale3D(FVector(4.038712, 4.038712, 16.446335));
+	BeamMesh->SetMobility(EComponentMobility::Movable);
+	BeamMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	BeamMesh->SetGenerateOverlapEvents(false);
+	BeamMesh->SetCanEverAffectNavigation(false);
+	BeamMesh->SetCastShadow(false);
+	BeamMesh->SetVisibility(false);
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> BeamAsset(
+		TEXT("/Game/NoPhotos/Blueprints/MapDesign/Light/S_SpotLight.S_SpotLight"));
+	BeamMesh->SetStaticMesh(BeamAsset.Object);
+}
+
+void ANPEventSpotlight::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	UpdateBeamGeometry();
+}
+
+void ANPEventSpotlight::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ANPEventSpotlight, BeamScaleMultiplier);
+}
+
+void ANPEventSpotlight::SetBeamScaleMultiplier(const FVector& Multiplier)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	BeamScaleMultiplier = Multiplier;
+	OnRep_BeamScaleMultiplier();
+	ForceNetUpdate();
+}
+
+void ANPEventSpotlight::OnRep_BeamScaleMultiplier()
+{
+	if (HasActorBegunPlay())
+	{
+		BeamMesh->SetRelativeScale3D(InitialBeamScale * BeamScaleMultiplier);
+		UpdateBeamGeometry();
+	}
+}
+
+void ANPEventSpotlight::UpdateBeamGeometry()
+{
+	const UStaticMesh* Mesh = BeamMesh->GetStaticMesh();
+	if (!Mesh)
+	{
+		return;
+	}
+
+	const FBoxSphereBounds Bounds = Mesh->GetBounds();
+	const FVector Scale = BeamMesh->GetRelativeScale3D();
+	// S_SpotLight의 위쪽 끝을 광원에 맞추고 아래 방향을 조명의 로컬 +X축으로 돌립니다.
+	const FQuat Rotation = FRotator(90.0f, 0.0f, 0.0f).Quaternion();
+	const FVector MeshTip(Bounds.Origin.X, Bounds.Origin.Y, Bounds.Origin.Z + Bounds.BoxExtent.Z);
+	BeamMesh->SetRelativeTransform(FTransform(Rotation, -Rotation.RotateVector(MeshTip * Scale), Scale));
 }
 
 void ANPEventSpotlight::BeginPlay()
 {
 	Super::BeginPlay();
 	InitialLightRotation = Spotlight->GetRelativeRotation().Quaternion();
+	Spotlight->SetVolumetricScatteringIntensity(0.0f);
 	Spotlight->SetVisibility(false);
+	BeamMesh->SetVisibility(false);
+	InitialBeamScale = BeamMesh->GetRelativeScale3D();
+	BeamMesh->SetRelativeScale3D(InitialBeamScale * BeamScaleMultiplier);
+	UpdateBeamGeometry();
 	SetActorTickEnabled(!HasAuthority());
 }
 
@@ -56,6 +128,7 @@ void ANPEventSpotlight::Tick(const float DeltaSeconds)
 void ANPEventSpotlight::UpdateBeam(const float ElapsedSeconds, const bool bActive)
 {
 	Spotlight->SetVisibility(bActive);
+	BeamMesh->SetVisibility(bActive && GetNetMode() != NM_DedicatedServer);
 	if (!bActive)
 	{
 		return;

@@ -6,6 +6,11 @@
    - `Spotlight` 컴포넌트에서 밝기, 색, `Attenuation Radius`, 안쪽/바깥쪽 원뿔 각도를 설정한다.
    - 기본 조사 방향은 아래쪽이다. `Sweep Angle`은 좌우 최대 기울기(기본 25도), `Sweep Period`는 왕복 시간(기본 8초)이다.
    - 필요하면 조명 외형 메시를 BP에 추가한다. 위치와 조사 방향의 기준은 스폰 포인트 Transform이다.
+   - `BeamMesh`에는 기존 `S_SpotLight` 메시와 메시의 기본 `MI_SpotLight` 머티리얼이 연결된다. 별도로 빛기둥을 추가할 필요가 없다.
+   - 빛기둥 기본 크기는 조명 BP의 `BeamMesh → Transform → Scale`에서 조절한다. 코드가 설정한 스케일을 덮어쓰지 않는다. 조명 BP를 레벨에 직접 배치한 경우에도 인스턴스별로 수정할 수 있다.
+   - 이벤트로 생성되는 빛기둥 메시 크기는 각 `SpawnPoint → Transform → Scale`로 조절한다. `(1,1,1)`은 BP 기본 메시 크기이며 X/Y는 메시 폭, Z는 길이의 배율이다. 포인트 스케일은 메시의 로컬 축 기준으로 적용되고 클라이언트에도 복제된다.
+   - 실제 조명 액터는 항상 Scale `(1,1,1)`로 생성한다. 모든 위치에서 같은 BP의 `Attenuation Radius`와 원뿔 각도를 사용하며, 포인트 스케일은 실제 조명 및 가격 판정 범위를 변경하지 않는다. 머티리얼은 `BeamMesh`의 Materials에서 지정한다.
+   - 실행 시 이 조명의 `Volumetric Scattering Intensity`는 0으로 설정한다. 빛기둥은 메시로 표시하므로 Volumetric Fog 격자 해상도를 높이지 않아도 된다. 프로젝트 전체 Fog 설정은 변경하지 않는다.
 2. `NPSpotlightMapEvent`를 부모로 이벤트 BP를 만들고 `Spotlight Class`에 조명 BP를 지정한다.
    - `Location Source`: Point
    - `Spotlight Spawn Group`: Spotlight
@@ -34,6 +39,7 @@
 - 이 밝기 변경은 서버와 각 클라이언트에서 적용한다. RectLight의 Mobility는 런타임 밝기 변경이 가능한 Stationary 또는 Movable로 설정해야 한다. 액터 이름은 사용하지 않으므로 메인 레벨에 RectLight를 추가하면 함께 적용된다.
 - 모든 지정 포인트에서 조명을 생성한 뒤 그중 한 개만 균등 추첨해 켠다. 직전에 켜졌던 조명이 다시 선택될 수 있다.
 - 조명의 위치는 고정하며, 조사 방향만 서버 시간 기준으로 회전한다.
+- `S_SpotLight` 빛기둥은 조명과 함께 회전하고 활성 조명에서만 표시된다. 메시의 충돌과 그림자는 비활성화하며 유물 판정에는 사용하지 않는다.
 - 10초 점등 후 2초간 모두 끄고 다시 한 개를 선택한다. 이 2초는 Definition의 이벤트 후딜레이와 별개다.
 - 서버는 매 프레임 캐릭터의 실제 오른손 그랩 대상과 조사 범위를 확인한다.
 - 조사 범위는 Unreal의 `USpotLightComponent::AffectsBounds`로 물리 Pawn 루트의 Bounds와 원뿔·거리 범위의 교차를 확인한다. 실제 메시 표면 단위의 판정은 아니므로 경계에 Bounds만 걸쳐도 대상이 될 수 있다.
