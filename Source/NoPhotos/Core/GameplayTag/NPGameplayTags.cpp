@@ -24,6 +24,12 @@ namespace NPGameplayTags
 		"State.CrowdControl.Stunned");
 	UE_DEFINE_GAMEPLAY_TAG(Effect_Knockback, "Effect.Knockback");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Impact, "GameplayCue.Impact");
+	UE_DEFINE_GAMEPLAY_TAG(
+		GameplayCue_Relic_Aimable_Fire,
+		"GameplayCue.Relic.Aimable.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(
+		GameplayCue_Relic_Aimable_Impact,
+		"GameplayCue.Relic.Aimable.Impact");
 	UE_DEFINE_GAMEPLAY_TAG(State_Invisible, "State.Invisible");
 	UE_DEFINE_GAMEPLAY_TAG(State_VisionRestricted, "State.VisionRestricted");
 	UE_DEFINE_GAMEPLAY_TAG(State_ControlsMirrored, "State.ControlsMirrored");

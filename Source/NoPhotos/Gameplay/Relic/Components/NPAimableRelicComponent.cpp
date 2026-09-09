@@ -13,11 +13,7 @@
 #include "Gameplay/Relic/Projectile/NPAimableRelicVisualProjectile.h"
 #include "GameplayEffect.h"
 #include "GameFramework/Actor.h"
-#include "Kismet/GameplayStatics.h"
-#include "NiagaraFunctionLibrary.h"
-#include "NiagaraSystem.h"
 #include "NoPhotos.h"
-#include "Sound/SoundBase.h"
 
 UNPAimableRelicComponent::UNPAimableRelicComponent()
 {
@@ -60,7 +56,14 @@ bool UNPAimableRelicComponent::TryFire(
 	{
 		return false;
 	}
-	MulticastPlayMuzzleEffect();
+	FGameplayCueParameters FireCueParameters;
+	FireCueParameters.Location = GetMuzzleTransform().GetLocation();
+	FireCueParameters.Normal = AimDirection;
+	FireCueParameters.Instigator = ShooterPawn;
+	FireCueParameters.EffectCauser = Relic;
+	SourceAbilitySystem->ExecuteGameplayCue(
+		NPGameplayTags::GameplayCue_Relic_Aimable_Fire,
+		FireCueParameters);
 
 	const FVector TraceEnd = TraceStart
 		+ AimDirection * FMath::Max(AimSettings.MaximumRange, 1.0f);
@@ -145,6 +148,19 @@ bool UNPAimableRelicComponent::TryFire(
 		bPrimaryHit ? TEXT("true") : TEXT("false"),
 		bAssistedHit ? TEXT("true") : TEXT("false"));
 	MulticastSpawnVisualProjectile(VisualStart, VisualEnd);
+	if (bPrimaryHit || bAssistedHit)
+	{
+		FGameplayEffectContextHandle ImpactContext =
+			SourceAbilitySystem->MakeEffectContext();
+		ImpactContext.AddInstigator(ShooterPawn, Relic);
+		ImpactContext.AddHitResult(Hit, true);
+		FGameplayCueParameters ImpactCueParameters(ImpactContext);
+		ImpactCueParameters.Location = Hit.ImpactPoint;
+		ImpactCueParameters.Normal = Hit.ImpactNormal;
+		SourceAbilitySystem->ExecuteGameplayCue(
+			NPGameplayTags::GameplayCue_Relic_Aimable_Impact,
+			ImpactCueParameters);
+	}
 
 	if (bPrimaryHit && !IsValid(TargetPawn))
 	{
@@ -364,38 +380,6 @@ bool UNPAimableRelicComponent::TryFindAssistedPlayer(
 	}
 
 	return BestScore < TNumericLimits<float>::Max();
-}
-
-void UNPAimableRelicComponent::MulticastPlayMuzzleEffect_Implementation()
-{
-	AActor* Relic = GetOwner();
-	USceneComponent* RelicMesh = Relic
-		? Cast<USceneComponent>(Relic->GetRootComponent())
-		: nullptr;
-	if (!IsValid(RelicMesh))
-	{
-		return;
-	}
-
-	if (IsValid(MuzzleEffect))
-	{
-		UNiagaraFunctionLibrary::SpawnSystemAttached(
-			MuzzleEffect,
-			RelicMesh,
-			MuzzleSocketName,
-			FVector::ZeroVector,
-			FRotator::ZeroRotator,
-			EAttachLocation::SnapToTarget,
-			true);
-	}
-
-	if (IsValid(MuzzleSound))
-	{
-		UGameplayStatics::PlaySoundAtLocation(
-			this,
-			MuzzleSound,
-			GetMuzzleTransform().GetLocation());
-	}
 }
 
 void UNPAimableRelicComponent::MulticastSpawnVisualProjectile_Implementation(

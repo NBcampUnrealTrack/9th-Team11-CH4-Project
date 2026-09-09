@@ -33,6 +33,10 @@ namespace NPGameplayTags
 	/** 수평면 이동(W/S, A/D)을 반전합니다. 시점과 점프 입력은 유지합니다. */
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_ControlsMirrored);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Impact);
+	/** 조준 유물 발사 순간의 총구 연출입니다. */
+	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Relic_Aimable_Fire);
+	/** 조준 유물 발사체가 Trace 대상에 적중한 순간의 연출입니다. */
+	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Relic_Aimable_Impact);
 	/** 빙의 중 캐릭터 주변에 표시할 지속형 GameplayCue입니다. */
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Status_ControlReversal);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Status_LavaBurning);

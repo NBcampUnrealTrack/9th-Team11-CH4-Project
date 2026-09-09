@@ -7,8 +7,6 @@ class ANPReplicatedStablePhysicsPawn;
 class ANPAimableRelicVisualProjectile;
 class UAbilitySystemComponent;
 class UGameplayEffect;
-class UNiagaraSystem;
-class USoundBase;
 class UWorld;
 
 USTRUCT(BlueprintType)
@@ -70,10 +68,6 @@ protected:
 	bool TryConsumeFireCooldown();
 	FTransform GetMuzzleTransform() const;
 
-	/** 서버가 승인한 발사를 모든 클라이언트의 총구에서 재생합니다. */
-	UFUNCTION(NetMulticast, Unreliable)
-	void MulticastPlayMuzzleEffect();
-
 	/** 서버 Trace의 총구 시작점과 종료점을 각 클라이언트의 로컬 장식 투사체로 재생합니다. */
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastSpawnVisualProjectile(
@@ -91,14 +85,6 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Aimable Relic", meta=(AllowPrivateAccess="true"))
 	FNPRelicAimSettings AimSettings;
-
-	/** BP 조준 유물에서 할당할 단발성 총구 Niagara System입니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Aimable Relic|Effects", meta=(AllowPrivateAccess="true"))
-	TObjectPtr<UNiagaraSystem> MuzzleEffect;
-
-	/** BP 조준 유물에서 할당할 단발성 발사 Sound입니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Aimable Relic|Effects", meta=(AllowPrivateAccess="true"))
-	TObjectPtr<USoundBase> MuzzleSound;
 
 	/** RelicMesh에 생성한 총구 Socket 이름입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Aimable Relic|Effects", meta=(AllowPrivateAccess="true"))
