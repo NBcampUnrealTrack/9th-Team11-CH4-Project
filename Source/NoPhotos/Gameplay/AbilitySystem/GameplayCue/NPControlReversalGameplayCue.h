@@ -16,6 +16,8 @@ public:
 	ANPControlReversalGameplayCue();
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void Tick(float DeltaSeconds) override;
+	void SetManagedScaleMultiplier(float ScaleMultiplier);
+	void CompleteManagedRemoval();
 
 protected:
 	virtual bool WhileActive_Implementation(
@@ -54,4 +56,5 @@ private:
 	void UpdateGhostTransforms();
 
 	float OrbitAngle = 0.0f;
+	float ScaleMultiplier = 1.0f;
 };

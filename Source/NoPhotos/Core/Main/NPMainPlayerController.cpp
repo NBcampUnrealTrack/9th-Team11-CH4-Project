@@ -2,8 +2,10 @@
 
 #include "Core/Main/NPMainGameMode.h"
 #include "Core/Main/NPMainGameState.h"
+#include "Core/NPPlayerState.h"
 #include "Core/GameplayTag/NPGameplayTags.h"
 #include "Core/Chat/NPChatComponent.h"
+#include "Core/Room/NPRoomCheatManager.h"
 #include "Core/Room/NPRoomSubsystem.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/PrimitiveComponent.h"
@@ -42,6 +44,7 @@ ANPMainPlayerController::ANPMainPlayerController()
 	PhotoCaptureComponent = CreateDefaultSubobject<UNPPhotoCaptureComponent>(TEXT("PhotoCaptureComponent"));
 	PhotoTransferComponent = CreateDefaultSubobject<UNPPhotoTransferComponent>(TEXT("PhotoTransferComponent"));
 	ChatComponent = CreateDefaultSubobject<UNPChatComponent>(TEXT("ChatComponent"));
+	CheatClass = UNPRoomCheatManager::StaticClass();
 
 	static ConstructorHelpers::FObjectFinder<UInputMappingContext>
 	DefaultMapping(TEXT("/Game/Input/IMC_Default.IMC_Default"));
@@ -88,6 +91,26 @@ ANPMainPlayerController::ANPMainPlayerController()
 	{
 		FireAction = LegacyPhotoShotAction.Object;
 	}
+}
+
+void ANPMainPlayerController::ServerAddCheatPoint_Implementation()
+{
+#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+	if (ANPPlayerState* NPPlayerState = GetPlayerState<ANPPlayerState>())
+	{
+		NPPlayerState->AddScore(100);
+	}
+#endif
+}
+
+void ANPMainPlayerController::ServerRemoveCheatPoint_Implementation()
+{
+#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+	if (ANPPlayerState* NPPlayerState = GetPlayerState<ANPPlayerState>())
+	{
+		NPPlayerState->AddScore(-100);
+	}
+#endif
 }
 
 void ANPMainPlayerController::NPTestLockGrab()
