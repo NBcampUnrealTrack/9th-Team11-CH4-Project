@@ -20,6 +20,7 @@ class UNPStablePhysicsDebugComponent;
 class UNPStablePhysicsGrabComponent;
 class UNPStablePhysicsMovementComponent;
 class UNPScanComponent;
+class UNPFootstepComponent;
 struct FNPRelicSwingSettings;
 struct FInputActionValue;
 
@@ -43,6 +44,7 @@ public:
 	virtual void SetExternalVerticalVelocity(float VerticalVelocity);
 	/** 캐릭터 설정에 따라 일시적인 래그돌과 골반 직립 복구를 시작합니다. */
 	virtual void StartTemporaryRagdoll();
+	bool IsTemporaryRagdollOrRecovering() const { return bTemporaryRagdollActive || bTemporaryRagdollRecoveryActive; }
 	bool BeginRelicSwing(const FNPRelicSwingSettings& Settings);
 	void EndRelicSwing();
 
@@ -90,6 +92,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Components")
 	UNPStablePhysicsGrabComponent* GetRightHandGrabComponent() const { return RightHandGrab; }
+
+	UFUNCTION(BlueprintPure, Category="Components")
+	UNPFootstepComponent* GetFootstepComponent() const { return FootstepComponent; }
 
 	UFUNCTION(BlueprintPure, Category="Animation")
 	float GetAnimationGroundSpeed() const;
@@ -168,6 +173,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	UNPScanComponent* ScanComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	TObjectPtr<UNPFootstepComponent> FootstepComponent;
 
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* MoveAction;

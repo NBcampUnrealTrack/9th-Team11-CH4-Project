@@ -23,6 +23,7 @@
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsMovementComponent.h"
 #include "Gameplay/Character/Component/NPScanComponent.h"
+#include "Gameplay/Character/Component/NPFootstepComponent.h"
 #include "Gameplay/AbilitySystem/NPAbilitySystemComponent.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Gameplay/Relic/Components/NPScanOutlineComponent.h"
@@ -67,6 +68,7 @@ ANPStablePhysicsPawn::ANPStablePhysicsPawn()
 
 	ScanComponent = CreateDefaultSubobject<UNPScanComponent>(TEXT("ScanComponent"));
 	ScanComponent->SetupAttachment(FollowCamera);
+	FootstepComponent = CreateDefaultSubobject<UNPFootstepComponent>(TEXT("FootstepComponent"));
 
 	PhysicalAnimation = CreateDefaultSubobject<UPhysicalAnimationComponent>(TEXT("PhysicalAnimation"));
 	PhysicsControl = CreateDefaultSubobject<UPhysicsControlComponent>(TEXT("PhysicsControl"));
