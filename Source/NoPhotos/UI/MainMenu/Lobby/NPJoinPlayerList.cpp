@@ -134,6 +134,7 @@ void UNPJoinPlayerList::RefreshPlayerList()
         }
 
 		PlayerWidgets.Add(PlayerState, JoinPlayerWidget);
+		OnPlayerListChanged.Broadcast();
 		const float JoinAnimationDelay = bInitialPlayerPopulationComplete ? 0.0f : InitialJoinAnimationIndex++ * InitialJoinAnimationInterval;
 		JoinPlayerWidget->PlayJoinAnimation(JoinAnimationDelay);
     }
@@ -155,6 +156,7 @@ void UNPJoinPlayerList::RefreshPlayerList()
     }
 
 	bInitialPlayerPopulationComplete = true;
+	bool bPlayerRemoved = false;
     for (auto PlayerWidgetIterator = PlayerWidgets.CreateIterator(); PlayerWidgetIterator; ++PlayerWidgetIterator)
     {
     	if (CurrentPlayerStates.Contains(PlayerWidgetIterator.Key()))
@@ -174,6 +176,12 @@ void UNPJoinPlayerList::RefreshPlayerList()
 			}
 		}
 		PlayerWidgetIterator.RemoveCurrent();
+		bPlayerRemoved = true;
+	}
+
+	if (bPlayerRemoved)
+	{
+		OnPlayerListChanged.Broadcast();
 	}
 
     World->GetTimerManager().ClearTimer(PlayerNameRefreshTimer);

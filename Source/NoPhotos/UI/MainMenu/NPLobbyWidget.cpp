@@ -1,10 +1,14 @@
 #include "UI/MainMenu/NPLobbyWidget.h"
 
+#include "Animation/WidgetAnimation.h"
+#include "Components/Border.h"
 #include "Components/Button.h"
 #include "Core/Chat/NPChatComponent.h"
 #include "Core/Room/NPRoomGameState.h"
 #include "Core/Room/NPRoomPlayerController.h"
 #include "InputCoreTypes.h"
+#include "TimerManager.h"
+#include "UI/MainMenu/Lobby/NPJoinPlayerList.h"
 
 UNPLobbyWidget::UNPLobbyWidget(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
@@ -34,6 +38,13 @@ void UNPLobbyWidget::NativeConstruct()
 		RoomGameState->OnRoomStateChanged.AddDynamic(this, &UNPLobbyWidget::OnRoomStateChanged);
 	}
 
+	if (IsValid(JoinPlayerListWidget))
+	{
+		JoinPlayerListWidget->OnPlayerListChanged.AddUObject(this, &UNPLobbyWidget::OnPlayerListChanged);
+	}
+
+	OnPlayerListChanged();
+
 	RefreshStartButtonVisibility();
 }
 
@@ -53,8 +64,28 @@ FReply UNPLobbyWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry, const
 	return Super::NativeOnPreviewKeyDown(InGeometry, InKeyEvent);
 }
 
+FReply UNPLobbyWidget::NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	const bool bIsMouseOver = IsValid(JoinPlayerHoverArea)
+		&& JoinPlayerHoverArea->GetCachedGeometry().IsUnderLocation(InMouseEvent.GetScreenSpacePosition());
+	UpdateJoinPlayerAreaHover(bIsMouseOver);
+
+	return Super::NativeOnMouseMove(InGeometry, InMouseEvent);
+}
+
+void UNPLobbyWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
+{
+	Super::NativeOnMouseLeave(InMouseEvent);
+	UpdateJoinPlayerAreaHover(false);
+}
+
 void UNPLobbyWidget::NativeDestruct()
 {
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(PlayerListCollapseTimer);
+	}
+
 	if (BoundRoomGameState.IsValid())
 	{
 		BoundRoomGameState->OnRoomStateChanged.RemoveDynamic(this, &UNPLobbyWidget::OnRoomStateChanged);
@@ -68,6 +99,11 @@ void UNPLobbyWidget::NativeDestruct()
 	if (IsValid(LeaveButton))
 	{
 		LeaveButton->OnClicked.RemoveAll(this);
+	}
+
+	if (IsValid(JoinPlayerListWidget))
+	{
+		JoinPlayerListWidget->OnPlayerListChanged.RemoveAll(this);
 	}
 
 	BoundRoomGameState.Reset();
@@ -93,6 +129,65 @@ void UNPLobbyWidget::RefreshStartButtonVisibility()
 void UNPLobbyWidget::OnRoomStateChanged()
 {
 	RefreshStartButtonVisibility();
+}
+
+void UNPLobbyWidget::OnPlayerListChanged()
+{
+	bIsPlayerListStable = false;
+	ExpandPlayerList();
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			PlayerListCollapseTimer,
+			this,
+			&UNPLobbyWidget::HandlePlayerListBecameStable,
+			PlayerListStableDelay,
+			false);
+	}
+}
+
+void UNPLobbyWidget::HandlePlayerListBecameStable()
+{
+	bIsPlayerListStable = true;
+	if (!bIsMouseOverJoinPlayerArea)
+	{
+		CollapsePlayerList();
+	}
+}
+
+void UNPLobbyWidget::UpdateJoinPlayerAreaHover(const bool bIsMouseOver)
+{
+	if (bIsMouseOverJoinPlayerArea == bIsMouseOver)
+	{
+		return;
+	}
+
+	bIsMouseOverJoinPlayerArea = bIsMouseOver;
+	if (bIsMouseOverJoinPlayerArea)
+	{
+		ExpandPlayerList();
+	}
+	else if (bIsPlayerListStable)
+	{
+		CollapsePlayerList();
+	}
+}
+
+void UNPLobbyWidget::ExpandPlayerList()
+{
+	if (IsValid(JoinPlayers_Collapse))
+	{
+		PlayAnimationReverse(JoinPlayers_Collapse);
+	}
+}
+
+void UNPLobbyWidget::CollapsePlayerList()
+{
+	if (IsValid(JoinPlayers_Collapse))
+	{
+		PlayAnimation(JoinPlayers_Collapse);
+	}
 }
 
 void UNPLobbyWidget::OnStartButtonClicked()

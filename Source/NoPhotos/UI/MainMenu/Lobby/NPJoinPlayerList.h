@@ -9,11 +9,16 @@ class UNPJoinPlayer;
 class ANPRoomGameState;
 class APlayerState;
 
+DECLARE_MULTICAST_DELEGATE(FNPOnJoinPlayerListChanged);
+
 UCLASS()
 class NOPHOTOS_API UNPJoinPlayerList : public UNPUserWidget
 {
 	GENERATED_BODY()
 	
+public:
+	FNPOnJoinPlayerListChanged OnPlayerListChanged;
+
 protected:
 	virtual void NativeConstruct() override;
     virtual void NativeDestruct() override;
