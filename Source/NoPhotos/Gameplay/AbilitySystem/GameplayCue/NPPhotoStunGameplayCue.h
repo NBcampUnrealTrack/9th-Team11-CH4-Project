@@ -1,14 +1,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Gameplay/AbilitySystem/GameplayCue/NPAttachedGameplayCueActor.h"
+#include "Gameplay/AbilitySystem/GameplayCue/NPStatusVisualGameplayCue.h"
 #include "NPPhotoStunGameplayCue.generated.h"
 
 class UInstancedStaticMeshComponent;
 
 /** 사진 스턴 상태 동안 캐릭터 머리 위에서 표시물 세 개가 회전합니다. */
 UCLASS(Blueprintable)
-class NOPHOTOS_API ANPPhotoStunGameplayCue : public ANPAttachedGameplayCueActor
+class NOPHOTOS_API ANPPhotoStunGameplayCue : public ANPStatusVisualGameplayCue
 {
 	GENERATED_BODY()
 
@@ -16,15 +16,11 @@ public:
 	ANPPhotoStunGameplayCue();
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void Tick(float DeltaSeconds) override;
-	void SetManagedScaleMultiplier(float ScaleMultiplier);
-	void CompleteManagedRemoval();
 
 protected:
-	virtual bool WhileActive_Implementation(
-		AActor* Target, const FGameplayCueParameters& Parameters) override;
-	virtual bool OnRemove_Implementation(
-		AActor* Target, const FGameplayCueParameters& Parameters) override;
-	virtual bool Recycle() override;
+	virtual void PrepareVisual() override;
+	virtual void ResetVisual() override;
+	virtual void ApplyVisualScale() override;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Photo|Stun Visual")
 	TObjectPtr<UInstancedStaticMeshComponent> MarkerMesh;
@@ -45,6 +41,4 @@ protected:
 private:
 	void RebuildMarkerInstances();
 	void UpdateMarkerInstances();
-
-	float ScaleMultiplier = 1.0f;
 };
