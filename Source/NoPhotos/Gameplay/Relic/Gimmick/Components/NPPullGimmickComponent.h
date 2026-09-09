@@ -59,7 +59,7 @@ private:
 	UPROPERTY(
 		EditAnywhere,
 		Category="Pull Gimmick",
-		meta=(ToolTip="World Space 기준의 당김 방향입니다."))
+		meta=(ToolTip="World Space 기준의 당김 방향입니다. (0, 0, 0)이면 모든 방향의 힘 크기로 판정합니다."))
 	FVector PullDirection = FVector::UpVector;
 
 	UPROPERTY(EditAnywhere, Category="Pull Gimmick", meta=(ClampMin="0.0"))
