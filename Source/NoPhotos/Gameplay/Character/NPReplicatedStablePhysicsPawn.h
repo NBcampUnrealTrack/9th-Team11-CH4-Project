@@ -62,6 +62,9 @@ public:
 	UFUNCTION(BlueprintPure, Category="Photo|Penalty")
 	bool IsPhotoStunned() const;
 
+	/** 스턴 진입 시 누르고 있던 Grab 요청과 로컬 예측 상태를 즉시 해제합니다. */
+	void CancelGrabForPhotoStun();
+
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;

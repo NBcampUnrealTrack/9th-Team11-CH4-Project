@@ -496,6 +496,7 @@ void ANPReplicatedStablePhysicsPawn::ApplyRightHandState(bool bActive)
 {
 	if (bActive && IsPhotoStunned())
 	{
+		CancelGrabForPhotoStun();
 		return;
 	}
 
@@ -676,6 +677,31 @@ bool ANPReplicatedStablePhysicsPawn::IsPhotoStunned() const
 	return IsValid(AbilitySystem)
 		&& AbilitySystem->HasMatchingGameplayTag(
 			NPGameplayTags::State_CrowdControl_Stunned);
+}
+
+void ANPReplicatedStablePhysicsPawn::CancelGrabForPhotoStun()
+{
+#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+	bDebugGrabLocked = false;
+	bDebugGrabWasConfirmed = false;
+#endif
+
+	bLocalRightHandActive = false;
+	bAwaitingServerGrabConfirmation = false;
+	LocalGrabPredictionTimeRemaining = 0.0f;
+	SetRightHandVisualState(false);
+	ClearRightHandIKWorldTarget();
+	RightHandGrab->SetGameplayNotificationsEnabled(true);
+	RightHandGrab->SetGrabRequested(false);
+
+	if (HasAuthority())
+	{
+		SetServerRightHandState(false);
+	}
+	else if (IsLocallyControlled())
+	{
+		ServerSetRightHandActive(false);
+	}
 }
 
 void ANPReplicatedStablePhysicsPawn::OnRep_RightHandActive()
