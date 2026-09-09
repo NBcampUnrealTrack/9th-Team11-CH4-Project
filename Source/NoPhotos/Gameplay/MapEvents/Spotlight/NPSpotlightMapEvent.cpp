@@ -1,7 +1,10 @@
 #include "NPSpotlightMapEvent.h"
 
+#include "AbilitySystemBlueprintLibrary.h"
+#include "AbilitySystemComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/RectLightComponent.h"
+#include "Core/GameplayTag/NPGameplayTags.h"
 #include "Engine/RectLight.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -261,7 +264,15 @@ void ANPSpotlightMapEvent::UpdatePriceBonuses(const float Now)
 		const float* LastBonusTime = LastRelicBonusTimes.Find(RelicKey);
 		if (!LastBonusTime || Exposure.NextBonusTime + KINDA_SMALL_NUMBER >= *LastBonusTime + Interval)
 		{
-			Relic->AddPriceBonus(BonusRate);
+			if (Relic->AddPriceBonus(BonusRate))
+			{
+				if (UAbilitySystemComponent* AbilitySystem =
+					UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Pawn))
+				{
+					AbilitySystem->ExecuteGameplayCue(
+						NPGameplayTags::GameplayCue_MapEvent_Spotlight_PriceBonus);
+				}
+			}
 			LastRelicBonusTimes.Add(RelicKey, Exposure.NextBonusTime);
 		}
 		Exposure.NextBonusTime += Interval;

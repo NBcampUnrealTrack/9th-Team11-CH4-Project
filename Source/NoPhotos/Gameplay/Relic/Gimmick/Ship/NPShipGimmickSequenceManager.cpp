@@ -46,22 +46,27 @@ void ANPShipGimmickSequenceManager::EndPlay(const EEndPlayReason::Type EndPlayRe
 
 void ANPShipGimmickSequenceManager::HandleGimmickActivated(ANPShipGimmickBase* ActivatedGimmick)
 {
-	if (!HasAuthority() || bSequenceCompleted || !GimmickSequence.IsValidIndex(CurrentStep))
+	if (!HasAuthority() || bSequenceCompleted || !IsValid(ActivatedGimmick))
 	{
 		return;
 	}
 
-	if (ActivatedGimmick != GimmickSequence[CurrentStep])
+	if (!GimmickSequence.Contains(ActivatedGimmick))
 	{
-		ResetSequence();
 		return;
 	}
 
-	++CurrentStep;
+	if (CompletedGimmicks.Contains(ActivatedGimmick))
+	{
+		return;
+	}
+
+	CompletedGimmicks.Add(ActivatedGimmick);
+	CurrentStep = CompletedGimmicks.Num();
 	OnProgressed.Broadcast(CurrentStep, GimmickSequence.Num());
 	ReceiveSequenceProgressed(CurrentStep, GimmickSequence.Num());
 
-	if (CurrentStep == GimmickSequence.Num())
+	if (CurrentStep >= GimmickSequence.Num())
 	{
 		bSequenceCompleted = true;
 		SpawnSequenceTreasure();
@@ -97,6 +102,7 @@ void ANPShipGimmickSequenceManager::ResetSequence()
 	}
 
 	CurrentStep = 0;
+	CompletedGimmicks.Empty();
 	for (ANPShipGimmickBase* Gimmick : GimmickSequence)
 	{
 		if (IsValid(Gimmick))

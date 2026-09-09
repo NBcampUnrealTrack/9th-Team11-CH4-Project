@@ -33,6 +33,12 @@ public:
 	UFUNCTION(Exec)
 	void Out(const FString& Command);
 
+	UFUNCTION(Exec)
+	void Add(const FString& Command);
+
+	UFUNCTION(Exec)
+	void Remove(const FString& Command);
+
 private:
 	UNPRoomPlayerComponent* GetRoomComponent() const;
 };
