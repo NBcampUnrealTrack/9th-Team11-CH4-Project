@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Gameplay/Relic/Components/NPUsableRelicComponent.h"
+#include "GameplayTagContainer.h"
 #include "NPSwingableRelicComponent.generated.h"
 
 class UAbilitySystemComponent;
@@ -50,6 +51,9 @@ struct NOPHOTOS_API FNPRelicSwingSettings
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Swing|Knockback")
 	TSubclassOf<UGameplayEffect> KnockbackEffectClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Swing|Effects", meta=(Categories="GameplayCue"))
+	FGameplayTag ImpactCueTag;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Swing|Knockback", meta=(ClampMin="0.0", Units="cm/s"))
 	float KnockbackStrength = 1000.0f;
