@@ -48,6 +48,10 @@ public:
 	UFUNCTION(BlueprintPure, Category="Room Generation")
 	bool HasGenerationFailed() const { return bGenerationFailed; }
 
+	/** Current room-generation progress in the normalized 0.0-1.0 range. */
+	UFUNCTION(BlueprintPure, Category="Room Generation")
+	float GetGenerationProgress() const;
+
 	const TArray<FNPRoomInstanceInfo>& GetGeneratedRooms() const
 	{
 		return GeneratedRooms;

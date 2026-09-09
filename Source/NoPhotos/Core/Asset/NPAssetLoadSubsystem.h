@@ -60,6 +60,7 @@ public:
 
 	int32 GetActiveSoftPathRequestCount() const { return ActiveSoftPathRequests.Num(); }
 	bool IsSoftPathRequestActive(FNPAssetLoadRequestId RequestId) const;
+	float GetSoftPathRequestProgress(FNPAssetLoadRequestId RequestId) const;
 
 	/** Called automatically before map load; public for deterministic automation testing. */
 	void AdvanceWorldGeneration();

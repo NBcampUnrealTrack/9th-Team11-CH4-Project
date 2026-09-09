@@ -9,7 +9,10 @@
 class ANPMainGameState;
 class UHorizontalBox;
 class UProgressBar;
-class UTexture2D;
+class USizeBox;
+class UUserWidget;
+class UWidget;
+class UWidgetAnimation;
 
 
 UCLASS()
@@ -32,9 +35,8 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UHorizontalBox> EventMarkerBox;
 
-	//마크랑 이벤트 타이밍 맞춘다고 이것저것 좀 추가했습니다...
 	UPROPERTY(EditDefaultsOnly, Category = "Event Progress")
-	TObjectPtr<UTexture2D> EventMarkerImage;
+	TSubclassOf<UUserWidget> EventMarkerWidgetClass;
 	UPROPERTY(EditDefaultsOnly, Category = "Event Progress", meta = (ClampMin = "1.0", UIMin = "1.0"))
 	FVector2D EventMarkerImageSize = FVector2D(48.0f, 48.0f);
 	UPROPERTY(EditDefaultsOnly, Category = "Event Progress")
@@ -61,6 +63,15 @@ private:
 	float ObservedGameDurationSeconds = 0.0f;
 	float LastMarkerBoxWidth = -1.0f;
 
+	struct FEventMarkerRuntime
+	{
+		TWeakObjectPtr<UUserWidget> Widget;
+		TWeakObjectPtr<USizeBox> SizeBox;
+		ENPScheduledMapEventState State = ENPScheduledMapEventState::Pending;
+	};
+
+	TMap<int32, FEventMarkerRuntime> EventMarkers;
+
 	UFUNCTION()
 	void HandleMainGameStateChanged();
 
@@ -75,4 +86,8 @@ private:
 	void RebuildEventMarkers();
 	float GetResolvedGameDurationSeconds() const;
 	void AddFillSpacer(float FillWeight);
+	FEventMarkerRuntime* CreateEventMarker(int32 ScheduleIndex, const FText& Title);
+	void SetEventMarkerState(FEventMarkerRuntime& Marker, ENPScheduledMapEventState NewState, bool bPlayTransition);
+	static UWidget* FindMarkerWidget(const UUserWidget* MarkerWidget, FName WidgetName);
+	static UWidgetAnimation* FindMarkerAnimation(const UUserWidget* MarkerWidget, FName AnimationName);
 };

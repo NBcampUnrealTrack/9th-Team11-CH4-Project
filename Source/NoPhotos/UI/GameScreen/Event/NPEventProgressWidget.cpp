@@ -2,18 +2,27 @@
 
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
-#include "Components/Image.h"
 #include "Components/ProgressBar.h"
 #include "Components/SizeBox.h"
 #include "Components/Spacer.h"
-#include "Components/TextBlock.h"
 #include "Core/Main/NPMainGameState.h"
 #include "Engine/World.h"
+#include "Animation/WidgetAnimation.h"
+#include "Blueprint/UserWidget.h"
+#include "Blueprint/WidgetBlueprintGeneratedClass.h"
+#include "Components/Widget.h"
+#include "UObject/ConstructorHelpers.h"
 #include "TimerManager.h"
 
 UNPEventProgressWidget::UNPEventProgressWidget(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
+	static ConstructorHelpers::FClassFinder<UUserWidget> EventMarkerWidgetFinder(
+		TEXT("/Game/NoPhotos/Blueprints/UI/GameScreen/Event/WBP_EventMarker"));
+	if (EventMarkerWidgetFinder.Succeeded())
+	{
+		EventMarkerWidgetClass = EventMarkerWidgetFinder.Class;
+	}
 }
 
 void UNPEventProgressWidget::NativeConstruct()
@@ -41,6 +50,7 @@ void UNPEventProgressWidget::NativeDestruct()
 	}
 
 	UnbindFromGameState();
+	EventMarkers.Empty();
 	Super::NativeDestruct();
 }
 
@@ -200,23 +210,26 @@ void UNPEventProgressWidget::RebuildEventMarkers()
 		return;
 	}
 
-	EventMarkerBox->ClearChildren();
 	const UNPMapEventManagerComponent* EventManager = BoundEventManager.Get();
 	const float TotalSeconds = GetResolvedGameDurationSeconds();
 	if (!IsValid(EventManager) || TotalSeconds <= KINDA_SMALL_NUMBER)
 	{
+		EventMarkerBox->ClearChildren();
+		EventMarkers.Empty();
 		return;
 	}
 
 	const FNPMapEventSchedulePresentation Schedule = EventManager->GetEventSchedule();
+	EventMarkerBox->ClearChildren();
 	const float MarkerBoxWidth = EventMarkerBox->GetCachedGeometry().GetLocalSize().X;
 	LastMarkerBoxWidth = MarkerBoxWidth;
-	const bool bUsePixelAccurateImageLayout = IsValid(EventMarkerImage) && MarkerBoxWidth > KINDA_SMALL_NUMBER;
+	const bool bUsePixelAccurateImageLayout = MarkerBoxWidth > KINDA_SMALL_NUMBER;
 	const float MarkerSlotWidth = FMath::Max(0.0f,
 		EventMarkerImageSize.X + EventMarkerHorizontalPadding * 2.0f);
 	const float MarkerCenterOffset = EventMarkerHorizontalPadding + EventMarkerImageSize.X * 0.5f;
 	float PreviousProgress = 0.0f;
 	float PreviousMarkerSlotRight = 0.0f;
+	TSet<int32> CurrentScheduleIndices;
 	for (const FNPScheduledMapEventPresentation& Event : Schedule.Events)
 	{
 		if (Event.ExpectedStartServerWorldTime < 0.0f)
@@ -239,37 +252,22 @@ void UNPEventProgressWidget::RebuildEventMarkers()
 			AddFillSpacer(FMath::Max(0.0f, EventProgress - PreviousProgress));
 		}
 
-		UWidget* Marker = nullptr;
-		const bool bIsUpcomingEvent = Event.State == ENPScheduledMapEventState::Pending
-			|| Event.State == ENPScheduledMapEventState::Loading;
-		const FLinearColor MarkerColor = bIsUpcomingEvent
-			? FLinearColor::White
-			: FLinearColor::Black;
-		if (IsValid(EventMarkerImage))
+		FEventMarkerRuntime* Marker = EventMarkers.Find(Event.ScheduleIndex);
+		const bool bIsNewMarker = Marker == nullptr || !Marker->Widget.IsValid() || !Marker->SizeBox.IsValid();
+		if (bIsNewMarker)
 		{
-			USizeBox* ImageSizeBox = NewObject<USizeBox>(this);
-			ImageSizeBox->SetWidthOverride(EventMarkerImageSize.X);
-			ImageSizeBox->SetHeightOverride(EventMarkerImageSize.Y);
-
-			UImage* ImageMarker = NewObject<UImage>(ImageSizeBox);
-			ImageMarker->SetBrushFromTexture(EventMarkerImage);
-			ImageMarker->SetColorAndOpacity(MarkerColor);
-			ImageMarker->SetToolTipText(Event.Title);
-			ImageSizeBox->SetContent(ImageMarker);
-			Marker = ImageSizeBox;
+			Marker = CreateEventMarker(Event.ScheduleIndex, Event.Title);
 		}
-		if (!IsValid(Marker))
+
+		if (Marker == nullptr)
 		{
-			UTextBlock* TextMarker = NewObject<UTextBlock>(this);
-			TextMarker->SetText(DefaultMarkerText);
-			TextMarker->SetColorAndOpacity(MarkerColor);
-			TextMarker->SetToolTipText(Event.Title);
-			TextMarker->SetJustification(ETextJustify::Center);
-			Marker = TextMarker;
+			continue;
 		}
-		Marker->SetRenderOpacity(1.0f);
 
-		if (UHorizontalBoxSlot* MarkerSlot = EventMarkerBox->AddChildToHorizontalBox(Marker))
+		SetEventMarkerState(*Marker, Event.State, !bIsNewMarker);
+		CurrentScheduleIndices.Add(Event.ScheduleIndex);
+
+		if (UHorizontalBoxSlot* MarkerSlot = EventMarkerBox->AddChildToHorizontalBox(Marker->SizeBox.Get()))
 		{
 			MarkerSlot->SetVerticalAlignment(VAlign_Center);
 			MarkerSlot->SetPadding(FMargin(
@@ -279,6 +277,14 @@ void UNPEventProgressWidget::RebuildEventMarkers()
 				0.0f));
 		}
 		PreviousProgress = EventProgress;
+	}
+
+	for (auto It = EventMarkers.CreateIterator(); It; ++It)
+	{
+		if (!CurrentScheduleIndices.Contains(It.Key()))
+		{
+			It.RemoveCurrent();
+		}
 	}
 
 	AddFillSpacer(bUsePixelAccurateImageLayout
@@ -306,5 +312,152 @@ void UNPEventProgressWidget::AddFillSpacer(const float FillWeight)
 		FillSize.Value = FillWeight;
 		SpacerSlot->SetSize(FillSize);
 	}
+}
+
+UNPEventProgressWidget::FEventMarkerRuntime* UNPEventProgressWidget::CreateEventMarker(
+	const int32 ScheduleIndex, const FText& Title)
+{
+	if (!EventMarkerWidgetClass)
+	{
+		return nullptr;
+	}
+
+	UUserWidget* MarkerWidget = CreateWidget<UUserWidget>(this, EventMarkerWidgetClass);
+	if (!IsValid(MarkerWidget))
+	{
+		return nullptr;
+	}
+
+	USizeBox* MarkerSizeBox = NewObject<USizeBox>(this);
+	MarkerSizeBox->SetWidthOverride(EventMarkerImageSize.X);
+	MarkerSizeBox->SetHeightOverride(EventMarkerImageSize.Y);
+	MarkerSizeBox->SetToolTipText(Title);
+	MarkerSizeBox->SetContent(MarkerWidget);
+
+	FEventMarkerRuntime& Marker = EventMarkers.FindOrAdd(ScheduleIndex);
+	Marker.Widget = MarkerWidget;
+	Marker.SizeBox = MarkerSizeBox;
+	return &Marker;
+}
+
+void UNPEventProgressWidget::SetEventMarkerState(FEventMarkerRuntime& Marker,
+	const ENPScheduledMapEventState NewState, const bool bPlayTransition)
+{
+	UUserWidget* MarkerWidget = Marker.Widget.Get();
+	if (!IsValid(MarkerWidget))
+	{
+		return;
+	}
+
+	UWidget* EventIcon = FindMarkerWidget(MarkerWidget, TEXT("EventIcon"));
+	UWidget* EventIconLight = FindMarkerWidget(MarkerWidget, TEXT("EventIconLight"));
+	const bool bIsActive = NewState == ENPScheduledMapEventState::Active;
+	const bool bWasActive = Marker.State == ENPScheduledMapEventState::Active;
+	if (bIsActive)
+	{
+		if (IsValid(EventIcon))
+		{
+			EventIcon->SetRenderOpacity(1.0f);
+		}
+		if (IsValid(EventIconLight))
+		{
+			EventIconLight->SetRenderOpacity(1.0f);
+		}
+		if (!bWasActive || !bPlayTransition)
+		{
+			if (UWidgetAnimation* LightAnimation = FindMarkerAnimation(MarkerWidget, TEXT("LightAnim")))
+			{
+				// NumLoopsToPlay가 0이면 이벤트가 활성 상태인 동안 계속 반복됩니다.
+				MarkerWidget->PlayAnimation(LightAnimation, 0.0f, 0);
+			}
+		}
+	}
+	else
+	{
+		if (UWidgetAnimation* LightAnimation = FindMarkerAnimation(MarkerWidget, TEXT("LightAnim")))
+		{
+			MarkerWidget->StopAnimation(LightAnimation);
+		}
+		if (IsValid(EventIconLight))
+		{
+			EventIconLight->SetRenderOpacity(0.0f);
+		}
+
+		const bool bHasFinished = NewState == ENPScheduledMapEventState::Completed
+			|| NewState == ENPScheduledMapEventState::Cancelled;
+		if (bHasFinished)
+		{
+			if (bWasActive && bPlayTransition)
+			{
+				if (UWidgetAnimation* IconOffAnimation = FindMarkerAnimation(MarkerWidget, TEXT("IconOffAnim")))
+				{
+					MarkerWidget->PlayAnimation(IconOffAnimation);
+					if (UWorld* World = GetWorld())
+					{
+						const TWeakObjectPtr<UUserWidget> WeakMarkerWidget = MarkerWidget;
+						FTimerHandle IconOffCompletionTimerHandle;
+						World->GetTimerManager().SetTimer(IconOffCompletionTimerHandle, FTimerDelegate::CreateWeakLambda(this,
+							[WeakMarkerWidget]()
+							{
+								if (UUserWidget* FinishedMarkerWidget = WeakMarkerWidget.Get())
+								{
+									if (UWidget* FinishedEventIcon = FindMarkerWidget(FinishedMarkerWidget, TEXT("EventIcon")))
+									{
+										FinishedEventIcon->SetRenderOpacity(0.0f);
+									}
+								}
+							}
+						), FMath::Max(0.0f, IconOffAnimation->GetEndTime() - IconOffAnimation->GetStartTime()), false);
+					}
+				}
+				else if (IsValid(EventIcon))
+				{
+					EventIcon->SetRenderOpacity(0.0f);
+				}
+			}
+			else if (IsValid(EventIcon))
+			{
+				EventIcon->SetRenderOpacity(0.0f);
+			}
+		}
+	}
+
+	Marker.State = NewState;
+}
+
+UWidget* UNPEventProgressWidget::FindMarkerWidget(const UUserWidget* MarkerWidget, const FName WidgetName)
+{
+	return IsValid(MarkerWidget) ? MarkerWidget->GetWidgetFromName(WidgetName) : nullptr;
+}
+
+UWidgetAnimation* UNPEventProgressWidget::FindMarkerAnimation(const UUserWidget* MarkerWidget, const FName AnimationName)
+{
+	if (!IsValid(MarkerWidget))
+	{
+		return nullptr;
+	}
+
+	const UWidgetBlueprintGeneratedClass* MarkerClass = Cast<UWidgetBlueprintGeneratedClass>(MarkerWidget->GetClass());
+	if (!IsValid(MarkerClass))
+	{
+		return nullptr;
+	}
+
+	for (UWidgetAnimation* Animation : MarkerClass->Animations)
+	{
+		if (!IsValid(Animation))
+		{
+			continue;
+		}
+
+		const FString RuntimeAnimationName = Animation->GetName();
+		const FString RequestedAnimationName = AnimationName.ToString();
+		if (RuntimeAnimationName == RequestedAnimationName
+			|| RuntimeAnimationName.StartsWith(RequestedAnimationName + TEXT("_")))
+		{
+			return Animation;
+		}
+	}
+	return nullptr;
 }
 
