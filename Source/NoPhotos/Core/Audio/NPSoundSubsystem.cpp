@@ -61,7 +61,7 @@ void UNPSoundSubsystem::PlaySFX(USoundBase* Sound, const float Volume, const flo
 	UGameplayStatics::PlaySound2D(
 		World,
 		Sound,
-		NPSoundSubsystemPrivate::SanitizeVolume(Volume),
+		NPSoundSubsystemPrivate::SanitizeVolume(Volume) * SFXVolume * MasterVolume,
 		NPSoundSubsystemPrivate::SanitizePitch(Pitch),
 		NPSoundSubsystemPrivate::SanitizeStartTime(StartTime));
 }
@@ -87,7 +87,7 @@ void UNPSoundSubsystem::PlaySFXAtLocation(
 		Sound,
 		Location,
 		Rotation,
-		NPSoundSubsystemPrivate::SanitizeVolume(Volume),
+		NPSoundSubsystemPrivate::SanitizeVolume(Volume) * SFXVolume * MasterVolume,
 		NPSoundSubsystemPrivate::SanitizePitch(Pitch),
 		NPSoundSubsystemPrivate::SanitizeStartTime(StartTime),
 		AttenuationSettings,
@@ -108,7 +108,8 @@ void UNPSoundSubsystem::PlayBGM(USoundBase* Sound, const float FadeDuration, con
 	if (IsValid(CurrentBGMComponent) && CurrentBGMComponent->IsPlaying()
 		&& CurrentBGMComponent->GetSound() == Sound)
 	{
-		CurrentBGMComponent->SetVolumeMultiplier(SafeVolume);
+		CurrentBGMBaseVolume = SafeVolume;
+		CurrentBGMComponent->SetVolumeMultiplier(CurrentBGMBaseVolume * BGMVolume * MasterVolume);
 		return;
 	}
 
@@ -129,13 +130,14 @@ void UNPSoundSubsystem::PlayBGM(USoundBase* Sound, const float FadeDuration, con
 
 	UAudioComponent* PreviousBGMComponent = CurrentBGMComponent;
 	CurrentBGMComponent = NewBGMComponent;
+	CurrentBGMBaseVolume = SafeVolume;
 
 	if (IsValid(PreviousBGMComponent) && PreviousBGMComponent->IsPlaying())
 	{
 		PreviousBGMComponent->FadeOut(SafeFadeDuration, 0.0f);
 	}
 
-	CurrentBGMComponent->FadeIn(SafeFadeDuration, SafeVolume);
+	CurrentBGMComponent->FadeIn(SafeFadeDuration, CurrentBGMBaseVolume * BGMVolume * MasterVolume);
 }
 
 void UNPSoundSubsystem::StopBGM(const float FadeOutDuration)
@@ -152,4 +154,29 @@ void UNPSoundSubsystem::StopBGM(const float FadeOutDuration)
 		? FMath::Max(0.0f, FadeOutDuration)
 		: 1.0f;
 	BGMComponentToStop->FadeOut(SafeFadeOutDuration, 0.0f);
+}
+
+void UNPSoundSubsystem::SetMasterVolume(const float InVolume)
+{
+	MasterVolume = FMath::IsFinite(InVolume) ? FMath::Clamp(InVolume, 0.0f, 1.0f) : 1.0f;
+
+	if (IsValid(CurrentBGMComponent))
+	{
+		CurrentBGMComponent->SetVolumeMultiplier(CurrentBGMBaseVolume * BGMVolume * MasterVolume);
+	}
+}
+
+void UNPSoundSubsystem::SetSFXVolume(const float InVolume)
+{
+	SFXVolume = FMath::IsFinite(InVolume) ? FMath::Clamp(InVolume, 0.0f, 1.0f) : 1.0f;
+}
+
+void UNPSoundSubsystem::SetBGMVolume(const float InVolume)
+{
+	BGMVolume = FMath::IsFinite(InVolume) ? FMath::Clamp(InVolume, 0.0f, 1.0f) : 1.0f;
+
+	if (IsValid(CurrentBGMComponent))
+	{
+		CurrentBGMComponent->SetVolumeMultiplier(CurrentBGMBaseVolume * BGMVolume * MasterVolume);
+	}
 }

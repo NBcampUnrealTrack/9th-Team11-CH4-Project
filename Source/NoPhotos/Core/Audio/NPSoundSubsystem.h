@@ -48,7 +48,30 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Sound|BGM")
 	void StopBGM(float FadeOutDuration = 1.0f);
 
+	UFUNCTION(BlueprintPure, Category = "Sound|Volume")
+	float GetMasterVolume() const { return MasterVolume; }
+
+	UFUNCTION(BlueprintCallable, Category = "Sound|Volume")
+	void SetMasterVolume(float InVolume);
+
+	UFUNCTION(BlueprintPure, Category = "Sound|Volume")
+	float GetSFXVolume() const { return SFXVolume; }
+
+	UFUNCTION(BlueprintCallable, Category = "Sound|Volume")
+	void SetSFXVolume(float InVolume);
+
+	UFUNCTION(BlueprintPure, Category = "Sound|Volume")
+	float GetBGMVolume() const { return BGMVolume; }
+
+	UFUNCTION(BlueprintCallable, Category = "Sound|Volume")
+	void SetBGMVolume(float InVolume);
+
 private:
 	UPROPERTY(Transient)
 	TObjectPtr<UAudioComponent> CurrentBGMComponent;
+
+	float MasterVolume = 1.0f;
+	float SFXVolume = 1.0f;
+	float BGMVolume = 1.0f;
+	float CurrentBGMBaseVolume = 1.0f;
 };
