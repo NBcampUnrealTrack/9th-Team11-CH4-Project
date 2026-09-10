@@ -3,9 +3,11 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Components/HorizontalBox.h"
 #include "Components/Image.h"
 #include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
+#include "Core/Main/NPMainGameState.h"
 #include "Core/Main/NPMainPlayerController.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
@@ -16,6 +18,7 @@ void UNPResultPicturePreviewPopup::NativeConstruct()
 {
 	Super::NativeConstruct();
 	EnsureDownloadButton();
+	EnsureLikeControls();
 
 	if (IsValid(CloseButton))
 	{
@@ -25,6 +28,10 @@ void UNPResultPicturePreviewPopup::NativeConstruct()
 	{
 		DownloadButton->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleDownloadClicked);
 	}
+	if (IsValid(LikeButton))
+	{
+		LikeButton->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleLikeClicked);
+	}
 
 	ANPMainPlayerController* PlayerController = Cast<ANPMainPlayerController>(GetOwningPlayer());
 	TransferComponent = IsValid(PlayerController) ? PlayerController->GetPhotoTransferComponent() : nullptr;
@@ -33,6 +40,16 @@ void UNPResultPicturePreviewPopup::NativeConstruct()
 		TransferComponent->OnPhotoTextureReceived.AddUniqueDynamic(
 			this, &ThisClass::HandlePhotoTextureReceived);
 	}
+
+	ObservedGameState = GetWorld() ? GetWorld()->GetGameState<ANPMainGameState>() : nullptr;
+	if (IsValid(ObservedGameState))
+	{
+		ObservedGameState->OnPhotoLikesChanged.AddUniqueDynamic(
+			this, &ThisClass::HandlePhotoLikesChanged);
+		ObservedGameState->OnPhotoFullyLiked.AddUniqueDynamic(
+			this, &ThisClass::HandlePhotoFullyLiked);
+	}
+	RefreshLikeState();
 }
 
 void UNPResultPicturePreviewPopup::NativeDestruct()
@@ -46,7 +63,46 @@ void UNPResultPicturePreviewPopup::NativeDestruct()
 		TransferComponent->OnPhotoTextureReceived.RemoveDynamic(
 			this, &ThisClass::HandlePhotoTextureReceived);
 	}
+	if (IsValid(LikeButton))
+	{
+		LikeButton->OnClicked.RemoveAll(this);
+	}
+	if (IsValid(ObservedGameState))
+	{
+		ObservedGameState->OnPhotoLikesChanged.RemoveDynamic(
+			this, &ThisClass::HandlePhotoLikesChanged);
+		ObservedGameState->OnPhotoFullyLiked.RemoveDynamic(
+			this, &ThisClass::HandlePhotoFullyLiked);
+	}
+	if (IsValid(LikeCountText))
+	{
+		LikeCountText->SetRenderScale(FullyLikedPulseBaseScale);
+	}
 	Super::NativeDestruct();
+}
+
+void UNPResultPicturePreviewPopup::NativeTick(
+	const FGeometry& MyGeometry,
+	const float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+	if (!bFullyLikedPulseActive || !IsValid(LikeCountText))
+	{
+		return;
+	}
+
+	FullyLikedPulseElapsed += InDeltaTime;
+	const float Alpha = FMath::Clamp(
+		FullyLikedPulseElapsed / FullyLikedPulseDuration, 0.0f, 1.0f);
+	const float ScaleMultiplier = FMath::Lerp(
+		1.0f, FullyLikedPulseScale, FMath::Sin(Alpha * PI));
+	LikeCountText->SetRenderScale(FullyLikedPulseBaseScale * ScaleMultiplier);
+
+	if (Alpha >= 1.0f)
+	{
+		LikeCountText->SetRenderScale(FullyLikedPulseBaseScale);
+		bFullyLikedPulseActive = false;
+	}
 }
 
 void UNPResultPicturePreviewPopup::OpenForPhoto(
@@ -55,6 +111,8 @@ void UNPResultPicturePreviewPopup::OpenForPhoto(
 {
 	PhotoId = InPhotoId;
 	bPhotoRequestPending = false;
+	bLikeRequestPending = false;
+	RefreshLikeState();
 	if (IsValid(PreviewImage))
 	{
 		PreviewImage->SetVisibility(ESlateVisibility::Hidden);
@@ -124,6 +182,49 @@ void UNPResultPicturePreviewPopup::HandleDownloadClicked()
 	}
 }
 
+void UNPResultPicturePreviewPopup::HandleLikeClicked()
+{
+	ANPMainPlayerController* PlayerController =
+		Cast<ANPMainPlayerController>(GetOwningPlayer());
+	if (bLikeRequestPending || !IsValid(PlayerController)
+		|| !IsValid(ObservedGameState)
+		|| !ObservedGameState->CanPlayerLikePhoto(PhotoId, PlayerController->PlayerState))
+	{
+		return;
+	}
+
+	bLikeRequestPending = true;
+	LikeButton->SetIsEnabled(false);
+	PlayerController->ServerLikeResultPhoto(PhotoId);
+}
+
+void UNPResultPicturePreviewPopup::HandlePhotoLikesChanged(const FGuid ChangedPhotoId)
+{
+	if (!ChangedPhotoId.IsValid() || ChangedPhotoId == PhotoId)
+	{
+		bLikeRequestPending = false;
+		RefreshLikeState();
+	}
+}
+
+void UNPResultPicturePreviewPopup::HandlePhotoFullyLiked(
+	const FGuid FullyLikedPhotoId,
+	const int32 LikeCount)
+{
+	if (FullyLikedPhotoId != PhotoId)
+	{
+		return;
+	}
+
+	bLikeRequestPending = false;
+	if (IsValid(LikeCountText))
+	{
+		LikeCountText->SetText(FText::FromString(
+			FString::Printf(TEXT("♡ %d"), LikeCount)));
+	}
+	StartFullyLikedPulse();
+}
+
 void UNPResultPicturePreviewPopup::HandlePhotoTextureReceived(
 	const FGuid ReceivedPhotoId,
 	UTexture2D* Texture)
@@ -171,6 +272,102 @@ void UNPResultPicturePreviewPopup::EnsureDownloadButton()
 		CanvasSlot->SetSize(FVector2D(180.0f, 50.0f));
 		CanvasSlot->SetZOrder(10);
 	}
+}
+
+void UNPResultPicturePreviewPopup::EnsureLikeControls()
+{
+	if (IsValid(LikeButton) && IsValid(LikeCountText))
+	{
+		return;
+	}
+	if (!WidgetTree)
+	{
+		return;
+	}
+
+	UPanelWidget* RootPanel = Cast<UPanelWidget>(WidgetTree->RootWidget);
+	if (!IsValid(RootPanel))
+	{
+		return;
+	}
+
+	if (!IsValid(LikeButton) && !IsValid(LikeCountText))
+	{
+		UHorizontalBox* LikeBox = WidgetTree->ConstructWidget<UHorizontalBox>(
+			UHorizontalBox::StaticClass(), TEXT("LikeBox"));
+		LikeButton = WidgetTree->ConstructWidget<UButton>(
+			UButton::StaticClass(), TEXT("LikeButton"));
+		LikeButtonText = WidgetTree->ConstructWidget<UTextBlock>(
+			UTextBlock::StaticClass(), TEXT("LikeButtonText"));
+		LikeButtonText->SetText(FText::FromString(TEXT("좋아요")));
+		LikeButton->AddChild(LikeButtonText);
+		LikeCountText = WidgetTree->ConstructWidget<UTextBlock>(
+			UTextBlock::StaticClass(), TEXT("LikeCountText"));
+		LikeBox->AddChild(LikeButton);
+		LikeBox->AddChild(LikeCountText);
+		RootPanel->AddChild(LikeBox);
+
+		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(LikeBox->Slot))
+		{
+			CanvasSlot->SetAnchors(FAnchors(0.5f, 1.0f));
+			CanvasSlot->SetAlignment(FVector2D(0.5f, 1.0f));
+			CanvasSlot->SetPosition(FVector2D(0.0f, -100.0f));
+			CanvasSlot->SetSize(FVector2D(220.0f, 50.0f));
+			CanvasSlot->SetZOrder(20);
+		}
+		return;
+	}
+
+	if (!IsValid(LikeButton))
+	{
+		LikeButton = WidgetTree->ConstructWidget<UButton>(
+			UButton::StaticClass(), TEXT("LikeButton"));
+		LikeButtonText = WidgetTree->ConstructWidget<UTextBlock>(
+			UTextBlock::StaticClass(), TEXT("LikeButtonText"));
+		LikeButtonText->SetText(FText::FromString(TEXT("좋아요")));
+		LikeButton->AddChild(LikeButtonText);
+		RootPanel->AddChild(LikeButton);
+	}
+	if (!IsValid(LikeCountText))
+	{
+		LikeCountText = WidgetTree->ConstructWidget<UTextBlock>(
+			UTextBlock::StaticClass(), TEXT("LikeCountText"));
+		RootPanel->AddChild(LikeCountText);
+	}
+}
+
+void UNPResultPicturePreviewPopup::RefreshLikeState()
+{
+	if (!IsValid(LikeButton) || !IsValid(LikeCountText))
+	{
+		return;
+	}
+
+	const int32 LikeCount = IsValid(ObservedGameState)
+		? ObservedGameState->GetPhotoLikeCount(PhotoId)
+		: 0;
+	LikeCountText->SetText(FText::FromString(
+		FString::Printf(TEXT("♡ %d"), LikeCount)));
+
+	const ANPMainPlayerController* PlayerController =
+		Cast<ANPMainPlayerController>(GetOwningPlayer());
+	const bool bCanLike = IsValid(PlayerController)
+		&& IsValid(ObservedGameState)
+		&& ObservedGameState->CanPlayerLikePhoto(PhotoId, PlayerController->PlayerState);
+	LikeButton->SetIsEnabled(bCanLike && !bLikeRequestPending);
+}
+
+void UNPResultPicturePreviewPopup::StartFullyLikedPulse()
+{
+	if (!IsValid(LikeCountText))
+	{
+		return;
+	}
+
+	FullyLikedPulseBaseScale = LikeCountText->GetRenderTransform().Scale;
+	LikeCountText->SetRenderTransformPivot(FVector2D(0.5f));
+	FullyLikedPulseElapsed = 0.0f;
+	bFullyLikedPulseActive = true;
 }
 
 void UNPResultPicturePreviewPopup::DisplayPhoto(UTexture2D* Texture)

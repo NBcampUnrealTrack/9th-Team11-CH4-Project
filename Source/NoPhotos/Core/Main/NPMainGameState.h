@@ -37,6 +37,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FNPOnMainGameEnded);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FNPOnMainGameLastSpurt);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FNPOnPictureSelectionStateChanged);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnNoPhotosPhotoEvidenceChanged);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FNPOnPhotoLikesChanged, FGuid, PhotoId);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FNPOnPhotoFullyLiked, FGuid, PhotoId, int32, LikeCount);
 
 UCLASS()
 class NOPHOTOS_API ANPMainGameState : public AGameState
@@ -77,6 +79,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Photo")
 	TArray<FGuid> GetSelectedPhotoIds(const APlayerState* PlayerState) const;
 
+	UFUNCTION(BlueprintPure, Category = "Photo|Like")
+	int32 GetPhotoLikeCount(FGuid PhotoId) const;
+
+	UFUNCTION(BlueprintPure, Category = "Photo|Like")
+	int32 GetMaximumPhotoLikeCount() const;
+
+	UFUNCTION(BlueprintPure, Category = "Photo|Like")
+	bool HasPlayerLikedPhoto(FGuid PhotoId, const APlayerState* PlayerState) const;
+
+	UFUNCTION(BlueprintPure, Category = "Photo|Like")
+	bool CanPlayerLikePhoto(FGuid PhotoId, const APlayerState* PlayerState) const;
+
 	//모든 플레이어가 사진 선택을 완료했으면 정산 화면으로 전환
 	void ConfirmPictureSelection(APlayerController* PlayerController);
 
@@ -98,6 +112,12 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Photo")
 	FOnNoPhotosPhotoEvidenceChanged OnPhotoEvidenceChanged;
 
+	UPROPERTY(BlueprintAssignable, Category = "Photo|Like")
+	FNPOnPhotoLikesChanged OnPhotoLikesChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "Photo|Like")
+	FNPOnPhotoFullyLiked OnPhotoFullyLiked;
+
 	void RefreshPlayerRankings();
 	void SetMainWorldState(ENPMainWorldState NewState);
 	void StartMainGame(int32 DurationSeconds);
@@ -106,6 +126,7 @@ public:
 	void AddPhotoEvidence(const FNPPhotoEvidenceResult& Result, int32 AwardedScore);
 	void RegisterTransferredPhoto(const FGuid& PhotoId);
 	void SetSelectedPhotoIds(APlayerState* PlayerState, const TArray<FGuid>& PhotoIds);
+	bool AddPhotoLike(const FGuid& PhotoId, APlayerState* PlayerState);
 
 private:
 	UFUNCTION()
@@ -129,10 +150,20 @@ private:
 	UFUNCTION()
 	void OnRep_SelectedPhotos();
 
+	UFUNCTION()
+	void OnRep_PhotoLikes();
+
+	UFUNCTION()
+	void OnRep_ResultParticipants();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPhotoFullyLiked(FGuid PhotoId, int32 LikeCount);
+
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastMainGameLastSpurt();
 
 	bool AreAllConnectedPlayersPictureSelectionComplete() const;
+	APlayerState* FindSelectedPhotoOwner(const FGuid& PhotoId) const;
 
 	void LogLocalGameStatus();
 	void TryLogFinalRankings();
@@ -167,6 +198,13 @@ private:
 
 	UPROPERTY(ReplicatedUsing = OnRep_SelectedPhotos)
 	TArray<FNPPlayerSelectedPhotos> SelectedPhotos;
+
+	/** 정산 화면 진입 시점의 참가자 목록입니다. */
+	UPROPERTY(ReplicatedUsing = OnRep_ResultParticipants)
+	TArray<TObjectPtr<APlayerState>> ResultParticipants;
+
+	UPROPERTY(ReplicatedUsing = OnRep_PhotoLikes)
+	TArray<FNPPhotoLikeState> PhotoLikes;
 
 	int32 LastLoggedRemainingTime = INDEX_NONE;
 	bool bFinalRankingsLogged = false;

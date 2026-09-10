@@ -1,7 +1,9 @@
 #include "UI/Result/NPResultWidget.h"
 
 #include "Components/Button.h"
+#include "Core/Main/NPMainGameState.h"
 #include "Core/Main/NPMainPlayerController.h"
+#include "Kismet/GameplayStatics.h"
 
 UNPResultWidget::UNPResultWidget(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -30,6 +32,13 @@ void UNPResultWidget::NativeConstruct()
 	{
 		ExitButton->OnClicked.AddDynamic(this, &UNPResultWidget::OnExitClicked);
 	}
+
+	ObservedGameState = GetWorld() ? GetWorld()->GetGameState<ANPMainGameState>() : nullptr;
+	if (IsValid(ObservedGameState))
+	{
+		ObservedGameState->OnPhotoFullyLiked.AddUniqueDynamic(
+			this, &ThisClass::HandlePhotoFullyLiked);
+	}
 }
 
 void UNPResultWidget::NativeDestruct()
@@ -42,6 +51,11 @@ void UNPResultWidget::NativeDestruct()
 	if (IsValid(ExitButton))
 	{
 		ExitButton->OnClicked.RemoveAll(this);
+	}
+	if (IsValid(ObservedGameState))
+	{
+		ObservedGameState->OnPhotoFullyLiked.RemoveDynamic(
+			this, &ThisClass::HandlePhotoFullyLiked);
 	}
 
 	Super::NativeDestruct();
@@ -63,5 +77,15 @@ void UNPResultWidget::OnExitClicked()
 	if (ANPMainPlayerController* NPPC=Cast<ANPMainPlayerController>(GetOwningPlayer()))
 	{
 		NPPC->ExitToMainMenu();
+	}
+}
+
+void UNPResultWidget::HandlePhotoFullyLiked(
+	const FGuid,
+	const int32)
+{
+	if (IsValid(FullyLikedSound))
+	{
+		UGameplayStatics::PlaySound2D(this, FullyLikedSound);
 	}
 }

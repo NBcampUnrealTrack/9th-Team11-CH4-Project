@@ -135,3 +135,16 @@ struct NOPHOTOS_API FNPPlayerSelectedPhotos
 	UPROPERTY(BlueprintReadOnly, Category="Photo")
 	TArray<FGuid> PhotoIds;
 };
+
+/** 정산 화면에서 사진 한 장이 받은 좋아요 상태입니다. */
+USTRUCT(BlueprintType)
+struct NOPHOTOS_API FNPPhotoLikeState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category="Photo|Like")
+	FGuid PhotoId;
+
+	UPROPERTY(BlueprintReadOnly, Category="Photo|Like")
+	TArray<TObjectPtr<APlayerState>> LikedPlayerStates;
+};

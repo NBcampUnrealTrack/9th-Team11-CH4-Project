@@ -943,6 +943,17 @@ void ANPMainPlayerController::ServerConfirmPictureSelection_Implementation(
 	ClientUploadSelectedPhotos(SelectedPhotoIds);
 }
 
+void ANPMainPlayerController::ServerLikeResultPhoto_Implementation(const FGuid PhotoId)
+{
+	ANPMainGameState* MainGameState = GetWorld()
+		? GetWorld()->GetGameState<ANPMainGameState>()
+		: nullptr;
+	if (IsValid(MainGameState) && IsValid(PlayerState))
+	{
+		MainGameState->AddPhotoLike(PhotoId, PlayerState);
+	}
+}
+
 void ANPMainPlayerController::ClientUploadSelectedPhotos_Implementation(
 	const TArray<FGuid>& SelectedPhotoIds)
 {
