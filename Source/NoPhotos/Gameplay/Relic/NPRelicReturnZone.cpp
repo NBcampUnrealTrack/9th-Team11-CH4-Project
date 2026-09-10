@@ -209,7 +209,6 @@ bool ANPRelicReturnZone::TryDeliverOverlappingRelic(ANPBaseRelic* Relic)
 			RelicPrice,
 			bDeliveryEffectEnabled);
 	}
-
 	UnregisterOverlappingRelic(Relic);
 	return true;
 }
