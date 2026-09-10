@@ -10,7 +10,6 @@ class ANPBaseRelic;
 class APlayerState;
 class UAnimMontage;
 class ANPGoblinPresentationDoor;
-class UDataTable;
 
 UENUM(BlueprintType)
 enum class ENPGoblinLifecycleState : uint8
@@ -119,6 +118,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Goblin|Photo|Reward")
 	ANPBaseRelic* GetSpawnedPhotoRelic() const { return SpawnedPhotoRelic; }
 
+	/** Content Browser에서 선택한 유물 BP들을 촬영 보상 배열에 중복 없이 추가합니다. */
+	UFUNCTION(CallInEditor, Category = "Goblin|Photo|Reward", meta = (DisplayName = "선택한 유물 클래스 가져오기"))
+	void ImportSelectedPhotographedRelicClasses();
+
 	UFUNCTION(BlueprintPure, Category = "Goblin|Photo|Health")
 	int32 GetCurrentPhotoHP() const { return CurrentPhotoHP; }
 
@@ -152,6 +155,14 @@ protected:
 	/** 놀란 뒤 도주를 시작하기까지의 정지 시간. 0이면 즉시 도주합니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Photo|Escape", meta = (ClampMin = "0.0", Units = "s"))
 	float PhotoReactionDuration = 0.25f;
+
+	/** 유효한 사진 촬영 직후 고블린 Mesh 충돌을 끄는 시간입니다. Capsule 충돌에는 영향을 주지 않습니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Photo|Escape", meta = (ClampMin = "0.0", Units = "s"))
+	float PhotoMeshNoCollisionDuration = 0.5f;
+
+	/** 사진에 놀라 도주를 시작할 때 서버에서 적용하는 수직 점프 속도입니다. 0이면 점프하지 않습니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Photo|Escape", meta = (ClampMin = "0.0", Units = "cm/s"))
+	float PhotoJumpVerticalVelocity = 450.0f;
 
 	/** 놀람 시간이 끝난 뒤 촬영 반대 방향 도주를 우선하는 시간. 이후 일반 회피/순찰로 돌아갑니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Photo|Escape", meta = (ClampMin = "0.0", Units = "s"))
@@ -190,13 +201,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Photo|Reward", meta = (ClampMin = "0", UIMin = "0", ClampMax = "100", UIMax = "100"))
 	int32 DefeatRelicDropCount = 0;
 
-	/** 지정하면 유효한 RelicClass를 가진 행 중 하나를 무작위로 골라 보상으로 생성합니다. */
+	/** 촬영 보상으로 생성할 유물 BP 목록입니다. 유효한 항목 중 하나를 동일 확률로 선택합니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Photo|Reward")
-	TObjectPtr<UDataTable> RelicDropTable;
-
-	/** RelicDropTable을 사용하지 못할 때 서버에서 생성할 예비 유물 BP입니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Photo|Reward")
-	TSubclassOf<ANPBaseRelic> PhotographedRelicClass;
+	TArray<TSubclassOf<ANPBaseRelic>> PhotographedRelicClasses;
 
 	/** 고블린 중심을 기준으로 유물을 생성할 상대 위치입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Goblin|Photo|Reward", meta = (Units = "cm"))
@@ -314,6 +321,13 @@ private:
 	void Multicast_PlayPhotoReaction(FVector FleeDirection, float ReactionDuration);
 	void StopPhotoReaction();
 	FTimerHandle PhotoReactionTimer;
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_TemporarilyDisablePhotoMeshCollision(float Duration);
+	void RestorePhotoMeshCollision();
+	FTimerHandle PhotoMeshCollisionTimer;
+	TEnumAsByte<ECollisionEnabled::Type> PhotoMeshOriginalCollision = ECollisionEnabled::NoCollision;
+	bool bPhotoMeshCollisionTemporarilyDisabled = false;
 
 	void SetLifecycleState(ENPGoblinLifecycleState NewState);
 	void NotifyLifecycleStateChanged();
