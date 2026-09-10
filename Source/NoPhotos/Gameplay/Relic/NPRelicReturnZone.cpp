@@ -148,12 +148,6 @@ bool ANPRelicReturnZone::TryDeliverOverlappingRelic(ANPBaseRelic* Relic)
 		: nullptr;
 	if (!DeliveryService)
 	{
-		const FVector DeliveryLocation = Relic->GetRelicWorldLocation();
-		if (DeliveryService->TryDeliverRelic(Relic, this)
-			&& bDeliveryEffectEnabled)
-		{
-			MulticastNotifyRelicDelivered(Relic, DeliveryLocation);
-		}
 		return false;
 	}
 
@@ -168,7 +162,7 @@ bool ANPRelicReturnZone::TryDeliverOverlappingRelic(ANPBaseRelic* Relic)
 
 	if (bDeliveryEffectEnabled)
 	{
-		MulticastNotifyRelicDelivered(DeliveryLocation);
+		MulticastNotifyRelicDelivered(Relic, DeliveryLocation);
 	}
 	UnregisterOverlappingRelic(Relic);
 	return true;
