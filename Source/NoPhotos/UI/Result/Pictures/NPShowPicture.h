@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Iris/Core/IrisProfiler.h"
 #include "UI/NPUserWidget.h"
 #include "NPShowPicture.generated.h"
 
@@ -40,4 +41,11 @@ private:
 	TObjectPtr<UImage> SelectPicture;
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> SelectButton;
+	
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UImage> StampIcon;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Picture|Stamp", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UTexture2D> UnselectedStampTexture;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Picture|Stamp", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UTexture2D> SelectedStampTexture;
 };
