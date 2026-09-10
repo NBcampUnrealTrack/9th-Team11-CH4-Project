@@ -1,5 +1,6 @@
 #pragma once
 
+#include "GameplayTagContainer.h"
 #include "Gameplay/Relic/Components/NPUsableRelicComponent.h"
 #include "NPAimableRelicComponent.generated.h"
 
@@ -67,6 +68,10 @@ public:
 protected:
 	bool TryConsumeFireCooldown();
 	FTransform GetMuzzleTransform() const;
+
+	/** 발사 순간 실행할 Gameplay Cue입니다. 파생 유물 또는 Blueprint에서 교체할 수 있습니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Aimable Relic|Effects")
+	FGameplayTag FireGameplayCueTag;
 
 	/** 서버 Trace의 총구 시작점과 종료점을 각 클라이언트의 로컬 장식 투사체로 재생합니다. */
 	UFUNCTION(NetMulticast, Unreliable)
