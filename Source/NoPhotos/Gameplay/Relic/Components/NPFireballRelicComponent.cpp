@@ -13,6 +13,8 @@
 
 UNPFireballRelicComponent::UNPFireballRelicComponent()
 {
+	FireGameplayCueTag =
+		NPGameplayTags::GameplayCue_Relic_MagicWand_Fire;
 	ProjectileClass = ANPFireballProjectile::StaticClass();
 	ExplosionSettings.KnockbackEffectClass =
 		UNPKnockbackGameplayEffect::StaticClass();
@@ -44,9 +46,12 @@ bool UNPFireballRelicComponent::TryFire(
 	FireCueParameters.Normal = AimDirection;
 	FireCueParameters.Instigator = ShooterPawn;
 	FireCueParameters.EffectCauser = Relic;
-	SourceAbilitySystem->ExecuteGameplayCue(
-		NPGameplayTags::GameplayCue_Relic_Aimable_Fire,
-		FireCueParameters);
+	if (FireGameplayCueTag.IsValid())
+	{
+		SourceAbilitySystem->ExecuteGameplayCue(
+			FireGameplayCueTag,
+			FireCueParameters);
+	}
 	const float Delay = FMath::Max(FireDelay, 0.0f);
 	if (Delay <= UE_SMALL_NUMBER)
 	{

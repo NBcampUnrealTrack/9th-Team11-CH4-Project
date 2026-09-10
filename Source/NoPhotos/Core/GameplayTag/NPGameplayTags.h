@@ -35,6 +35,8 @@ namespace NPGameplayTags
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Impact);
 	/** 조준 유물 발사 순간의 총구 연출입니다. */
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Relic_Aimable_Fire);
+	/** 마법 지팡이 발사 순간의 전용 연출입니다. */
+	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Relic_MagicWand_Fire);
 	/** 조준 유물 발사체가 Trace 대상에 적중한 순간의 연출입니다. */
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Relic_Aimable_Impact);
 	/** 빙의 중 캐릭터 주변에 표시할 지속형 GameplayCue입니다. */

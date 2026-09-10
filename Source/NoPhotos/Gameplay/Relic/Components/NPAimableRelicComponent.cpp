@@ -23,6 +23,8 @@ UNPAimableRelicComponent::UNPAimableRelicComponent()
 	AbilityClasses.Add(UNPRelicAimAbility::StaticClass());
 	AbilityClasses.Add(UNPRelicFireAbility::StaticClass());
 	SetUseAbilityClasses(AbilityClasses);
+	FireGameplayCueTag =
+		NPGameplayTags::GameplayCue_Relic_Aimable_Fire;
 	AimSettings.KnockbackEffectClass =
 		UNPKnockbackGameplayEffect::StaticClass();
 }
@@ -61,9 +63,12 @@ bool UNPAimableRelicComponent::TryFire(
 	FireCueParameters.Normal = AimDirection;
 	FireCueParameters.Instigator = ShooterPawn;
 	FireCueParameters.EffectCauser = Relic;
-	SourceAbilitySystem->ExecuteGameplayCue(
-		NPGameplayTags::GameplayCue_Relic_Aimable_Fire,
-		FireCueParameters);
+	if (FireGameplayCueTag.IsValid())
+	{
+		SourceAbilitySystem->ExecuteGameplayCue(
+			FireGameplayCueTag,
+			FireCueParameters);
+	}
 
 	const FVector TraceEnd = TraceStart
 		+ AimDirection * FMath::Max(AimSettings.MaximumRange, 1.0f);

@@ -28,6 +28,9 @@ namespace NPGameplayTags
 		GameplayCue_Relic_Aimable_Fire,
 		"GameplayCue.Relic.Aimable.Fire");
 	UE_DEFINE_GAMEPLAY_TAG(
+		GameplayCue_Relic_MagicWand_Fire,
+		"GameplayCue.Relic.MagicWand.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(
 		GameplayCue_Relic_Aimable_Impact,
 		"GameplayCue.Relic.Aimable.Impact");
 	UE_DEFINE_GAMEPLAY_TAG(State_Invisible, "State.Invisible");
