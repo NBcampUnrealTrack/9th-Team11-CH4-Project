@@ -51,4 +51,7 @@ namespace NPGameplayTags
 	/** 스포트라이트 아래에서 유물 가치가 증가한 순간 재생하는 GameplayCue입니다. */
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_MapEvent_Spotlight_PriceBonus);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Knockback_Magnitude);
+	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Ship_Cannon_Fire);
+	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Ship_Wheel_Rotate);
+	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Ship_Anchor_Set);
 }

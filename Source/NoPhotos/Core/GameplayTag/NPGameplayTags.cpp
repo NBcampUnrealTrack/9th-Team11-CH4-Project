@@ -62,4 +62,7 @@ namespace NPGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(
 		Data_Knockback_Magnitude,
 		"Data.Knockback.Magnitude");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Ship_Cannon_Fire, "GameplayCue.Ship.Cannon.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Ship_Wheel_Rotate, "GameplayCue.Ship.Wheel.Rotate");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Ship_Anchor_Set, "GameplayCue.Ship.Anchor.Set");
 }
