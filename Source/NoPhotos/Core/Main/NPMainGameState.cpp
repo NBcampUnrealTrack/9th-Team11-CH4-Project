@@ -310,6 +310,12 @@ void ANPMainGameState::SetRemainingGameTime(const int32 RemainingSeconds)
 	RemainingGameTime = FMath::Max(0, RemainingSeconds);
 	ForceNetUpdate();
 	OnMainGameStateChanged.Broadcast();
+	if (!bFinalMinuteBGMStarted && RemainingGameTime <= 60 && MainWorldState == ENPMainWorldState::Playing)
+	{
+		if (RemainingGameTime <= 55)
+			bFinalMinuteBGMStarted = true;
+		OnMainGameLastSpurt.Broadcast();	
+	}
 	LogLocalGameStatus();
 }
 

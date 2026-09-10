@@ -33,6 +33,7 @@ struct NOPHOTOS_API FNPPlayerRanking
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FNPOnPlayerRankingsChanged);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FNPOnMainGameStateChanged);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FNPOnMainGameLastSpurt);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FNPOnPictureSelectionStateChanged);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnNoPhotosPhotoEvidenceChanged);
 
@@ -83,6 +84,9 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "Main Game")
 	FNPOnMainGameStateChanged OnMainGameStateChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "Main Game")
+	FNPOnMainGameLastSpurt OnMainGameLastSpurt;
 
 	UPROPERTY(BlueprintAssignable, Category = "Picture Selection")
 	FNPOnPictureSelectionStateChanged OnPictureSelectionStateChanged;
@@ -156,4 +160,6 @@ private:
 
 	int32 LastLoggedRemainingTime = INDEX_NONE;
 	bool bFinalRankingsLogged = false;
+	
+	bool bFinalMinuteBGMStarted = false;
 };
