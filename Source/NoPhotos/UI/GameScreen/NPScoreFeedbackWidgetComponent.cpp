@@ -25,6 +25,7 @@ UNPScoreFeedbackWidgetComponent::UNPScoreFeedbackWidgetComponent()
 void UNPScoreFeedbackWidgetComponent::BeginPlay()
 {
 	Super::BeginPlay();
+	CreateMissionBonusWidgetComponent();
 	SetVisibility(false, true);
 	SetComponentTickEnabled(false);
 }
@@ -35,6 +36,11 @@ void UNPScoreFeedbackWidgetComponent::EndPlay(
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(HideTimer);
+	}
+	if (IsValid(MissionBonusWidgetComponent))
+	{
+		MissionBonusWidgetComponent->DestroyComponent();
+		MissionBonusWidgetComponent = nullptr;
 	}
 
 	Super::EndPlay(EndPlayReason);
@@ -65,6 +71,35 @@ void UNPScoreFeedbackWidgetComponent::MulticastShowScoreFeedback_Implementation(
 	ShowScoreFeedbackLocally(Amount, FeedbackType, DurationSeconds);
 }
 
+void UNPScoreFeedbackWidgetComponent::ShowRelicReturnFeedback(
+	const int32 ReturnScore,
+	const int32 MissionBonusScore,
+	const float DurationSeconds)
+{
+	const AActor* OwnerActor = GetOwner();
+	if (!IsValid(OwnerActor) || !OwnerActor->HasAuthority()
+		|| ReturnScore < 0 || MissionBonusScore <= 0)
+	{
+		return;
+	}
+
+	MulticastShowRelicReturnFeedback(
+		ReturnScore,
+		FMath::Max(0, MissionBonusScore),
+		FMath::Max(0.01f, DurationSeconds));
+}
+
+void UNPScoreFeedbackWidgetComponent::MulticastShowRelicReturnFeedback_Implementation(
+	const int32 ReturnScore,
+	const int32 MissionBonusScore,
+	const float DurationSeconds)
+{
+	ShowRelicReturnFeedbackLocally(
+		ReturnScore,
+		MissionBonusScore,
+		DurationSeconds);
+}
+
 void UNPScoreFeedbackWidgetComponent::ShowScoreFeedbackLocally(
 	const int32 Amount,
 	const ENPScoreFeedbackType FeedbackType,
@@ -75,6 +110,94 @@ void UNPScoreFeedbackWidgetComponent::ShowScoreFeedbackLocally(
 		return;
 	}
 
+	UNPScoreFeedbackWidget* FeedbackWidget = ResolveFeedbackWidget();
+	if (!IsValid(FeedbackWidget))
+	{
+		return;
+	}
+
+	FeedbackWidget->SetScoreFeedback(Amount, FeedbackType);
+	if (IsValid(MissionBonusWidgetComponent))
+	{
+		MissionBonusWidgetComponent->SetVisibility(false, true);
+	}
+	BeginDisplayingFeedback(DurationSeconds);
+
+	UE_LOG(
+		LogNPPhoto,
+		Log,
+		TEXT("[ScoreFeedbackUI] Feedback shown. Owner=%s Amount=%d Type=%d Duration=%.2f"),
+		*GetNameSafe(GetOwner()),
+		Amount,
+		static_cast<int32>(FeedbackType),
+		DurationSeconds);
+}
+
+void UNPScoreFeedbackWidgetComponent::ShowRelicReturnFeedbackLocally(
+	const int32 ReturnScore,
+	const int32 MissionBonusScore,
+	const float DurationSeconds)
+{
+	if (ReturnScore < 0 || MissionBonusScore <= 0
+		|| GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+
+	UNPScoreFeedbackWidget* FeedbackWidget = ResolveFeedbackWidget();
+	UNPScoreFeedbackWidget* MissionBonusWidget = ResolveMissionBonusWidget();
+	if (!IsValid(FeedbackWidget) || !IsValid(MissionBonusWidget))
+	{
+		return;
+	}
+
+	FeedbackWidget->SetScoreFeedback(
+		ReturnScore,
+		ENPScoreFeedbackType::RelicReturnReward);
+	MissionBonusWidget->SetScoreFeedback(
+		MissionBonusScore,
+		ENPScoreFeedbackType::PersonalMissionBonus);
+	MissionBonusWidgetComponent->SetVisibility(true, true);
+	BeginDisplayingFeedback(DurationSeconds);
+}
+
+void UNPScoreFeedbackWidgetComponent::CreateMissionBonusWidgetComponent()
+{
+	if (IsValid(MissionBonusWidgetComponent) || !IsValid(GetOwner()))
+	{
+		return;
+	}
+
+	MissionBonusWidgetComponent = NewObject<UWidgetComponent>(
+		GetOwner(),
+		TEXT("MissionBonusFeedbackWidget"));
+	MissionBonusWidgetComponent->SetupAttachment(this);
+	MissionBonusWidgetComponent->SetWidgetClass(GetWidgetClass());
+	MissionBonusWidgetComponent->SetWidgetSpace(GetWidgetSpace());
+	MissionBonusWidgetComponent->SetDrawSize(GetDrawSize());
+	MissionBonusWidgetComponent->SetPivot(GetPivot());
+	MissionBonusWidgetComponent->SetTwoSided(GetTwoSided());
+	MissionBonusWidgetComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	MissionBonusWidgetComponent->SetRelativeLocation(MissionBonusRelativeLocation);
+	MissionBonusWidgetComponent->RegisterComponent();
+	MissionBonusWidgetComponent->SetVisibility(false, true);
+}
+
+UNPScoreFeedbackWidget* UNPScoreFeedbackWidgetComponent::ResolveMissionBonusWidget()
+{
+	CreateMissionBonusWidgetComponent();
+	if (!IsValid(MissionBonusWidgetComponent))
+	{
+		return nullptr;
+	}
+
+	MissionBonusWidgetComponent->InitWidget();
+	return Cast<UNPScoreFeedbackWidget>(
+		MissionBonusWidgetComponent->GetUserWidgetObject());
+}
+
+UNPScoreFeedbackWidget* UNPScoreFeedbackWidgetComponent::ResolveFeedbackWidget()
+{
 	InitWidget();
 	UNPScoreFeedbackWidget* FeedbackWidget =
 		Cast<UNPScoreFeedbackWidget>(GetUserWidgetObject());
@@ -87,11 +210,15 @@ void UNPScoreFeedbackWidgetComponent::ShowScoreFeedbackLocally(
 			*GetNameSafe(GetOwner()),
 			*GetNameSafe(this),
 			*GetNameSafe(GetUserWidgetObject()));
-		return;
 	}
 
-	FeedbackWidget->SetScoreFeedback(Amount, FeedbackType);
-	SetVisibility(true, true);
+	return FeedbackWidget;
+}
+
+void UNPScoreFeedbackWidgetComponent::BeginDisplayingFeedback(
+	const float DurationSeconds)
+{
+	SetVisibility(true, false);
 	SetComponentTickEnabled(true);
 	UpdateFacingCamera();
 
@@ -105,14 +232,6 @@ void UNPScoreFeedbackWidgetComponent::ShowScoreFeedbackLocally(
 			false);
 	}
 
-	UE_LOG(
-		LogNPPhoto,
-		Log,
-		TEXT("[ScoreFeedbackUI] Feedback shown. Owner=%s Amount=%d Type=%d Duration=%.2f"),
-		*GetNameSafe(GetOwner()),
-		Amount,
-		static_cast<int32>(FeedbackType),
-		DurationSeconds);
 }
 
 void UNPScoreFeedbackWidgetComponent::TickComponent(
@@ -126,7 +245,11 @@ void UNPScoreFeedbackWidgetComponent::TickComponent(
 
 void UNPScoreFeedbackWidgetComponent::HideFeedback()
 {
-	SetVisibility(false, true);
+	if (IsValid(MissionBonusWidgetComponent))
+	{
+		MissionBonusWidgetComponent->SetVisibility(false, true);
+	}
+	SetVisibility(false, false);
 	SetComponentTickEnabled(false);
 }
 

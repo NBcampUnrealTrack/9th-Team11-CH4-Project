@@ -10,10 +10,11 @@ UENUM(BlueprintType)
 enum class ENPScoreFeedbackType : uint8
 {
 	PhotoPenalty,
-	RelicReturnReward
+	RelicReturnReward,
+	PersonalMissionBonus
 };
 
-/** 사진 감점과 유물 반환 보상을 월드 공간에 표시하는 범용 점수 피드백 위젯입니다. */
+/** 사진 감점, 유물 반환 보상과 개인 미션 보너스를 월드 공간에 표시합니다. */
 UCLASS()
 class NOPHOTOS_API UNPScoreFeedbackWidget : public UNPUserWidget
 {
@@ -24,6 +25,15 @@ public:
 
 private:
 	UTextBlock* ResolveFeedbackText() const;
+
+	/** {0} 위치에 개인 미션 보너스 점수가 들어갑니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Score Feedback|Mission Bonus",
+		meta=(AllowPrivateAccess="true"))
+	FText MissionBonusTextFormat = INVTEXT("개인 미션 +{0}점");
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Score Feedback|Mission Bonus",
+		meta=(AllowPrivateAccess="true"))
+	FLinearColor MissionBonusColor = FLinearColor(1.0f, 0.65f, 0.05f, 1.0f);
 
 	/** 새 WBP에서 권장하는 TextBlock 이름입니다. */
 	UPROPERTY(meta=(BindWidgetOptional))

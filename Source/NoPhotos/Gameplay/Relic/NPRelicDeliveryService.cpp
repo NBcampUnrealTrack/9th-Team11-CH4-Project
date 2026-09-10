@@ -5,8 +5,10 @@
 #include "Gameplay/Photo/NPPhotoEvidenceTypes.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Gameplay/Relic/Components/NPRelicOwnershipComponent.h"
+#include "Gameplay/Relic/Components/NPPlayerBonusQuestComponent.h"
 #include "Gameplay/Relic/NPRelicReturnZone.h"
 #include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
+#include "GameFramework/PlayerController.h"
 #include "NoPhotos.h"
 #include "Core/Main/NPMainGameMode.h"
 #include "UI/GameScreen/NPScoreFeedbackWidgetComponent.h"
@@ -119,16 +121,36 @@ bool UNPRelicDeliveryService::TryDeliverRelic(
 	for (int32 OwnerIndex = 0; OwnerIndex < Owners.Num(); ++OwnerIndex)
 	{
 		const int32 OwnerScore = ScorePerOwner + (OwnerIndex < ScoreRemainder ? 1 : 0);
-		if (OwnerScore > 0)
+		APlayerController* OwnerController = Owners[OwnerIndex]->GetPlayerController();
+		const UNPPlayerBonusQuestComponent* BonusQuest = OwnerController
+			? OwnerController->FindComponentByClass<UNPPlayerBonusQuestComponent>()
+			: nullptr;
+		const int32 MissionBonusScore = BonusQuest
+			&& BonusQuest->IsAssignedQuestRelic(Relic)
+			? FMath::Max(0, BonusQuest->GetQuestRelicDeliveryBonusScore())
+			: 0;
+		const int32 TotalOwnerScore = static_cast<int32>(FMath::Clamp<int64>(
+			static_cast<int64>(OwnerScore) + MissionBonusScore,
+			0,
+			MAX_int32));
+		if (TotalOwnerScore > 0)
 		{
-			Owners[OwnerIndex]->AddScore(OwnerScore);
+			Owners[OwnerIndex]->AddScore(TotalOwnerScore);
 
 			ANPReplicatedStablePhysicsPawn* OwnerPawn =
 				Cast<ANPReplicatedStablePhysicsPawn>(
 					Owners[OwnerIndex]->GetPawn());
-			if (UNPScoreFeedbackWidgetComponent* ScoreFeedback = OwnerPawn
+			UNPScoreFeedbackWidgetComponent* ScoreFeedback = OwnerPawn
 				? OwnerPawn->FindComponentByClass<UNPScoreFeedbackWidgetComponent>()
-				: nullptr)
+				: nullptr;
+			if (MissionBonusScore > 0 && ScoreFeedback)
+			{
+				ScoreFeedback->ShowRelicReturnFeedback(
+					OwnerScore,
+					MissionBonusScore,
+					2.0f);
+			}
+			else if (ScoreFeedback)
 			{
 				ScoreFeedback->ShowScoreFeedback(
 					OwnerScore,
