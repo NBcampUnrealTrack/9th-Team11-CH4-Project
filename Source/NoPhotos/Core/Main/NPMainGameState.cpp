@@ -310,6 +310,12 @@ void ANPMainGameState::SetRemainingGameTime(const int32 RemainingSeconds)
 	RemainingGameTime = FMath::Max(0, RemainingSeconds);
 	ForceNetUpdate();
 	OnMainGameStateChanged.Broadcast();
+	if (!bFinalMinuteBGMStarted && RemainingGameTime <= 60 && MainWorldState == ENPMainWorldState::Playing)
+	{
+		if (RemainingGameTime <= 55)
+			bFinalMinuteBGMStarted = true;
+		OnMainGameLastSpurt.Broadcast();	
+	}
 	LogLocalGameStatus();
 }
 
@@ -348,6 +354,7 @@ void ANPMainGameState::FinishMainGame()
 	RefreshPlayerRankings();
 	ForceNetUpdate();
 	OnMainGameStateChanged.Broadcast();
+	OnMainGameEnded.Broadcast();
 	OnPictureSelectionStateChanged.Broadcast();
 	TryLogFinalRankings();
 
@@ -377,6 +384,14 @@ void ANPMainGameState::OnRep_MainGameState()
 	}
 
 	TryLogFinalRankings();
+}
+
+void ANPMainGameState::OnRep_MainGameEnded()
+{
+	if (bMainGameEnded)
+	{
+		OnMainGameEnded.Broadcast();
+	}
 }
 
 void ANPMainGameState::OnRep_PictureSelectionCompletedPlayers()

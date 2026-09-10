@@ -33,6 +33,8 @@ struct NOPHOTOS_API FNPPlayerRanking
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FNPOnPlayerRankingsChanged);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FNPOnMainGameStateChanged);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FNPOnMainGameEnded);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FNPOnMainGameLastSpurt);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FNPOnPictureSelectionStateChanged);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnNoPhotosPhotoEvidenceChanged);
 
@@ -84,6 +86,12 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Main Game")
 	FNPOnMainGameStateChanged OnMainGameStateChanged;
 
+	UPROPERTY(BlueprintAssignable, Category = "Main Game")
+	FNPOnMainGameEnded OnMainGameEnded;
+
+	UPROPERTY(BlueprintAssignable, Category = "Main Game")
+	FNPOnMainGameLastSpurt OnMainGameLastSpurt;
+
 	UPROPERTY(BlueprintAssignable, Category = "Picture Selection")
 	FNPOnPictureSelectionStateChanged OnPictureSelectionStateChanged;
 
@@ -106,6 +114,9 @@ private:
 
 	UFUNCTION()
 	void OnRep_MainGameState();
+
+	UFUNCTION()
+	void OnRep_MainGameEnded();
 
 	UFUNCTION()
 	void OnRep_PictureSelectionCompletedPlayers();
@@ -133,7 +144,7 @@ private:
 	UPROPERTY(ReplicatedUsing = OnRep_MainGameState)
 	bool bMainGameActive = false;
 
-	UPROPERTY(ReplicatedUsing = OnRep_MainGameState)
+	UPROPERTY(ReplicatedUsing = OnRep_MainGameEnded)
 	bool bMainGameEnded = false;
 
 	UPROPERTY(ReplicatedUsing = OnRep_MainGameState)
@@ -156,4 +167,6 @@ private:
 
 	int32 LastLoggedRemainingTime = INDEX_NONE;
 	bool bFinalRankingsLogged = false;
+	
+	bool bFinalMinuteBGMStarted = false;
 };

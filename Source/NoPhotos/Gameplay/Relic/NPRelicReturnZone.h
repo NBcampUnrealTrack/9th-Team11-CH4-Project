@@ -7,6 +7,7 @@
 class UBoxComponent;
 class UPrimitiveComponent;
 class ANPBaseRelic;
+class UNPRelicOwnershipComponent;
 
 /** 레벨에 배치하여 서버에서 Relic 반환 Overlap을 감지하는 구역입니다. */
 UCLASS(Blueprintable)
@@ -26,6 +27,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	UFUNCTION()
 	void HandleReturnVolumeBeginOverlap(
@@ -37,6 +39,14 @@ protected:
 		const FHitResult& SweepResult);
 
 	/** 서버에서 유물 제출이 실제로 성공했을 때 원본 유물과 제출 위치를 전달하며 각 클라이언트에서 호출됩니다. */
+	UFUNCTION()
+	void HandleReturnVolumeEndOverlap(
+		UPrimitiveComponent* OverlappedComponent,
+		AActor* OtherActor,
+		UPrimitiveComponent* OtherComponent,
+		int32 OtherBodyIndex);
+
+	/** 서버에서 유물 제출이 실제로 성공했을 때 각 클라이언트에서 호출됩니다. */
 	UFUNCTION(BlueprintImplementableEvent, Category="Relic|Delivery", meta=(DisplayName="On Relic Delivered"))
 	void BP_OnRelicDelivered(
 		ANPBaseRelic* DeliveredRelic,
@@ -50,10 +60,17 @@ protected:
 	float ReturnScoreMultiplier = 1.0f;
 
 private:
+	void RegisterOverlappingRelic(ANPBaseRelic* Relic);
+	void UnregisterOverlappingRelic(ANPBaseRelic* Relic);
+	void HandleRelicOwnershipChanged(UNPRelicOwnershipComponent* Ownership);
+	bool TryDeliverOverlappingRelic(ANPBaseRelic* Relic);
+
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastNotifyRelicDelivered(
 		ANPBaseRelic* DeliveredRelic,
 		FVector_NetQuantize10 DeliveryLocation);
 
+	TSet<TWeakObjectPtr<ANPBaseRelic>> OverlappingRelics;
+	TSet<TWeakObjectPtr<ANPBaseRelic>> DeliveryAttemptsInProgress;
 	bool bDeliveryEffectEnabled = false;
 };

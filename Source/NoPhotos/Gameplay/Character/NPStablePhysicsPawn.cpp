@@ -3,6 +3,7 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Core/GameplayTag/NPGameplayTags.h"
+#include "Core/Main/NPMainPlayerController.h"
 
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
@@ -107,6 +108,9 @@ void ANPStablePhysicsPawn::BeginPlay()
 	PhysicsMovement->OnJumpApplied.AddUObject(
 		RightHandGrab,
 		&UNPStablePhysicsGrabComponent::NotifyJumpIntent);
+	PhysicsMovement->OnJumpApplied.AddUObject(
+		this,
+		&ThisClass::HandleJumpApplied);
 	ScanComponent->OnActorScanned.AddUniqueDynamic(
 		this,
 		&ThisClass::HandleActorScanned);
@@ -996,6 +1000,14 @@ void ANPStablePhysicsPawn::HandleActorScanned(AActor* ScannedActor)
 void ANPStablePhysicsPawn::Move(const FInputActionValue& Value)
 {
 	const FVector2D MovementInput = Value.Get<FVector2D>();
+	if (const ANPMainPlayerController* MainPlayerController =
+		Cast<ANPMainPlayerController>(Controller);
+		MainPlayerController && MainPlayerController->IsMainWorldInputLocked())
+	{
+		ApplyMoveInput(FVector::ZeroVector);
+		return;
+	}
+
 	if (!Controller)
 	{
 		ApplyMoveInput(FVector::ZeroVector);
@@ -1032,6 +1044,14 @@ void ANPStablePhysicsPawn::Look(const FInputActionValue& Value)
 void ANPStablePhysicsPawn::Jump()
 {
 	ApplyJumpRequest();
+}
+
+void ANPStablePhysicsPawn::HandleJumpApplied()
+{
+	if (IsLocallyControlled())
+	{
+		OnJumpSucceeded();
+	}
 }
 
 void ANPStablePhysicsPawn::StartRightHand()

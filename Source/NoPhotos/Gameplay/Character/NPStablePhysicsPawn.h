@@ -198,6 +198,10 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category="Input")
 	void EventPressScan();
 
+	/** 로컬 플레이어의 실제 물리 점프가 적용되었을 때 호출됩니다. */
+	UFUNCTION(BlueprintImplementableEvent, Category="Movement|Audio", meta=(DisplayName="점프 성공"))
+	void OnJumpSucceeded();
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation|Photo")
 	TObjectPtr<UAnimMontage> PhotoShotMontage;
 
@@ -299,6 +303,7 @@ private:
 	void Move(const FInputActionValue& Value);
 	void Look(const FInputActionValue& Value);
 	void Jump();
+	void HandleJumpApplied();
 	void StartRightHand();
 	void StopRightHand();
 	void HandleScanPressed();

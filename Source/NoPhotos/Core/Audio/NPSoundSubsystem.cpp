@@ -33,8 +33,13 @@ void UNPSoundSubsystem::Deinitialize()
 	{
 		CurrentBGMComponent->Stop();
 	}
+	if (IsValid(CurrentAmbientComponent))
+	{
+		CurrentAmbientComponent->Stop();
+	}
 
 	CurrentBGMComponent = nullptr;
+	CurrentAmbientComponent = nullptr;
 	Super::Deinitialize();
 }
 
@@ -104,6 +109,7 @@ void UNPSoundSubsystem::PlayBGM(USoundBase* Sound, const float FadeDuration, con
 
 	const float SafeFadeDuration = FMath::IsFinite(FadeDuration) ? FMath::Max(0.0f, FadeDuration) : 1.0f;
 	const float SafeVolume = NPSoundSubsystemPrivate::SanitizeVolume(Volume);
+	const float TargetVolume = SafeVolume * BGMVolume * MasterVolume;
 
 	if (IsValid(CurrentBGMComponent) && CurrentBGMComponent->IsPlaying()
 		&& CurrentBGMComponent->GetSound() == Sound)
@@ -116,7 +122,7 @@ void UNPSoundSubsystem::PlayBGM(USoundBase* Sound, const float FadeDuration, con
 	UAudioComponent* NewBGMComponent = UGameplayStatics::CreateSound2D(
 		World,
 		Sound,
-		0.0f,
+		TargetVolume,
 		1.0f,
 		0.0f,
 		nullptr,
@@ -137,7 +143,7 @@ void UNPSoundSubsystem::PlayBGM(USoundBase* Sound, const float FadeDuration, con
 		PreviousBGMComponent->FadeOut(SafeFadeDuration, 0.0f);
 	}
 
-	CurrentBGMComponent->FadeIn(SafeFadeDuration, CurrentBGMBaseVolume * BGMVolume * MasterVolume);
+	CurrentBGMComponent->FadeIn(SafeFadeDuration, 1.0f);
 }
 
 void UNPSoundSubsystem::StopBGM(const float FadeOutDuration)
@@ -156,6 +162,62 @@ void UNPSoundSubsystem::StopBGM(const float FadeOutDuration)
 	BGMComponentToStop->FadeOut(SafeFadeOutDuration, 0.0f);
 }
 
+void UNPSoundSubsystem::PlayAmbient(
+	USoundBase* Sound,
+	const float FadeDuration,
+	const float Volume)
+{
+	UWorld* World = GetWorld();
+	if (!IsValid(Sound) || !NPSoundSubsystemPrivate::CanPlayAudio(World))
+	{
+		return;
+	}
+
+	const float SafeFadeDuration = FMath::IsFinite(FadeDuration)
+		? FMath::Max(0.0f, FadeDuration)
+		: 1.0f;
+	const float SafeVolume = NPSoundSubsystemPrivate::SanitizeVolume(Volume);
+	const float TargetVolume = SafeVolume * BGMVolume * MasterVolume;
+
+	if (IsValid(CurrentAmbientComponent)
+		&& CurrentAmbientComponent->IsPlaying()
+		&& CurrentAmbientComponent->GetSound() == Sound)
+	{
+		CurrentAmbientBaseVolume = SafeVolume;
+		CurrentAmbientComponent->SetVolumeMultiplier(
+			CurrentAmbientBaseVolume * BGMVolume * MasterVolume);
+		return;
+	}
+
+	UAudioComponent* NewAmbientComponent = UGameplayStatics::CreateSound2D(
+		World,
+		Sound,
+		TargetVolume,
+		1.0f,
+		0.0f,
+		nullptr,
+		true,
+		true);
+	if (!IsValid(NewAmbientComponent))
+	{
+		return;
+	}
+
+	UAudioComponent* PreviousAmbientComponent = CurrentAmbientComponent;
+	CurrentAmbientComponent = NewAmbientComponent;
+	CurrentAmbientBaseVolume = SafeVolume;
+
+	if (IsValid(PreviousAmbientComponent)
+		&& PreviousAmbientComponent->IsPlaying())
+	{
+		PreviousAmbientComponent->FadeOut(SafeFadeDuration, 0.0f);
+	}
+
+	CurrentAmbientComponent->FadeIn(
+		SafeFadeDuration,
+		1.0f);
+}
+
 void UNPSoundSubsystem::SetMasterVolume(const float InVolume)
 {
 	MasterVolume = FMath::IsFinite(InVolume) ? FMath::Clamp(InVolume, 0.0f, 1.0f) : 1.0f;
@@ -163,6 +225,11 @@ void UNPSoundSubsystem::SetMasterVolume(const float InVolume)
 	if (IsValid(CurrentBGMComponent))
 	{
 		CurrentBGMComponent->SetVolumeMultiplier(CurrentBGMBaseVolume * BGMVolume * MasterVolume);
+	}
+	if (IsValid(CurrentAmbientComponent))
+	{
+		CurrentAmbientComponent->SetVolumeMultiplier(
+			CurrentAmbientBaseVolume * BGMVolume * MasterVolume);
 	}
 }
 
@@ -178,5 +245,10 @@ void UNPSoundSubsystem::SetBGMVolume(const float InVolume)
 	if (IsValid(CurrentBGMComponent))
 	{
 		CurrentBGMComponent->SetVolumeMultiplier(CurrentBGMBaseVolume * BGMVolume * MasterVolume);
+	}
+	if (IsValid(CurrentAmbientComponent))
+	{
+		CurrentAmbientComponent->SetVolumeMultiplier(
+			CurrentAmbientBaseVolume * BGMVolume * MasterVolume);
 	}
 }

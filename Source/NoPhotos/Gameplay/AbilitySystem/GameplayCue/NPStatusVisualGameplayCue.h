@@ -35,6 +35,7 @@ protected:
 	virtual bool Recycle() override;
 
 	virtual void PrepareVisual() {}
+	virtual void OnAppearTransitionStarted() {}
 	virtual void ResetVisual() {}
 	virtual void ApplyVisualScale() {}
 
