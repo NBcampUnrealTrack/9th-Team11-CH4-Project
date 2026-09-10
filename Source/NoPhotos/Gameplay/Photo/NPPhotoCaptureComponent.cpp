@@ -333,18 +333,33 @@ void UNPPhotoCaptureComponent::ServerRequestTakePhoto_Implementation(
 	}
 	LastServerCaptureTime = CurrentTime;
 
-	if (PhotographerPawn)
+	if (AbilitySystem && PhotographerPawn)
 	{
-		// Pawn은 모든 관련 클라이언트에 복제되므로 위치 기반 셔터음 멀티캐스트의 주체로 사용합니다.
-		PhotographerPawn->BroadcastPhotoShutterSound(PhotographerPawn->GetActorLocation());
+		FGameplayCueParameters ShutterCueParameters;
+		ShutterCueParameters.Location = PhotographerPawn->GetActorLocation();
+		ShutterCueParameters.Normal = PhotographerPawn->GetActorForwardVector();
+		ShutterCueParameters.Instigator = PhotographerPawn;
+		ShutterCueParameters.EffectCauser = PhotographerPawn;
+		AbilitySystem->ExecuteGameplayCue(
+			NPGameplayTags::GameplayCue_Photo_Shutter,
+			ShutterCueParameters);
+		UE_LOG(
+			LogNPPhoto,
+			Log,
+			TEXT("[PhotoCue][Shutter] Requested. Pawn=%s ASC=%s Location=%s Tag=%s"),
+			*GetNameSafe(PhotographerPawn),
+			*GetNameSafe(AbilitySystem),
+			*ShutterCueParameters.Location.ToCompactString(),
+			*NPGameplayTags::GameplayCue_Photo_Shutter.GetTag().ToString());
 	}
 	else
 	{
 		UE_LOG(
 			LogNPPhoto,
 			Warning,
-			TEXT("[Audio] Shutter multicast skipped: photographer Pawn is invalid. Pawn=%s"),
-			*GetNameSafe(Photographer->GetPawn()));
+			TEXT("[PhotoCue][Shutter] Skipped: Pawn or ASC is invalid. Pawn=%s ASC=%s"),
+			*GetNameSafe(PhotographerPawn),
+			*GetNameSafe(AbilitySystem));
 	}
 
 	FNPPhotoCaptureRequest Request;

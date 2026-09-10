@@ -426,8 +426,23 @@ void ANPMainPlayerController::ClientNotifyMainWorldLoadFailed_Implementation()
 
 void ANPMainPlayerController::SetMainWorldInputLocked(const bool bLocked)
 {
+	if (bMainWorldInputLocked == bLocked)
+	{
+		return;
+	}
+
+	bMainWorldInputLocked = bLocked;
 	SetIgnoreMoveInput(bLocked);
 	SetIgnoreLookInput(bLocked);
+
+	if (bLocked)
+	{
+		if (ANPStablePhysicsPawn* StablePawn =
+			Cast<ANPStablePhysicsPawn>(GetPawn()))
+		{
+			StablePawn->StopMovementInput();
+		}
+	}
 }
 
 void ANPMainPlayerController::ShowMainWorldLoadingOverlay()

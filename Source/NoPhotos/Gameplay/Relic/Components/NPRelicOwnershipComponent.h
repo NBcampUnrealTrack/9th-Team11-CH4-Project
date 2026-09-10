@@ -6,6 +6,12 @@
 
 class ANPPlayerState;
 class UNPStablePhysicsGrabComponent;
+class UNPRelicOwnershipComponent;
+
+/** 서버에서 유물의 현재 Grab 소유자 구성이 변경된 직후 호출됩니다. */
+DECLARE_MULTICAST_DELEGATE_OneParam(
+	FOnRelicOwnershipChanged,
+	UNPRelicOwnershipComponent*);
 
 /** 서버에서 Relic을 현재 잡고 있는 Grab 주체와 고유 소유자를 관리합니다. */
 UCLASS(ClassGroup=(Relic), meta=(BlueprintSpawnableComponent))
@@ -28,6 +34,8 @@ public:
 	/** 등록된 모든 Grab Component에 서버 권한으로 놓기 요청을 전달합니다. */
 	void ReleaseAllGrabbers();
 	void ClearOwnership();
+
+	FOnRelicOwnershipChanged OnOwnershipChanged;
 
 private:
 	bool HasServerAuthority() const;

@@ -26,8 +26,16 @@ void UNPRelicOwnershipComponent::RegisterGrabber(
 		return;
 	}
 
+	const TWeakObjectPtr<ANPPlayerState>* ExistingOwner =
+		ActiveGrabbers.Find(GrabComponent);
+	if (ExistingOwner && ExistingOwner->Get() == PlayerState)
+	{
+		return;
+	}
+
 	ActiveGrabbers.FindOrAdd(GrabComponent) = PlayerState;
 	UpdateReplicationOwner();
+	OnOwnershipChanged.Broadcast(this);
 }
 
 void UNPRelicOwnershipComponent::UnregisterGrabber(
@@ -38,8 +46,13 @@ void UNPRelicOwnershipComponent::UnregisterGrabber(
 		return;
 	}
 
-	ActiveGrabbers.Remove(GrabComponent);
+	if (ActiveGrabbers.Remove(GrabComponent) == 0)
+	{
+		return;
+	}
+
 	UpdateReplicationOwner();
+	OnOwnershipChanged.Broadcast(this);
 }
 
 void UNPRelicOwnershipComponent::GetCurrentOwners(
@@ -94,8 +107,13 @@ void UNPRelicOwnershipComponent::ClearOwnership()
 {
 	if (HasServerAuthority())
 	{
+		const bool bOwnershipChanged = !ActiveGrabbers.IsEmpty();
 		ActiveGrabbers.Reset();
 		UpdateReplicationOwner();
+		if (bOwnershipChanged)
+		{
+			OnOwnershipChanged.Broadcast(this);
+		}
 	}
 }
 
