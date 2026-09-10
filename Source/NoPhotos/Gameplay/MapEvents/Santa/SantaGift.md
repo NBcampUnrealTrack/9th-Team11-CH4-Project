@@ -55,7 +55,7 @@ Content/NoPhotos/Resources/Exturnal/PolyUniversalPack/Meshes/Christmas/
 | Max Fall Duration | 45초 | 바닥을 못 찾은 선물의 최대 낙하 시간 |
 | Minimum Ground Normal Z | 0.5 | 바닥으로 인정할 표면의 위쪽 방향 기준 |
 
-`On Gift Landed`, `On Gift Opened`는 소리/파티클 등을 추가할 수 있는 **연출 전용 BP 이벤트**입니다. 기본 뚜껑 애니메이션은 C++에 있으므로 BP Tick/Timeline은 필요 없습니다. 여기에서 유물 Spawn을 추가하면 중복될 수 있으므로 넣지 마세요. 전용 서버에서는 연출 훅을 실행하지 않습니다.
+`On Gift Landed`, `On Gift Opened`는 착지/개봉 연출용 BP 이벤트입니다. 실제 유물 생성에 성공하면 모든 클라이언트에서 `On Gift Reward Spawned`가 추가로 호출되며 `Spawned Relic Class`와 `Primary Reward`가 전달됩니다. 이 이벤트에서 클래스별 사운드를 분기하거나 `Primary Reward`로 특별 당첨음을 구분하세요. 기본 뚜껑 애니메이션은 C++에 있으므로 BP Tick/Timeline은 필요 없습니다. 여기에서 유물 Spawn을 추가하면 중복될 수 있으므로 넣지 마세요. 전용 서버에서는 연출 훅을 실행하지 않습니다.
 
 `GrabbableComponent`는 C++에서 기본 생성되므로 BP에 중복 추가하거나 별도 잡기 이벤트를 연결하지 마세요. 기존 BP의 `On Gift Landed`에 직접 개봉 Timeline이나 Destroy를 연결했다면 제거하고 착지 소리/먼지 효과만 유지하세요. 낙하 중이나 개봉이 시작된 상자는 잡을 수 없으며 동시/반복 잡기도 한 번의 개봉으로 처리합니다.
 
@@ -71,7 +71,9 @@ DA 타입은 기존 **NPSantaEventDefinition** 그대로 사용합니다.
 | Gift Drops → End Progress | 0.9 |
 | Gift Drops → Random Drop Radius | 500cm |
 | Gift Drop Height Offset | 100cm |
-| Relic Classes | 생성할 기존 유물 BP 여러 개 |
+| Primary Relic Class | 개봉 시 1차 확률 추첨에 사용할 특별 유물 BP |
+| Primary Relic Chance Percent | 특별 유물 등장 확률(0~100%) |
+| Relic Classes | 1차 추첨 실패 시 균등 추첨할 기존 유물 BP 여러 개 |
 
 - `Count=5`, 구간 `0.1~0.9`이면 **매 비행마다** 진행률 **10%, 30%, 50%, 70%, 90%**에 투하합니다. `Flight Schedule → Flight Duration`이 30초라면 각 비행 시작 후 약 3, 9, 15, 21, 27초입니다. 공통 `Duration`은 대기 시간을 포함한 전체 이벤트 수명이며 투하 간격 계산에는 사용하지 않습니다.
 - 비행 종료 후 `Respawn Delay Min~Max` 사이 랜덤 대기를 거쳐 새 경로/방향으로 다시 등장하면 투하 슬롯도 0번부터 다시 시작합니다. 이전 비행에서 떨어진 선물은 유지합니다. 역방향 비행도 산타가 이동하는 방향 순서대로 투하합니다.
@@ -79,8 +81,9 @@ DA 타입은 기존 **NPSantaEventDefinition** 그대로 사용합니다.
 - Count=1이면 Start Progress에서 한 개, Count=0이면 비행만 합니다. 최대 128개입니다.
 - End Progress는 1보다 작아야 합니다. 비행 종료 타이머와 같은 시각의 투하는 허용하지 않습니다.
 - 서버가 크게 지연되면 과거 슬롯을 한 위치에 몰아서 생성하지 않고 건너뜁니다. 그래서 심한 지연 상황에서는 실제 투하 수가 Count보다 적을 수 있습니다.
+- `Primary Relic Class`가 지정되고 확률이 0보다 크면 개봉 시 서버가 먼저 0~100 확률을 추첨합니다. 성공하면 특별 유물을 생성하고, 실패하면 `Relic Classes` 후보 중 하나를 균등 추첨합니다. 확률 100은 항상 특별 유물, 확률 0 또는 빈 클래스는 기존 균등 추첨만 사용합니다.
 - 유물 목록은 **ANPBaseRelic 파생 BP 클래스**입니다. 메시나 데이터 테이블 Row를 넣는 칸이 아닙니다. 기존 유물 BP가 가진 가격/등급/상호작용 설정을 그대로 사용합니다.
-- 후보는 중복 제거 후 균등 추첨합니다. 서로 다른 상자에서 같은 유물이 나올 수 있습니다. 한 종류만 넣으면 해당 유물만 나옵니다.
+- 2차 후보는 중복 제거 후 균등 추첨합니다. 서로 다른 상자에서 같은 유물이 나올 수 있습니다. 한 종류만 넣으면 해당 유물만 나옵니다. 실패 경로를 보장하기 위해 `Relic Classes`에는 최소 한 개를 등록해야 합니다.
 - 랜덤 풀을 비우거나 Gift Class를 누락하면 경고를 남기고 **비행만** 진행합니다. 유물 전체 에셋을 임의로 스캔하지 않습니다.
 - 투하 시간과 진행 간격은 기존처럼 유지되며, 각 투하 위치만 경로상의 지점을 중심으로 `Random Drop Radius` 수평 원 안에서 서버가 무작위로 정합니다. 0이면 기존처럼 일직선으로 투하합니다.
 - 이번 작업에서 BP/DA/레벨 에셋은 수정하거나 생성하지 않았습니다.

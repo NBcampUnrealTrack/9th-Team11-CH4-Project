@@ -51,16 +51,17 @@ void ANPRelicReturnZone::HandleReturnVolumeBeginOverlap(
 		if (DeliveryService->TryDeliverRelic(Relic, this)
 			&& bDeliveryEffectEnabled)
 		{
-			MulticastNotifyRelicDelivered(DeliveryLocation);
+			MulticastNotifyRelicDelivered(Relic, DeliveryLocation);
 		}
 	}
 }
 
 void ANPRelicReturnZone::MulticastNotifyRelicDelivered_Implementation(
+	ANPBaseRelic* DeliveredRelic,
 	const FVector_NetQuantize10 DeliveryLocation)
 {
 	if (GetNetMode() != NM_DedicatedServer)
 	{
-		BP_OnRelicDelivered(DeliveryLocation);
+		BP_OnRelicDelivered(DeliveredRelic, DeliveryLocation);
 	}
 }

@@ -6,6 +6,7 @@
 
 class UBoxComponent;
 class UPrimitiveComponent;
+class ANPBaseRelic;
 
 /** 레벨에 배치하여 서버에서 Relic 반환 Overlap을 감지하는 구역입니다. */
 UCLASS(Blueprintable)
@@ -35,9 +36,11 @@ protected:
 		bool bFromSweep,
 		const FHitResult& SweepResult);
 
-	/** 서버에서 유물 제출이 실제로 성공했을 때 각 클라이언트에서 호출됩니다. */
+	/** 서버에서 유물 제출이 실제로 성공했을 때 원본 유물과 제출 위치를 전달하며 각 클라이언트에서 호출됩니다. */
 	UFUNCTION(BlueprintImplementableEvent, Category="Relic|Delivery", meta=(DisplayName="On Relic Delivered"))
-	void BP_OnRelicDelivered(FVector DeliveryLocation);
+	void BP_OnRelicDelivered(
+		ANPBaseRelic* DeliveredRelic,
+		FVector DeliveryLocation);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<UBoxComponent> ReturnVolume;
@@ -48,7 +51,9 @@ protected:
 
 private:
 	UFUNCTION(NetMulticast, Reliable)
-	void MulticastNotifyRelicDelivered(FVector_NetQuantize10 DeliveryLocation);
+	void MulticastNotifyRelicDelivered(
+		ANPBaseRelic* DeliveredRelic,
+		FVector_NetQuantize10 DeliveryLocation);
 
 	bool bDeliveryEffectEnabled = false;
 };

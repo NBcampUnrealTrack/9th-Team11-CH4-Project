@@ -235,6 +235,14 @@ void ANPSantaMapEvent::StartGiftDrops(const UNPSantaEventDefinition* Definition)
 	}
 	ActiveGiftClass = Definition->GetGiftClass();
 	ActiveDropHeightOffset = Definition->GetGiftDropHeightOffset();
+	ActivePrimaryRelicClass = Definition->GetPrimaryRelicClass();
+	ActivePrimaryRelicChancePercent = FMath::IsFinite(Definition->GetPrimaryRelicChancePercent())
+		? FMath::Clamp(Definition->GetPrimaryRelicChancePercent(), 0.0f, 100.0f) : 0.0f;
+	if (!ActivePrimaryRelicClass || ActivePrimaryRelicClass->HasAnyClassFlags(CLASS_Abstract))
+	{
+		ActivePrimaryRelicClass = nullptr;
+		ActivePrimaryRelicChancePercent = 0.0f;
+	}
 	if (!ActiveGiftDrops.IsValid() || !ActiveGiftClass || ActiveGiftClass->HasAnyClassFlags(CLASS_Abstract)
 		|| !FMath::IsFinite(ActiveDropHeightOffset) || ActiveDropHeightOffset < 0.0f)
 	{
@@ -302,7 +310,10 @@ void ANPSantaMapEvent::DropGift()
 	Params.bDeferConstruction = true;
 	// Owner를 이벤트로 지정하거나 부착하지 않습니다. 이미 투하된 선물은 비행 종료 후에도 남습니다.
 	ANPSantaGiftActor* Gift = GetWorld()->SpawnActor<ANPSantaGiftActor>(ActiveGiftClass, DropTransform, Params);
-	if (IsValid(Gift) && Gift->InitializeGift(ActiveRelicClasses))
+	if (IsValid(Gift) && Gift->InitializeGift(
+		ActiveRelicClasses,
+		ActivePrimaryRelicClass,
+		ActivePrimaryRelicChancePercent))
 	{
 		Gift->SetReplicates(true);
 		Gift->SetReplicateMovement(true);
@@ -341,6 +352,8 @@ void ANPSantaMapEvent::CleanupFlight()
 	}
 	ActiveGiftClass = nullptr;
 	ActiveRelicClasses.Reset();
+	ActivePrimaryRelicClass = nullptr;
+	ActivePrimaryRelicChancePercent = 0.0f;
 	NextGiftIndex = 0;
 	if (IsValid(SpawnedSanta))
 	{

@@ -60,4 +60,7 @@ private:
 	TSubclassOf<ANPSantaGiftActor> ActiveGiftClass;
 	UPROPERTY(Transient)
 	TArray<TSubclassOf<ANPBaseRelic>> ActiveRelicClasses;
+	UPROPERTY(Transient)
+	TSubclassOf<ANPBaseRelic> ActivePrimaryRelicClass;
+	float ActivePrimaryRelicChancePercent = 0.0f;
 };

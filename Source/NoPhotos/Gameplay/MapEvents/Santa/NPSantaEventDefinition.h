@@ -24,6 +24,8 @@ public:
 	const FNPSantaFlightSchedule& GetFlightSchedule() const { return FlightSchedule; }
 	TSubclassOf<ANPSantaGiftActor> GetGiftClass() const { return GiftClass; }
 	const FNPSantaGiftDropSchedule& GetGiftDrops() const { return GiftDrops; }
+	TSubclassOf<ANPBaseRelic> GetPrimaryRelicClass() const { return PrimaryRelicClass; }
+	float GetPrimaryRelicChancePercent() const { return PrimaryRelicChancePercent; }
 	const TArray<TSubclassOf<ANPBaseRelic>>& GetRelicClasses() const { return RelicClasses; }
 	float GetGiftDropHeightOffset() const { return GiftDropHeightOffset; }
 
@@ -51,7 +53,15 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Santa Event|Gifts", meta=(AllowPrivateAccess="true", ClampMin="0.0", Units="cm"))
 	float GiftDropHeightOffset = 100.0f;
 
-	/** 각 상자가 개봉할 때 하나를 균등 추첨합니다. 중복 클래스는 한 후보로 취급합니다. */
+	/** 개봉 시 첫 번째로 추첨할 특별 유물입니다. 비어 있거나 확률이 0이면 1차 추첨을 건너뜁니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Santa Event|Gifts", meta=(AllowPrivateAccess="true"))
+	TSubclassOf<ANPBaseRelic> PrimaryRelicClass;
+
+	/** PrimaryRelicClass가 선택될 확률입니다. 실패하면 아래 RelicClasses에서 균등 추첨합니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Santa Event|Gifts", meta=(AllowPrivateAccess="true", ClampMin="0.0", ClampMax="100.0", UIMin="0.0", UIMax="100.0", Units="Percent"))
+	float PrimaryRelicChancePercent = 0.0f;
+
+	/** 1차 특별 유물 추첨에 실패하면 여기서 하나를 균등 추첨합니다. 중복 클래스는 한 후보로 취급합니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Santa Event|Gifts", meta=(AllowPrivateAccess="true"))
 	TArray<TSubclassOf<ANPBaseRelic>> RelicClasses;
 };

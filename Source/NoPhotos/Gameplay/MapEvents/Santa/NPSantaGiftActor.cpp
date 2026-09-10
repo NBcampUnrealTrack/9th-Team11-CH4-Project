@@ -53,7 +53,10 @@ ANPSantaGiftActor::ANPSantaGiftActor()
 	FallingMovement->OnProjectileStop.AddDynamic(this, &ThisClass::HandleFallStopped);
 }
 
-bool ANPSantaGiftActor::InitializeGift(const TArray<TSubclassOf<ANPBaseRelic>>& InRelicClasses)
+bool ANPSantaGiftActor::InitializeGift(
+	const TArray<TSubclassOf<ANPBaseRelic>>& InRelicClasses,
+	const TSubclassOf<ANPBaseRelic> InPrimaryRelicClass,
+	const float InPrimaryRelicChancePercent)
 {
 	if (!HasAuthority() || bInitialized)
 	{
@@ -65,6 +68,12 @@ bool ANPSantaGiftActor::InitializeGift(const TArray<TSubclassOf<ANPBaseRelic>>& 
 		{
 			RelicClasses.AddUnique(RelicClass);
 		}
+	}
+	if (InPrimaryRelicClass && !InPrimaryRelicClass->HasAnyClassFlags(CLASS_Abstract))
+	{
+		PrimaryRelicClass = InPrimaryRelicClass;
+		PrimaryRelicChancePercent = FMath::IsFinite(InPrimaryRelicChancePercent)
+			? FMath::Clamp(InPrimaryRelicChancePercent, 0.0f, 100.0f) : 0.0f;
 	}
 	bInitialized = !RelicClasses.IsEmpty();
 	return bInitialized;
@@ -270,7 +279,13 @@ void ANPSantaGiftActor::SpawnRelic()
 		return;
 	}
 	bRelicSpawnAttempted = true;
-	const TSubclassOf<ANPBaseRelic> RelicClass = RelicClasses[FMath::RandRange(0, RelicClasses.Num() - 1)];
+	const float PrimaryRoll = FMath::FRandRange(0.0f, 100.0f);
+	const bool bPrimarySelected = PrimaryRelicClass
+		&& PrimaryRelicChancePercent > 0.0f
+		&& PrimaryRoll < PrimaryRelicChancePercent;
+	const TSubclassOf<ANPBaseRelic> RelicClass = bPrimarySelected
+		? PrimaryRelicClass
+		: RelicClasses[FMath::RandRange(0, RelicClasses.Num() - 1)];
 	FActorSpawnParameters Params;
 	// 이벤트/선물 상자의 제거와 무관하게 월드에 남는 유물입니다. Owner도 상자로 지정하지 않습니다.
 	Params.OverrideLevel = GetWorld()->PersistentLevel;
@@ -304,7 +319,19 @@ void ANPSantaGiftActor::SpawnRelic()
 	{
 		UE_LOG(LogNPSantaGift, Warning, TEXT("선물 유물 물리 활성화 실패: Relic=%s. 유물 BP의 Physics Collision/Simple Collision을 확인하세요."), *GetNameSafe(Relic));
 	}
-	UE_LOG(LogNPSantaGift, Log, TEXT("선물 개봉/랜덤 유물 생성: Gift=%s Relic=%s"), *GetName(), *GetNameSafe(Relic));
+	MulticastNotifyGiftRewardSpawned(RelicClass, bPrimarySelected);
+	UE_LOG(LogNPSantaGift, Log, TEXT("선물 개봉/유물 생성: Gift=%s Relic=%s PrimarySelected=%d PrimaryRoll=%.2f PrimaryChance=%.2f%%"),
+		*GetName(), *GetNameSafe(Relic), bPrimarySelected ? 1 : 0, PrimaryRoll, PrimaryRelicChancePercent);
+}
+
+void ANPSantaGiftActor::MulticastNotifyGiftRewardSpawned_Implementation(
+	const TSubclassOf<ANPBaseRelic> SpawnedRelicClass,
+	const bool bPrimaryReward)
+{
+	if (GetNetMode() != NM_DedicatedServer)
+	{
+		OnGiftRewardSpawned(SpawnedRelicClass, bPrimaryReward);
+	}
 }
 
 void ANPSantaGiftActor::HandleFallTimeout()
