@@ -20,6 +20,8 @@ public class NoPhotosEditor : ModuleRules
             {
                 "CoreUObject",
                 "Engine",
+                "BlueprintGraph",
+                "KismetCompiler",
                 "Slate",
                 "SlateCore",
                 "UnrealEd"

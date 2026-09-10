@@ -94,7 +94,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Helicopter|Cycle", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
 	float MaximumCycleRespawnDelay = 5.0f;
 
-	/** 퇴장 신호를 보낸 뒤 헬리콥터를 실제로 제거하기까지 기다리는 시간입니다. */
+	/** 퇴장 신호를 보낸 뒤 헬리콥터와 반환 존을 실제로 제거하기까지 기다리는 시간입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Relic Bonus Event|Helicopter|Departure", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
 	float HelicopterDepartureDuration = 2.0f;
 
@@ -124,11 +124,12 @@ private:
 	void MulticastFadeGroundWind();
 
 	UFUNCTION(NetMulticast, Reliable)
-	void MulticastBeginHelicopterDeparture(
-		const TArray<AActor*>& Helicopters,
+	void MulticastBeginDeparture(
+		const TArray<AActor*>& DepartureActors,
 		float DepartureDuration);
 
 	void StopGroundWindImmediately();
+	void DisableReturnZonesAndDestroyCountdowns();
 	void DestroyReturnZonesAndCountdowns();
 	void DestroySpawnedActors();
 	FVector GetReturnZoneHalfExtent() const;

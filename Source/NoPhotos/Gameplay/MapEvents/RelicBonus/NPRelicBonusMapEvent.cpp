@@ -423,8 +423,8 @@ void ANPRelicBonusMapEvent::BeginDeparture(const bool bShouldRespawn)
 	GetWorldTimerManager().ClearTimer(HelicopterStayTimer);
 	bRespawnAfterDeparture = bShouldRespawn && IsEventActive();
 	MulticastFadeGroundWind();
-	// 판정 존과 카운트다운은 즉시 닫고, 헬리콥터만 퇴장 연출 동안 유지합니다.
-	DestroyReturnZonesAndCountdowns();
+	// 반환 판정과 카운트다운만 즉시 닫고, 반환 존의 시각 액터는 퇴장 연출 동안 유지합니다.
+	DisableReturnZonesAndDestroyCountdowns();
 
 	// 이벤트가 종료되어 재호출되면 기존 퇴장 연출은 유지하되 다음 사이클만 막습니다.
 	if (GetWorldTimerManager().IsTimerActive(HelicopterDepartureTimer))
@@ -432,17 +432,24 @@ void ANPRelicBonusMapEvent::BeginDeparture(const bool bShouldRespawn)
 		return;
 	}
 
-	TArray<AActor*> ValidHelicopters;
-	ValidHelicopters.Reserve(SpawnedHelicopters.Num());
+	TArray<AActor*> ValidDepartureActors;
+	ValidDepartureActors.Reserve(SpawnedHelicopters.Num() + SpawnedReturnZones.Num());
 	for (AActor* Helicopter : SpawnedHelicopters)
 	{
 		if (IsValid(Helicopter))
 		{
-			ValidHelicopters.Add(Helicopter);
+			ValidDepartureActors.Add(Helicopter);
+		}
+	}
+	for (ANPRelicReturnZone* ReturnZone : SpawnedReturnZones)
+	{
+		if (IsValid(ReturnZone))
+		{
+			ValidDepartureActors.Add(ReturnZone);
 		}
 	}
 
-	if (ValidHelicopters.IsEmpty())
+	if (ValidDepartureActors.IsEmpty())
 	{
 		FinishDepartureCycle();
 		return;
@@ -451,7 +458,7 @@ void ANPRelicBonusMapEvent::BeginDeparture(const bool bShouldRespawn)
 	const float SafeDepartureDuration = FMath::IsFinite(HelicopterDepartureDuration)
 		? FMath::Max(0.0f, HelicopterDepartureDuration)
 		: 0.0f;
-	MulticastBeginHelicopterDeparture(ValidHelicopters, SafeDepartureDuration);
+	MulticastBeginDeparture(ValidDepartureActors, SafeDepartureDuration);
 
 	if (SafeDepartureDuration <= KINDA_SMALL_NUMBER)
 	{
@@ -558,18 +565,18 @@ void ANPRelicBonusMapEvent::MulticastFadeGroundWind_Implementation()
 	GroundWindComponents.Reset();
 }
 
-void ANPRelicBonusMapEvent::MulticastBeginHelicopterDeparture_Implementation(
-	const TArray<AActor*>& Helicopters,
+void ANPRelicBonusMapEvent::MulticastBeginDeparture_Implementation(
+	const TArray<AActor*>& DepartureActors,
 	const float DepartureDuration)
 {
-	for (AActor* Helicopter : Helicopters)
+	for (AActor* DepartureActor : DepartureActors)
 	{
-		if (IsValid(Helicopter)
-			&& Helicopter->GetClass()->ImplementsInterface(
+		if (IsValid(DepartureActor)
+			&& DepartureActor->GetClass()->ImplementsInterface(
 				UNPRelicBonusHelicopterInterface::StaticClass()))
 		{
 			INPRelicBonusHelicopterInterface::Execute_BeginRelicBonusDeparture(
-				Helicopter,
+				DepartureActor,
 				DepartureDuration);
 		}
 	}
@@ -585,6 +592,28 @@ void ANPRelicBonusMapEvent::StopGroundWindImmediately()
 		}
 	}
 	GroundWindComponents.Reset();
+}
+
+void ANPRelicBonusMapEvent::DisableReturnZonesAndDestroyCountdowns()
+{
+	// 서버 판정을 즉시 중단하되, 블루프린트 퇴장 연출이 끝날 때까지 액터와 비주얼은 남겨둡니다.
+	for (ANPRelicReturnZone* ReturnZone : SpawnedReturnZones)
+	{
+		if (IsValid(ReturnZone))
+		{
+			ReturnZone->SetActorEnableCollision(false);
+			ReturnZone->SetDeliveryEffectEnabled(false);
+		}
+	}
+
+	for (ANPRelicBonusCountdownActor* Countdown : SpawnedCountdownActors)
+	{
+		if (IsValid(Countdown))
+		{
+			Countdown->Destroy();
+		}
+	}
+	SpawnedCountdownActors.Reset();
 }
 
 void ANPRelicBonusMapEvent::DestroyReturnZonesAndCountdowns()

@@ -6,7 +6,10 @@
 
 class UBoxComponent;
 class UPrimitiveComponent;
+class USoundBase;
+class UStaticMesh;
 class ANPBaseRelic;
+class ANPRelicDeliveryEffect;
 class UNPRelicOwnershipComponent;
 
 /** 레벨에 배치하여 서버에서 Relic 반환 Overlap을 감지하는 구역입니다. */
@@ -38,6 +41,7 @@ protected:
 		bool bFromSweep,
 		const FHitResult& SweepResult);
 
+	/** 서버에서 유물 제출이 실제로 성공했을 때 원본 유물과 제출 위치를 전달하며 각 클라이언트에서 호출됩니다. */
 	UFUNCTION()
 	void HandleReturnVolumeEndOverlap(
 		UPrimitiveComponent* OverlappedComponent,
@@ -47,7 +51,9 @@ protected:
 
 	/** 서버에서 유물 제출이 실제로 성공했을 때 각 클라이언트에서 호출됩니다. */
 	UFUNCTION(BlueprintImplementableEvent, Category="Relic|Delivery", meta=(DisplayName="On Relic Delivered"))
-	void BP_OnRelicDelivered(FVector DeliveryLocation);
+	void BP_OnRelicDelivered(
+		ANPBaseRelic* DeliveredRelic,
+		FVector DeliveryLocation);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<UBoxComponent> ReturnVolume;
@@ -56,6 +62,25 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic|Delivery", meta=(ClampMin="0.0", UIMin="0.0"))
 	float ReturnScoreMultiplier = 1.0f;
 
+	/** 반환 성공 시 로컬에서 생성할 Niagara 연출 액터입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic|Delivery")
+	TSubclassOf<ANPRelicDeliveryEffect> DeliveryEffectClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic|Delivery Audio", meta=(ClampMin="0"))
+	int32 LowPriceThreshold = 250;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic|Delivery Audio", meta=(ClampMin="0"))
+	int32 MidPriceThreshold = 450;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic|Delivery Audio")
+	TObjectPtr<USoundBase> LowPriceSound;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic|Delivery Audio")
+	TObjectPtr<USoundBase> MidPriceSound;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic|Delivery Audio")
+	TObjectPtr<USoundBase> LargePriceSound;
+
 private:
 	void RegisterOverlappingRelic(ANPBaseRelic* Relic);
 	void UnregisterOverlappingRelic(ANPBaseRelic* Relic);
@@ -63,7 +88,13 @@ private:
 	bool TryDeliverOverlappingRelic(ANPBaseRelic* Relic);
 
 	UFUNCTION(NetMulticast, Reliable)
-	void MulticastNotifyRelicDelivered(FVector_NetQuantize10 DeliveryLocation);
+	void MulticastNotifyRelicDelivered(
+  ANPBaseRelic* DeliveredRelic,
+const FTransform& DeliveryTransform,
+UStaticMesh* RelicMesh,
+const TArray<AActor*>& DeliveryTargets,
+int32 RelicPrice,
+bool bNotifyBlueprint);
 
 	TSet<TWeakObjectPtr<ANPBaseRelic>> OverlappingRelics;
 	TSet<TWeakObjectPtr<ANPBaseRelic>> DeliveryAttemptsInProgress;
