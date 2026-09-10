@@ -41,6 +41,7 @@ protected:
 		bool bFromSweep,
 		const FHitResult& SweepResult);
 
+	/** 서버에서 유물 제출이 실제로 성공했을 때 원본 유물과 제출 위치를 전달하며 각 클라이언트에서 호출됩니다. */
 	UFUNCTION()
 	void HandleReturnVolumeEndOverlap(
 		UPrimitiveComponent* OverlappedComponent,
@@ -50,7 +51,9 @@ protected:
 
 	/** 서버에서 유물 제출이 실제로 성공했을 때 각 클라이언트에서 호출됩니다. */
 	UFUNCTION(BlueprintImplementableEvent, Category="Relic|Delivery", meta=(DisplayName="On Relic Delivered"))
-	void BP_OnRelicDelivered(FVector DeliveryLocation);
+	void BP_OnRelicDelivered(
+		ANPBaseRelic* DeliveredRelic,
+		FVector DeliveryLocation);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<UBoxComponent> ReturnVolume;
@@ -86,11 +89,12 @@ private:
 
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastNotifyRelicDelivered(
-		const FTransform& DeliveryTransform,
-		UStaticMesh* RelicMesh,
-		const TArray<AActor*>& DeliveryTargets,
-		int32 RelicPrice,
-		bool bNotifyBlueprint);
+  ANPBaseRelic* DeliveredRelic,
+const FTransform& DeliveryTransform,
+UStaticMesh* RelicMesh,
+const TArray<AActor*>& DeliveryTargets,
+int32 RelicPrice,
+bool bNotifyBlueprint);
 
 	TSet<TWeakObjectPtr<ANPBaseRelic>> OverlappingRelics;
 	TSet<TWeakObjectPtr<ANPBaseRelic>> DeliveryAttemptsInProgress;

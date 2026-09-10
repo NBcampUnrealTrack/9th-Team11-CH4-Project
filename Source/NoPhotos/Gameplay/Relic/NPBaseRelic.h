@@ -42,6 +42,10 @@ public:
 	UFUNCTION(BlueprintPure, Category="Relic")
 	virtual FVector GetRelicWorldLocation() const;
 
+	/** 반환 연출에서 원본 유물의 메쉬와 재질을 복사할 수 있도록 시각 컴포넌트를 반환합니다. */
+	UFUNCTION(BlueprintPure, Category="Relic|Delivery")
+	UPrimitiveComponent* GetRelicMeshComponent() const { return RelicMesh; }
+
 	UFUNCTION(BlueprintPure, Category="Relic|Delivery")
 	bool IsReturned() const { return bIsReturned; }
 

@@ -26,7 +26,10 @@ public:
 	virtual void OnRep_ReplicatedMovement() override;
 
 	/** deferred spawn 중 서버에서 호출. 후보 목록을 복사하므로 이후 이벤트/DA 수명에 의존하지 않습니다. */
-	bool InitializeGift(const TArray<TSubclassOf<ANPBaseRelic>>& InRelicClasses);
+	bool InitializeGift(
+		const TArray<TSubclassOf<ANPBaseRelic>>& InRelicClasses,
+		TSubclassOf<ANPBaseRelic> InPrimaryRelicClass,
+		float InPrimaryRelicChancePercent);
 
 	UFUNCTION(BlueprintPure, Category="Santa Gift")
 	bool HasLanded() const { return LandingState.bLanded; }
@@ -44,6 +47,13 @@ protected:
 
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category="Santa Gift|Presentation")
 	void OnGiftOpened();
+
+	/** 서버가 보상 유물 생성에 성공했을 때 모든 클라이언트에 전달되는 연출 전용 훅입니다. */
+	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category="Santa Gift|Presentation",
+		meta=(DisplayName="On Gift Reward Spawned"))
+	void OnGiftRewardSpawned(
+		TSubclassOf<ANPBaseRelic> SpawnedRelicClass,
+		bool bPrimaryReward);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Santa Gift")
 	TObjectPtr<UBoxComponent> CollisionBox;
@@ -93,6 +103,10 @@ private:
 	void BeginOpening();
 	void UpdateOpeningVisuals();
 	void SpawnRelic();
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastNotifyGiftRewardSpawned(
+		TSubclassOf<ANPBaseRelic> SpawnedRelicClass,
+		bool bPrimaryReward);
 	void HandleFallTimeout();
 	float GetServerTime() const;
 
@@ -100,6 +114,9 @@ private:
 	FNPSantaGiftLandingState LandingState;
 	UPROPERTY(Transient)
 	TArray<TSubclassOf<ANPBaseRelic>> RelicClasses;
+	UPROPERTY(Transient)
+	TSubclassOf<ANPBaseRelic> PrimaryRelicClass;
+	float PrimaryRelicChancePercent = 0.0f;
 
 	FTransform ClosedBoxInitialTransform;
 	FTransform LidInitialTransform;
