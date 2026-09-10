@@ -44,6 +44,11 @@ public:
 	
 	UFUNCTION(BlueprintPure, Category = "Room")
 	bool IsListenServerHost() const;
+
+	/** Level Instance 준비 중 수평 이동 입력이 잠겨 있는지 반환합니다. 점프는 이 상태와 무관합니다. */
+	UFUNCTION(BlueprintPure, Category = "Room|Loading")
+	bool IsMainWorldInputLocked() const { return bMainWorldInputLocked; }
+
 	UFUNCTION(BlueprintCallable, Category = "Room")
 	void RequestRestartRoom();
 	UFUNCTION(BlueprintCallable, Category = "Room")
@@ -219,6 +224,7 @@ private:
 	FDelegateHandle RelicAimingTagChangedHandle;
 	FDelegateHandle PhotoAimingTagChangedHandle;
 
+	bool bMainWorldInputLocked = false;
 	bool bReportedMainWorldReady = false;
 	double MainWorldLoadingShownAtRealTime = -1.0;
 	FTimerHandle MinimumMainWorldLoadingTimer;
