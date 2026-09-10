@@ -107,6 +107,9 @@ void ANPStablePhysicsPawn::BeginPlay()
 	PhysicsMovement->OnJumpApplied.AddUObject(
 		RightHandGrab,
 		&UNPStablePhysicsGrabComponent::NotifyJumpIntent);
+	PhysicsMovement->OnJumpApplied.AddUObject(
+		this,
+		&ThisClass::HandleJumpApplied);
 	ScanComponent->OnActorScanned.AddUniqueDynamic(
 		this,
 		&ThisClass::HandleActorScanned);
@@ -1032,6 +1035,14 @@ void ANPStablePhysicsPawn::Look(const FInputActionValue& Value)
 void ANPStablePhysicsPawn::Jump()
 {
 	ApplyJumpRequest();
+}
+
+void ANPStablePhysicsPawn::HandleJumpApplied()
+{
+	if (IsLocallyControlled())
+	{
+		OnJumpSucceeded();
+	}
 }
 
 void ANPStablePhysicsPawn::StartRightHand()
