@@ -3,7 +3,6 @@
 #include "Components/MeshComponent.h"
 #include "Curves/CurveFloat.h"
 #include "GameFramework/Actor.h"
-#include "Materials/MaterialInstanceDynamic.h"
 
 UNPScanOutlineComponent::UNPScanOutlineComponent()
 {
@@ -14,27 +13,21 @@ UNPScanOutlineComponent::UNPScanOutlineComponent()
 void UNPScanOutlineComponent::PlayOutline()
 {
 	UMeshComponent* Mesh = ResolveTargetMesh();
-	if (!IsValid(Mesh) || !IsValid(OverlayMaterial) || !IsValid(ExpansionCurve))
+	if (!IsValid(Mesh) || !IsValid(ExpansionCurve))
 	{
 		return;
 	}
 
-	if (!IsValid(OverlayMaterialInstance))
+	if (!bOutlineActive)
 	{
-		OverlayMaterialInstance = UMaterialInstanceDynamic::Create(
-			OverlayMaterial,
-			this);
-	}
-	if (!IsValid(OverlayMaterialInstance))
-	{
-		return;
+		PreviousStencilValue = Mesh->CustomDepthStencilValue;
+		bPreviousRenderCustomDepth = Mesh->bRenderCustomDepth;
+		bOutlineActive = true;
 	}
 
 	ElapsedTime = 0.0f;
-	SetExpansionRatio(
-		FMath::Max(0.0f, ExpansionCurve->GetFloatValue(0.0f))
-		* MaxExpansionRatio);
-	Mesh->SetOverlayMaterial(OverlayMaterialInstance);
+	SetExpansionRatio(ExpansionCurve->GetFloatValue(0.0f));
+	Mesh->SetRenderCustomDepth(true);
 	SetComponentTickEnabled(true);
 }
 
@@ -42,11 +35,14 @@ void UNPScanOutlineComponent::StopOutline()
 {
 	SetComponentTickEnabled(false);
 	ElapsedTime = 0.0f;
-	SetExpansionRatio(0.0f);
-
-	if (UMeshComponent* Mesh = ResolveTargetMesh())
+	if (bOutlineActive)
 	{
-		Mesh->SetOverlayMaterial(nullptr);
+		if (UMeshComponent* Mesh = TargetMesh.Get())
+		{
+			Mesh->SetRenderCustomDepth(bPreviousRenderCustomDepth);
+			Mesh->SetCustomDepthStencilValue(PreviousStencilValue);
+		}
+		bOutlineActive = false;
 	}
 }
 
@@ -63,7 +59,7 @@ void UNPScanOutlineComponent::TickComponent(
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (!IsValid(OverlayMaterialInstance) || !IsValid(ExpansionCurve))
+	if (!bOutlineActive || !TargetMesh.IsValid() || !IsValid(ExpansionCurve))
 	{
 		StopOutline();
 		return;
@@ -72,10 +68,7 @@ void UNPScanOutlineComponent::TickComponent(
 	ElapsedTime += DeltaTime;
 	const float Duration = FMath::Max(0.01f, AnimationDuration);
 	const float NormalizedTime = FMath::Clamp(ElapsedTime / Duration, 0.0f, 1.0f);
-	const float CurveValue = FMath::Max(
-		0.0f,
-		ExpansionCurve->GetFloatValue(NormalizedTime));
-	SetExpansionRatio(CurveValue * MaxExpansionRatio);
+	SetExpansionRatio(ExpansionCurve->GetFloatValue(NormalizedTime));
 
 	if (NormalizedTime >= 1.0f)
 	{
@@ -100,10 +93,12 @@ UMeshComponent* UNPScanOutlineComponent::ResolveTargetMesh()
 
 void UNPScanOutlineComponent::SetExpansionRatio(const float Ratio)
 {
-	if (IsValid(OverlayMaterialInstance))
+	if (UMeshComponent* Mesh = TargetMesh.Get())
 	{
-		OverlayMaterialInstance->SetScalarParameterValue(
-			TEXT("ExpansionRatio"),
-			Ratio);
+		const int32 StencilValue = FMath::RoundToInt(FMath::Clamp(Ratio, 0.0f, 1.0f) * 128.0f);
+		if (Mesh->CustomDepthStencilValue != StencilValue)
+		{
+			Mesh->SetCustomDepthStencilValue(StencilValue);
+		}
 	}
 }
