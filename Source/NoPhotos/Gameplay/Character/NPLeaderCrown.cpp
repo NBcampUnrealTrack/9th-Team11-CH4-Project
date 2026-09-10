@@ -2,6 +2,9 @@
 
 #include "Components/StaticMeshComponent.h"
 #include "Core/GameplayTag/NPGameplayTags.h"
+#include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
+#include "UObject/ConstructorHelpers.h"
 
 ANPLeaderCrown::ANPLeaderCrown()
 {
@@ -13,24 +16,47 @@ ANPLeaderCrown::ANPLeaderCrown()
 	CrownMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	CrownMesh->SetGenerateOverlapEvents(false);
 	CrownMesh->SetCanEverAffectNavigation(false);
+
+	AppearEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("AppearEffect"));
+	AppearEffect->SetupAttachment(SceneRoot);
+	AppearEffect->SetAutoActivate(false);
+
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> AppearEffectAsset(
+		TEXT("/Game/UnityParticle/Burst_EnergyDrain.Burst_EnergyDrain"));
+	if (AppearEffectAsset.Succeeded())
+	{
+		AppearEffect->SetAsset(AppearEffectAsset.Object);
+	}
 }
 
 void ANPLeaderCrown::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 	CrownMesh->SetRelativeLocation(FVector(0.0f, 0.0f, VisualHeight));
+	AppearEffect->SetRelativeLocation(FVector(0.0f, 0.0f, VisualHeight + AppearEffectZOffset));
 }
 
 void ANPLeaderCrown::PrepareVisual()
 {
 	SetOwner(GetVisualTarget());
 	CrownMesh->SetRelativeLocation(FVector(0.0f, 0.0f, VisualHeight));
+	AppearEffect->SetRelativeLocation(FVector(0.0f, 0.0f, VisualHeight + AppearEffectZOffset));
 	SetVisibleToOwner(bVisibleToOwner);
 	if (!bBaseCrownScaleInitialized)
 	{
 		BaseCrownScale = CrownMesh->GetRelativeScale3D();
 		bBaseCrownScaleInitialized = true;
 	}
+}
+
+void ANPLeaderCrown::OnAppearTransitionStarted()
+{
+	AppearEffect->Activate(true);
+}
+
+void ANPLeaderCrown::ResetVisual()
+{
+	AppearEffect->DeactivateImmediate();
 }
 
 void ANPLeaderCrown::Tick(float DeltaSeconds)
@@ -50,6 +76,7 @@ void ANPLeaderCrown::SetVisibleToOwner(bool bNewVisibleToOwner)
 {
 	bVisibleToOwner = bNewVisibleToOwner;
 	CrownMesh->SetOwnerNoSee(!bVisibleToOwner);
+	AppearEffect->SetOwnerNoSee(!bVisibleToOwner);
 }
 
 void ANPLeaderCrown::ApplyVisualScale()

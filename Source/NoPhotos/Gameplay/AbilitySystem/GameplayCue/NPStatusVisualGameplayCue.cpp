@@ -67,6 +67,7 @@ void ANPStatusVisualGameplayCue::RequestAppear()
 	}
 	bRemovalFinished = false;
 	BeginTransition(true);
+	OnAppearTransitionStarted();
 }
 
 void ANPStatusVisualGameplayCue::RequestDisappear()
