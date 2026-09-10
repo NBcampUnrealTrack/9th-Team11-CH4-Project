@@ -28,7 +28,8 @@ public class NoPhotos : ModuleRules
 			"UMG",
 			"Slate",
 			"SlateCore",
-			"OnlineSubsystem"
+			"OnlineSubsystem",
+			"AsyncLoadingScreen"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] {

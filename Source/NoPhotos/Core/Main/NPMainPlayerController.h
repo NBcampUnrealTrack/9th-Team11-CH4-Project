@@ -84,6 +84,7 @@ public:
 	//서버가 선택 사진과 완료 상태를 확인
 	UFUNCTION(Server, Reliable)
 	void ServerConfirmPictureSelection(const TArray<FGuid>& SelectedPhotoIds);
+	void HandleSelectedPhotoStored(const FGuid& PhotoId);
 
 	/** 개발 빌드에서 현재 Pawn의 Grab 입력을 창 포커스와 무관하게 유지합니다. */
 	UFUNCTION(Exec)
@@ -167,6 +168,14 @@ protected:
 	TSoftObjectPtr<UWorld> MainMenuLevel;
 
 private:
+	UFUNCTION(Client, Reliable)
+	void ClientUploadSelectedPhotos(const TArray<FGuid>& SelectedPhotoIds);
+
+	UFUNCTION(Server, Reliable)
+	void ServerReportSelectedPhotoUploadFailed(FGuid PhotoId);
+
+	void TryCompletePictureSelection();
+
 	bool ShouldBypassRoomPreparationForEditorTest() const;
 	void BeginLocalMainWorldPreparation();
 
@@ -180,6 +189,7 @@ private:
 	void BindRoomGenerationState();
 	void SetMainWorldInputLocked(bool bLocked);
 	void ShowMainWorldLoadingOverlay();
+	void FinishTransitionLoadingScreenHandoff();
 	void HideMainWorldLoadingOverlay();
 	void ShowMainWorldLoadingFailure();
 
@@ -228,6 +238,8 @@ private:
 	bool bReportedMainWorldReady = false;
 	double MainWorldLoadingShownAtRealTime = -1.0;
 	FTimerHandle MinimumMainWorldLoadingTimer;
+	TSet<FGuid> PendingSelectedPhotoIds;
+	bool bTransitionLoadingScreenHandoffScheduled = false;
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestRestartRoom();

@@ -1,5 +1,6 @@
 #include "Core/Main/NPMainPlayerController.h"
 
+#include "AsyncLoadingScreenLibrary.h"
 #include "Core/Main/NPMainGameMode.h"
 #include "Core/Main/NPMainGameState.h"
 #include "Core/NPPlayerState.h"
@@ -20,6 +21,7 @@
 #include "Gameplay/Photo/NPPhotoCaptureComponent.h"
 #include "Gameplay/Photo/NPPhotoFlashWidget.h"
 #include "Gameplay/Photo/NPPhotoLog.h"
+#include "Gameplay/Photo/NPPhotoRepository.h"
 #include "Gameplay/Photo/NPPhotoTransferComponent.h"
 #include "Gameplay/AbilitySystem/NPAbilitySystemComponent.h"
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
@@ -272,6 +274,10 @@ void ANPMainPlayerController::ClientBeginMainWorldPreparation_Implementation()
 	}
 
 	bReportedMainWorldReady = false;
+	if (IsValid(PhotoCaptureComponent))
+	{
+		PhotoCaptureComponent->ResetLocalPhotos();
+	}
 	BeginLocalMainWorldPreparation();
 }
 
@@ -473,6 +479,20 @@ void ANPMainPlayerController::ShowMainWorldLoadingOverlay()
 	{
 		MainWorldLoadingWidget->ShowLoading();
 	}
+
+	if (!bTransitionLoadingScreenHandoffScheduled)
+	{
+		bTransitionLoadingScreenHandoffScheduled = true;
+		GetWorldTimerManager().SetTimerForNextTick(
+			this,
+			&ThisClass::FinishTransitionLoadingScreenHandoff);
+	}
+}
+
+void ANPMainPlayerController::FinishTransitionLoadingScreenHandoff()
+{
+	bTransitionLoadingScreenHandoffScheduled = false;
+	UAsyncLoadingScreenLibrary::HideTransitionHandoffOverlay();
 }
 
 void ANPMainPlayerController::HideMainWorldLoadingOverlay()
@@ -872,13 +892,15 @@ void ANPMainPlayerController::ServerConfirmPictureSelection_Implementation(
 		? GetWorld()->GetGameState<ANPMainGameState>()
 		: nullptr;
 
-	if (!IsValid(MainGameState) || !IsValid(PlayerState))
+	if (!IsValid(MainGameState) || !IsValid(PlayerState)
+		|| SelectedPhotoIds.Num() > 5 || !PendingSelectedPhotoIds.IsEmpty())
 	{
 		return;
 	}
 
 	//선택된 사진들이 이 플레이어가 찍은 성공 사진인지 검증
 	TSet<FGuid> VerifiedPhotoIds;
+	TMap<FGuid, uint16> CaptureSequences;
 
 	for (const FGuid& PhotoId : SelectedPhotoIds)
 	{
@@ -897,6 +919,7 @@ void ANPMainPlayerController::ServerConfirmPictureSelection_Implementation(
 				&& Evidence.Photographer == PlayerState)
 			{
 				bIsOwnedSuccessPhoto = true;
+				CaptureSequences.Add(PhotoId, static_cast<uint16>(Evidence.CaptureSequence));
 				break;
 			}
 		}
@@ -910,7 +933,100 @@ void ANPMainPlayerController::ServerConfirmPictureSelection_Implementation(
 	}
 
 	MainGameState->SetSelectedPhotoIds(PlayerState, SelectedPhotoIds);
-	MainGameState->ConfirmPictureSelection(this);
+	if (SelectedPhotoIds.IsEmpty())
+	{
+		MainGameState->ConfirmPictureSelection(this);
+		return;
+	}
+
+	ANPMainGameMode* MainGameMode = GetWorld()
+		? GetWorld()->GetAuthGameMode<ANPMainGameMode>()
+		: nullptr;
+	UNPPhotoRepository* Repository = IsValid(MainGameMode)
+		? MainGameMode->GetPhotoRepository()
+		: nullptr;
+	if (!IsValid(Repository))
+	{
+		return;
+	}
+
+	PendingSelectedPhotoIds = VerifiedPhotoIds;
+	for (const FGuid& PhotoId : SelectedPhotoIds)
+	{
+		Repository->AuthorizeCapture(this, PhotoId, CaptureSequences[PhotoId]);
+	}
+	ClientUploadSelectedPhotos(SelectedPhotoIds);
+}
+
+void ANPMainPlayerController::ClientUploadSelectedPhotos_Implementation(
+	const TArray<FGuid>& SelectedPhotoIds)
+{
+	if (!IsValid(PhotoCaptureComponent) || !IsValid(PhotoTransferComponent))
+	{
+		for (const FGuid& PhotoId : SelectedPhotoIds)
+		{
+			ServerReportSelectedPhotoUploadFailed(PhotoId);
+		}
+		return;
+	}
+
+	for (const FGuid& PhotoId : SelectedPhotoIds)
+	{
+		uint16 CaptureSequence = 0;
+		const TArray<uint8>* JpegData = nullptr;
+		int32 Width = 0;
+		int32 Height = 0;
+		if (!PhotoCaptureComponent->GetLocalPhotoData(
+				PhotoId, CaptureSequence, JpegData, Width, Height)
+			|| !JpegData
+			|| !PhotoTransferComponent->BeginUploadPhoto(
+				PhotoId, CaptureSequence, *JpegData, Width, Height))
+		{
+			ServerReportSelectedPhotoUploadFailed(PhotoId);
+		}
+	}
+}
+
+void ANPMainPlayerController::ServerReportSelectedPhotoUploadFailed_Implementation(
+	const FGuid PhotoId)
+{
+	if (!PendingSelectedPhotoIds.Remove(PhotoId))
+	{
+		return;
+	}
+
+	if (ANPMainGameState* MainGameState = GetWorld()
+		? GetWorld()->GetGameState<ANPMainGameState>()
+		: nullptr)
+	{
+		TArray<FGuid> StoredSelection = MainGameState->GetSelectedPhotoIds(PlayerState);
+		StoredSelection.Remove(PhotoId);
+		MainGameState->SetSelectedPhotoIds(PlayerState, StoredSelection);
+	}
+	TryCompletePictureSelection();
+}
+
+void ANPMainPlayerController::HandleSelectedPhotoStored(const FGuid& PhotoId)
+{
+	if (HasAuthority() && PendingSelectedPhotoIds.Remove(PhotoId))
+	{
+		TryCompletePictureSelection();
+	}
+}
+
+void ANPMainPlayerController::TryCompletePictureSelection()
+{
+	if (!HasAuthority() || !PendingSelectedPhotoIds.IsEmpty())
+	{
+		return;
+	}
+
+	if (ANPMainGameState* MainGameState = GetWorld()
+		? GetWorld()->GetGameState<ANPMainGameState>()
+		: nullptr)
+	{
+		MainGameState->ConfirmPictureSelection(this);
+	}
 }
 
 void ANPMainPlayerController::ShowSingleScreen(

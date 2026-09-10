@@ -12,31 +12,34 @@ void UNPPhotoRepository::Initialize(ANPMainGameMode* InGameMode)
 
 void UNPPhotoRepository::AuthorizeCapture(
 	APlayerController* Photographer,
+	const FGuid& PhotoId,
 	const uint16 CaptureSequence)
 {
-	if (!IsValid(Photographer))
+	if (!IsValid(Photographer) || !PhotoId.IsValid())
 	{
 		return;
 	}
 
 	AuthorizedCaptures.RemoveAll(
-		[Photographer, CaptureSequence](const FAuthorizedCapture& Entry)
+		[Photographer, PhotoId](const FAuthorizedCapture& Entry)
 		{
 			return !Entry.Photographer.IsValid()
 				|| (Entry.Photographer.Get() == Photographer
-					&& Entry.CaptureSequence == CaptureSequence);
+					&& Entry.PhotoId == PhotoId);
 		});
-	AuthorizedCaptures.Add({Photographer, CaptureSequence});
+	AuthorizedCaptures.Add({Photographer, PhotoId, CaptureSequence});
 }
 
 bool UNPPhotoRepository::IsCaptureAuthorized(
 	APlayerController* Photographer,
+	const FGuid& PhotoId,
 	const uint16 CaptureSequence) const
 {
 	return AuthorizedCaptures.ContainsByPredicate(
-		[Photographer, CaptureSequence](const FAuthorizedCapture& Entry)
+		[Photographer, PhotoId, CaptureSequence](const FAuthorizedCapture& Entry)
 		{
 			return Entry.Photographer.Get() == Photographer
+				&& Entry.PhotoId == PhotoId
 				&& Entry.CaptureSequence == CaptureSequence;
 		});
 }
@@ -50,7 +53,7 @@ bool UNPPhotoRepository::StorePhoto(
 	TArray<uint8>&& JpegData)
 {
 	if (!PhotoId.IsValid()
-		|| !IsCaptureAuthorized(Photographer, CaptureSequence)
+		|| !IsCaptureAuthorized(Photographer, PhotoId, CaptureSequence)
 		|| JpegData.IsEmpty()
 		|| StoredPhotos.Contains(PhotoId))
 	{
@@ -68,16 +71,16 @@ bool UNPPhotoRepository::StorePhoto(
 	StoredPhotos.Add(PhotoId, MoveTemp(StoredPhoto));
 	StorageOrder.Add(PhotoId);
 	AuthorizedCaptures.RemoveAll(
-		[Photographer, CaptureSequence](const FAuthorizedCapture& Entry)
+		[Photographer, PhotoId](const FAuthorizedCapture& Entry)
 		{
 			return Entry.Photographer.Get() == Photographer
-				&& Entry.CaptureSequence == CaptureSequence;
+				&& Entry.PhotoId == PhotoId;
 		});
 	TrimOldestPhotos();
 
 	if (OwningGameMode.IsValid())
 	{
-		OwningGameMode->HandlePhotoStored(Photographer, CaptureSequence, PhotoId);
+		OwningGameMode->HandlePhotoStored(Photographer, PhotoId);
 	}
 	UE_LOG(LogNPPhoto, Log, TEXT("[PhotoRepository] Stored PhotoId=%s Sequence=%u"), *PhotoId.ToString(), CaptureSequence);
 	return true;

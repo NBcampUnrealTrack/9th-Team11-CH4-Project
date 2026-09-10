@@ -10,7 +10,7 @@ class ANPMainGameState;
 class UButton;
 class UTextBlock;
 class UTexture2D;
-class UNPPhotoTransferComponent;
+class UNPPhotoCaptureComponent;
 class UNPPictureList;
 class UNPSelectedPictureListWidget;
 class UNPShowPicture;
@@ -50,12 +50,9 @@ private:
 	UFUNCTION()
 	void HandlePhotoEvidenceChanged();
 	UFUNCTION()
-	void HandlePhotoTextureReceived(FGuid PhotoId, UTexture2D* Texture);
-	UFUNCTION()
 	void HandlePictureSelectionStateChanged();
 
 	void RequestOwnedPictures();
-	void RequestNextPicture();
 	void ShowPicture(int32 PictureIndex);
 	void UpdateSelectedPictureCountText();
 	void UpdateNextPlayerText();
@@ -82,7 +79,7 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<ANPMainGameState> ObservedMainGameState;
 	UPROPERTY(Transient)
-	TObjectPtr<UNPPhotoTransferComponent> TransferComponent;
+	TObjectPtr<UNPPhotoCaptureComponent> PhotoCaptureComponent;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UTexture2D>> PictureTextures;
@@ -91,8 +88,6 @@ private:
 	TArray<FGuid> PicturePhotoIds;
 	//중복처리 방지
 	TSet<FGuid> RequestedPhotoIds;
-	TArray<FGuid> PendingPhotoIds;
-	FGuid DownloadingPhotoId;
 
 	bool bWaitingForOtherPlayers = false;
 	UPROPERTY(Transient)

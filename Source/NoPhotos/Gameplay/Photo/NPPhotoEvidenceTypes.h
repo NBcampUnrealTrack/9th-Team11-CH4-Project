@@ -44,6 +44,9 @@ struct NOPHOTOS_API FNPPhotoEvidenceResult
 	GENERATED_BODY()
 
 	UPROPERTY(BlueprintReadOnly, Category="Photo")
+	FGuid PhotoId;
+
+	UPROPERTY(BlueprintReadOnly, Category="Photo")
 	int32 CaptureSequence = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category="Photo")

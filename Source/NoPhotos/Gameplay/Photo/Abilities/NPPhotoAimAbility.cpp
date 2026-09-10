@@ -1,5 +1,6 @@
 #include "Gameplay/Photo/Abilities/NPPhotoAimAbility.h"
 
+#include "AbilitySystemComponent.h"
 #include "Core/GameplayTag/NPGameplayTags.h"
 #include "Core/Main/NPMainPlayerController.h"
 #include "GameFramework/Pawn.h"
@@ -80,6 +81,26 @@ void UNPPhotoAimAbility::ActivateAbility(
 			return;
 		}
 		ActivePhotoCaptureComponent = PhotoCapture;
+	}
+
+	// LocalPredicted Ability는 촬영 클라이언트와 서버에서 모두 실행될 수 있으므로,
+	// 네트워크 Cue는 권한 있는 실행에서만 요청해 중복 재생을 막습니다.
+	if (ActorInfo->IsNetAuthority())
+	{
+		APawn* Pawn = Cast<APawn>(ActorInfo->AvatarActor.Get());
+		UAbilitySystemComponent* AbilitySystem =
+			ActorInfo->AbilitySystemComponent.Get();
+		if (Pawn && AbilitySystem)
+		{
+			FGameplayCueParameters CueParameters;
+			CueParameters.Location = Pawn->GetActorLocation();
+			CueParameters.Normal = Pawn->GetActorForwardVector();
+			CueParameters.Instigator = Pawn;
+			CueParameters.EffectCauser = Pawn;
+			AbilitySystem->ExecuteGameplayCue(
+				NPGameplayTags::GameplayCue_Photo_AimStart,
+				CueParameters);
+		}
 	}
 }
 

@@ -120,15 +120,25 @@ void ANPMainGameState::AddPhotoEvidence(const FNPPhotoEvidenceResult& Result, co
 	}
 
 	FNPReplicatedPhotoEvidence& NewEvidence = PhotoEvidence.AddDefaulted_GetRef();
+	NewEvidence.PhotoId = Result.PhotoId;
 	NewEvidence.CaptureSequence = Result.CaptureSequence;
 	NewEvidence.Photographer = Result.Photographer;
 	NewEvidence.Thief = Result.Thief;
 	NewEvidence.Relic = Result.Relic;
 	NewEvidence.AwardedScore = AwardedScore;
 	NewEvidence.ServerCaptureTime = Result.ServerCaptureTime;
-	if (PhotoEvidence.Num() > MaximumStoredPhotos)
+	int32 PhotographerPhotoCount = 0;
+	for (int32 EvidenceIndex = PhotoEvidence.Num() - 1; EvidenceIndex >= 0; --EvidenceIndex)
 	{
-		PhotoEvidence.RemoveAt(0, PhotoEvidence.Num() - MaximumStoredPhotos);
+		if (PhotoEvidence[EvidenceIndex].Photographer != Result.Photographer)
+		{
+			continue;
+		}
+		++PhotographerPhotoCount;
+		if (PhotographerPhotoCount > MaximumStoredPhotosPerPlayer)
+		{
+			PhotoEvidence.RemoveAt(EvidenceIndex);
+		}
 	}
 	ForceNetUpdate();
 	OnPhotoEvidenceChanged.Broadcast();
@@ -142,34 +152,12 @@ void ANPMainGameState::RegisterTransferredPhoto(const FGuid& PhotoId)
 	}
 
 	TransferredPhotoIds.Add(PhotoId);
-	if (TransferredPhotoIds.Num() > MaximumStoredPhotos)
+	if (TransferredPhotoIds.Num() > MaximumTransferredPhotos)
 	{
-		TransferredPhotoIds.RemoveAt(0, TransferredPhotoIds.Num() - MaximumStoredPhotos);
+		TransferredPhotoIds.RemoveAt(0, TransferredPhotoIds.Num() - MaximumTransferredPhotos);
 	}
 	ForceNetUpdate();
 	OnPhotoEvidenceChanged.Broadcast();
-}
-
-void ANPMainGameState::AttachPhotoId(
-	APlayerState* Photographer,
-	const uint16 CaptureSequence,
-	const FGuid& PhotoId)
-{
-	if (!HasAuthority() || !PhotoId.IsValid())
-	{
-		return;
-	}
-
-	for (FNPReplicatedPhotoEvidence& Evidence : PhotoEvidence)
-	{
-		if (Evidence.Photographer == Photographer && Evidence.CaptureSequence == CaptureSequence)
-		{
-			Evidence.PhotoId = PhotoId;
-			ForceNetUpdate();
-			OnPhotoEvidenceChanged.Broadcast();
-			return;
-		}
-	}
 }
 
 void ANPMainGameState::ConfirmPictureSelection(APlayerController* PlayerController)
@@ -314,9 +302,14 @@ void ANPMainGameState::SetRemainingGameTime(const int32 RemainingSeconds)
 	{
 		if (RemainingGameTime <= 55)
 			bFinalMinuteBGMStarted = true;
-		OnMainGameLastSpurt.Broadcast();	
+		MulticastMainGameLastSpurt();
 	}
 	LogLocalGameStatus();
+}
+
+void ANPMainGameState::MulticastMainGameLastSpurt_Implementation()
+{
+	OnMainGameLastSpurt.Broadcast();
 }
 
 void ANPMainGameState::FinishMainGame()

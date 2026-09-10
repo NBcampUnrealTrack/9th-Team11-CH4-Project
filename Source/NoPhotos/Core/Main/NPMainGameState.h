@@ -105,7 +105,6 @@ public:
 	void FinishMainGame();
 	void AddPhotoEvidence(const FNPPhotoEvidenceResult& Result, int32 AwardedScore);
 	void RegisterTransferredPhoto(const FGuid& PhotoId);
-	void AttachPhotoId(APlayerState* Photographer, uint16 CaptureSequence, const FGuid& PhotoId);
 	void SetSelectedPhotoIds(APlayerState* PlayerState, const TArray<FGuid>& PhotoIds);
 
 private:
@@ -129,6 +128,9 @@ private:
 
 	UFUNCTION()
 	void OnRep_SelectedPhotos();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastMainGameLastSpurt();
 
 	bool AreAllConnectedPlayersPictureSelectionComplete() const;
 
@@ -154,7 +156,8 @@ private:
 	UPROPERTY(ReplicatedUsing = OnRep_PictureSelectionCompletedPlayers)
 	TArray<TObjectPtr<APlayerState>> PictureSelectionCompletedPlayers;
 
-	static constexpr int32 MaximumStoredPhotos = 10;
+	static constexpr int32 MaximumStoredPhotosPerPlayer = 30;
+	static constexpr int32 MaximumTransferredPhotos = 30;
 
 	UPROPERTY(ReplicatedUsing = OnRep_PhotoEvidence)
 	TArray<FNPReplicatedPhotoEvidence> PhotoEvidence;

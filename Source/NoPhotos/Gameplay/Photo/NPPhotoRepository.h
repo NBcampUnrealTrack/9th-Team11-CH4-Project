@@ -18,7 +18,7 @@ struct FNPStoredPhoto
 	TArray<uint8> JpegData;
 };
 
-/** 서버에서 성공 판정된 사진 JPEG를 제한된 메모리 안에 보관합니다. */
+/** 게임 종료 후 플레이어가 선택해 업로드한 JPEG만 제한된 메모리 안에 보관합니다. */
 UCLASS()
 class NOPHOTOS_API UNPPhotoRepository : public UObject
 {
@@ -26,8 +26,8 @@ class NOPHOTOS_API UNPPhotoRepository : public UObject
 
 public:
 	void Initialize(ANPMainGameMode* InGameMode);
-	void AuthorizeCapture(APlayerController* Photographer, uint16 CaptureSequence);
-	bool IsCaptureAuthorized(APlayerController* Photographer, uint16 CaptureSequence) const;
+	void AuthorizeCapture(APlayerController* Photographer, const FGuid& PhotoId, uint16 CaptureSequence);
+	bool IsCaptureAuthorized(APlayerController* Photographer, const FGuid& PhotoId, uint16 CaptureSequence) const;
 	bool StorePhoto(
 		APlayerController* Photographer,
 		const FGuid& PhotoId,
@@ -41,6 +41,7 @@ private:
 	struct FAuthorizedCapture
 	{
 		TWeakObjectPtr<APlayerController> Photographer;
+		FGuid PhotoId;
 		uint16 CaptureSequence = 0;
 	};
 
@@ -52,6 +53,6 @@ private:
 	TArray<FGuid> StorageOrder;
 	int64 StoredByteCount = 0;
 
-	static constexpr int32 MaximumStoredPhotos = 10;
+	static constexpr int32 MaximumStoredPhotos = 30;
 	static constexpr int64 MaximumStoredBytes = 16 * 1024 * 1024;
 };

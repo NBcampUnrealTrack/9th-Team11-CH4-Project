@@ -14,7 +14,6 @@
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Gameplay/Photo/NPPhotoLog.h"
 #include "Gameplay/Photo/NPPhotoImageCodec.h"
-#include "Gameplay/Photo/NPPhotoTransferComponent.h"
 #include "Core/Main/NPMainGameMode.h"
 #include "Core/Main/NPMainPlayerController.h"
 
@@ -199,14 +198,17 @@ bool UNPPhotoCaptureComponent::TakePhoto()
 
 	bPhotoAttemptInProgress = false;
 	const uint16 CaptureSequence = ++NextCaptureSequence;
-	if (ImageCodec)
+	if (!ImageCodec)
 	{
-		TArray<uint8> JpegData;
-		if (ImageCodec->EncodeRenderTargetToJpeg(PhotoRenderTarget, JpegQuality, JpegData))
-		{
-			PendingJpegPhotos.Add(CaptureSequence, MoveTemp(JpegData));
-		}
+		return false;
 	}
+
+	TArray<uint8> JpegData;
+	if (!ImageCodec->EncodeRenderTargetToJpeg(PhotoRenderTarget, JpegQuality, JpegData))
+	{
+		return false;
+	}
+	PendingJpegPhotos.Add(CaptureSequence, MoveTemp(JpegData));
 	ServerRequestTakePhoto(CameraLocation, CameraRotation.Vector(), CaptureSequence);
 	return true;
 }
@@ -415,25 +417,90 @@ void UNPPhotoCaptureComponent::ClientReceivePhotoResult_Implementation(
 
 	if (TArray<uint8>* JpegData = PendingJpegPhotos.Find(Result.CaptureSequence))
 	{
-		if (Result.bSuccess
-			|| Result.bReactiveTargetSuccess
-			|| Result.FailureReason == ENPPhotoEvidenceFailureReason::NoValidEvidence)
+		if (Result.bSuccess && Result.PhotoId.IsValid())
 		{
-			if (UNPPhotoTransferComponent* TransferComponent =
-				GetOwner()->FindComponentByClass<UNPPhotoTransferComponent>())
-			{
-				TransferComponent->BeginUploadPhoto(
-					Result.CaptureSequence,
-					*JpegData,
-					CaptureWidth,
-					CaptureHeight);
-			}
-			else
-			{
-				UE_LOG(LogNPPhoto, Error, TEXT("[PhotoTransfer] Transfer Component is missing."));
-			}
+			StoreLocalCorrectPhoto(
+				Result.PhotoId,
+				Result.CaptureSequence,
+				MoveTemp(*JpegData));
 		}
 		PendingJpegPhotos.Remove(Result.CaptureSequence);
 	}
 	OnPhotoResultReceived.Broadcast(Result);
+}
+
+void UNPPhotoCaptureComponent::StoreLocalCorrectPhoto(
+	const FGuid& PhotoId,
+	const uint16 CaptureSequence,
+	TArray<uint8>&& JpegData)
+{
+	if (!PhotoId.IsValid() || JpegData.IsEmpty())
+	{
+		return;
+	}
+
+	FLocalCorrectPhoto& Photo = LocalCorrectPhotos.FindOrAdd(PhotoId);
+	Photo.CaptureSequence = CaptureSequence;
+	Photo.JpegData = MoveTemp(JpegData);
+	Photo.Width = CaptureWidth;
+	Photo.Height = CaptureHeight;
+	LocalPhotoOrder.AddUnique(PhotoId);
+
+	while (LocalPhotoOrder.Num() > MaximumLocalCorrectPhotos)
+	{
+		const FGuid OldestPhotoId = LocalPhotoOrder[0];
+		LocalPhotoOrder.RemoveAt(0);
+		LocalCorrectPhotos.Remove(OldestPhotoId);
+		LocalPhotoTextures.Remove(OldestPhotoId);
+	}
+}
+
+UTexture2D* UNPPhotoCaptureComponent::FindLocalPhotoTexture(const FGuid& PhotoId)
+{
+	if (const TObjectPtr<UTexture2D>* CachedTexture = LocalPhotoTextures.Find(PhotoId))
+	{
+		return CachedTexture->Get();
+	}
+
+	const FLocalCorrectPhoto* Photo = LocalCorrectPhotos.Find(PhotoId);
+	if (!Photo || !ImageCodec)
+	{
+		return nullptr;
+	}
+
+	UTexture2D* Texture = ImageCodec->DecodeJpegToTexture(Photo->JpegData);
+	if (IsValid(Texture))
+	{
+		LocalPhotoTextures.Add(PhotoId, Texture);
+	}
+	return Texture;
+}
+
+bool UNPPhotoCaptureComponent::GetLocalPhotoData(
+	const FGuid& PhotoId,
+	uint16& OutCaptureSequence,
+	const TArray<uint8>*& OutJpegData,
+	int32& OutWidth,
+	int32& OutHeight) const
+{
+	const FLocalCorrectPhoto* Photo = LocalCorrectPhotos.Find(PhotoId);
+	if (!Photo)
+	{
+		return false;
+	}
+
+	OutCaptureSequence = Photo->CaptureSequence;
+	OutJpegData = &Photo->JpegData;
+	OutWidth = Photo->Width;
+	OutHeight = Photo->Height;
+	return true;
+}
+
+void UNPPhotoCaptureComponent::ResetLocalPhotos()
+{
+	PendingJpegPhotos.Reset();
+	LocalCorrectPhotos.Reset();
+	LocalPhotoOrder.Reset();
+	LocalPhotoTextures.Reset();
+	NextCaptureSequence = 0;
 }

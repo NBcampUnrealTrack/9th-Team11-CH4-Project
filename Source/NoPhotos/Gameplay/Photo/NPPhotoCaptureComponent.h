@@ -7,6 +7,7 @@
 
 class USceneCaptureComponent2D;
 class UTextureRenderTarget2D;
+class UTexture2D;
 class ANPStablePhysicsPawn;
 class UNPPhotoImageCodec;
 
@@ -50,6 +51,15 @@ public:
 	UFUNCTION(BlueprintPure, Category="Photo")
 	UTextureRenderTarget2D* GetPhotoRenderTarget() const { return PhotoRenderTarget; }
 
+	void ResetLocalPhotos();
+	UTexture2D* FindLocalPhotoTexture(const FGuid& PhotoId);
+	bool GetLocalPhotoData(
+		const FGuid& PhotoId,
+		uint16& OutCaptureSequence,
+		const TArray<uint8>*& OutJpegData,
+		int32& OutWidth,
+		int32& OutHeight) const;
+
 	UPROPERTY(BlueprintAssignable, Category="Photo")
 	FNPOnPhotoResultReceived OnPhotoResultReceived;
 
@@ -75,9 +85,21 @@ protected:
 	float PhotoCooldown = 5.0f;
 
 private:
+	struct FLocalCorrectPhoto
+	{
+		uint16 CaptureSequence = 0;
+		TArray<uint8> JpegData;
+		int32 Width = 0;
+		int32 Height = 0;
+	};
+
 	void InitializeLocalCapture();
 	bool IsPhotographerGrabbing() const;
 	void CancelPhotoAttempt();
+	void StoreLocalCorrectPhoto(
+		const FGuid& PhotoId,
+		uint16 CaptureSequence,
+		TArray<uint8>&& JpegData);
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestTakePhoto(
@@ -101,6 +123,13 @@ private:
 	int32 JpegQuality = 60;
 
 	TMap<uint16, TArray<uint8>> PendingJpegPhotos;
+	TMap<FGuid, FLocalCorrectPhoto> LocalCorrectPhotos;
+	TArray<FGuid> LocalPhotoOrder;
+
+	UPROPERTY(Transient)
+	TMap<FGuid, TObjectPtr<UTexture2D>> LocalPhotoTextures;
+
+	static constexpr int32 MaximumLocalCorrectPhotos = 30;
 
 	double LastServerCaptureTime = -TNumericLimits<double>::Max();
 	uint16 NextCaptureSequence = 0;

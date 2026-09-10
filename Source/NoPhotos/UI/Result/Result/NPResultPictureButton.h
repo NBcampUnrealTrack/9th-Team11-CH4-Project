@@ -5,7 +5,6 @@
 #include "NPResultPictureButton.generated.h"
 
 class UButton;
-class UTexture2D;
 class UNPResultPicturePreviewPopup;
 
 UCLASS()
@@ -14,7 +13,7 @@ class NOPHOTOS_API UNPResultPictureButton : public UNPUserWidget
 	GENERATED_BODY()
 
 public:
-	void SetPictureTexture(UTexture2D* InTexture, const FString& InCapturedPlayerName = FString());
+	void InitializePhoto(FGuid InPhotoId, const FString& InCapturedPlayerName = FString());
 
 protected:
 	virtual void NativeConstruct() override;
@@ -31,8 +30,6 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UNPResultPicturePreviewPopup> PreviewPopupWidgetClass;
 
-	UPROPERTY(Transient)
-	TObjectPtr<UTexture2D> PictureTexture;
-
+	FGuid PhotoId;
 	FString CapturedPlayerName;
 };
