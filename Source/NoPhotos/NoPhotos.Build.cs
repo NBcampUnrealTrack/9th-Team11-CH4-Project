@@ -41,6 +41,11 @@ public class NoPhotos : ModuleRules
 			"NavigationSystem"
 		});
 
+		if (Target.bBuildEditor)
+		{
+			PrivateDependencyModuleNames.Add("ContentBrowser");
+		}
+
 		AddEngineThirdPartyPrivateStaticDependencies(Target, "Steamworks");
 
 		PublicIncludePaths.Add(ModuleDirectory);

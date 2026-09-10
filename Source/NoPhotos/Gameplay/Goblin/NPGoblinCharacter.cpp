@@ -5,12 +5,12 @@
 #include "CollisionQueryParams.h"
 #include "CollisionShape.h"
 #include "Components/CapsuleComponent.h"
-#include "Data/Structs/NPRelicData.h"
-#include "Engine/DataTable.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerState.h"
 #include "Gameplay/Photo/NPPhotoLog.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
+#include "Gameplay/Relic/NPRelicEditorSelectionUtils.h"
 #include "Net/UnrealNetwork.h"
 #include "NPGoblinAIController.h"
 #include "NPGoblinPresentationDoor.h"
@@ -18,22 +18,21 @@
 #include "NavigationPath.h"
 #include "NavigationSystem.h"
 #include "TimerManager.h"
-#include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogNPGoblinCharacter, Log, All);
+
+void ANPGoblinCharacter::ImportSelectedPhotographedRelicClasses()
+{
+	NPRelicEditorSelectionUtils::AppendSelectedRelicClasses(
+		this,
+		PhotographedRelicClasses);
+}
 
 ANPGoblinCharacter::ANPGoblinCharacter()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
 	SetReplicateMovement(true);
-
-	static ConstructorHelpers::FObjectFinder<UDataTable> RelicDropTableFinder(
-		TEXT("/Game/NoPhotos/Table/Relic/DT_Relic.DT_Relic"));
-	if (RelicDropTableFinder.Succeeded())
-	{
-		RelicDropTable = RelicDropTableFinder.Object;
-	}
 
 	AIControllerClass = ANPGoblinAIController::StaticClass();
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
@@ -456,6 +455,8 @@ void ANPGoblinCharacter::OnPhotographed_Implementation(
 		CurrentPhotoHP,
 		FMath::Max(1, PhotoDamagePerCapture));
 	CurrentPhotoHP -= AppliedDamage;
+	Multicast_TemporarilyDisablePhotoMeshCollision(
+		FMath::Max(0.0f, PhotoMeshNoCollisionDuration));
 	// BP 콜백 이후 HP가 바뀌어도 이 촬영이 처치한 것인지 판정은 유지합니다.
 	const bool bDefeatedByThisPhoto = CurrentPhotoHP == 0;
 	OnRep_CurrentPhotoHP();
@@ -493,6 +494,15 @@ void ANPGoblinCharacter::OnPhotographed_Implementation(
 			CaptureSequence);
 		BP_OnPhotoHPDepleted(Photographer);
 		BeginDespawnPresentation();
+		const float JumpVelocity = FMath::Max(0.0f, PhotoJumpVerticalVelocity);
+		if (!IsActorBeingDestroyed() && JumpVelocity > 0.0f)
+		{
+			// 퇴장 전환이 AI 이동을 멈춘 다음 적용해야 마지막 촬영에서도 점프가 유지됩니다.
+			LaunchCharacter(
+				FVector(0.0f, 0.0f, JumpVelocity),
+				false,
+				true);
+		}
 	}
 }
 
@@ -523,10 +533,18 @@ void ANPGoblinCharacter::OnPhotographedFromCamera_Implementation(
 	ANPGoblinAIController* GoblinController = Cast<ANPGoblinAIController>(GetController());
 	if (GoblinController && GoblinController->StartPhotoFlee(CameraLocation, FleeDirection))
 	{
+		const float JumpVelocity = FMath::Max(0.0f, PhotoJumpVerticalVelocity);
+		if (JumpVelocity > 0.0f)
+		{
+			LaunchCharacter(
+				FVector(0.0f, 0.0f, JumpVelocity),
+				false,
+				true);
+		}
 		UE_LOG(LogNPPhoto, Display,
-			TEXT("[GoblinPhoto] ESCAPE Goblin=%s Direction=%s Reaction=%.2fs Flee=%.2fs"),
+			TEXT("[GoblinPhoto] ESCAPE Goblin=%s Direction=%s Reaction=%.2fs Flee=%.2fs JumpZ=%.2f"),
 			*GetNameSafe(this), *FleeDirection.ToCompactString(),
-			GetPhotoReactionDuration(), GetPhotoFleeDuration());
+			GetPhotoReactionDuration(), GetPhotoFleeDuration(), JumpVelocity);
 		Multicast_PlayPhotoReaction(FleeDirection, GetPhotoReactionDuration());
 	}
 }
@@ -558,6 +576,48 @@ void ANPGoblinCharacter::StopPhotoReaction()
 	}
 }
 
+void ANPGoblinCharacter::Multicast_TemporarilyDisablePhotoMeshCollision_Implementation(
+	const float Duration)
+{
+	USkeletalMeshComponent* GoblinMesh = GetMesh();
+	if (!IsValid(GoblinMesh) || Duration <= 0.0f)
+	{
+		return;
+	}
+
+	if (!bPhotoMeshCollisionTemporarilyDisabled)
+	{
+		PhotoMeshOriginalCollision = GoblinMesh->GetCollisionEnabled();
+		bPhotoMeshCollisionTemporarilyDisabled = true;
+	}
+
+	GoblinMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	GetWorldTimerManager().SetTimer(
+		PhotoMeshCollisionTimer,
+		this,
+		&ThisClass::RestorePhotoMeshCollision,
+		Duration,
+		false);
+}
+
+void ANPGoblinCharacter::RestorePhotoMeshCollision()
+{
+	GetWorldTimerManager().ClearTimer(PhotoMeshCollisionTimer);
+	if (!bPhotoMeshCollisionTemporarilyDisabled)
+	{
+		return;
+	}
+
+	bPhotoMeshCollisionTemporarilyDisabled = false;
+	if (LifecycleState != ENPGoblinLifecycleState::Despawning)
+	{
+		if (USkeletalMeshComponent* GoblinMesh = GetMesh())
+		{
+			GoblinMesh->SetCollisionEnabled(PhotoMeshOriginalCollision);
+		}
+	}
+}
+
 void ANPGoblinCharacter::TrySpawnPhotographedRelic()
 {
 	UWorld* World = GetWorld();
@@ -566,54 +626,30 @@ void ANPGoblinCharacter::TrySpawnPhotographedRelic()
 		return;
 	}
 
-	TSubclassOf<ANPBaseRelic> SelectedRelicClass = PhotographedRelicClass;
-	FDataTableRowHandle SelectedRelicData;
-
-	if (RelicDropTable)
+	TArray<TSubclassOf<ANPBaseRelic>> ValidRelicClasses;
+	ValidRelicClasses.Reserve(PhotographedRelicClasses.Num());
+	for (const TSubclassOf<ANPBaseRelic>& RelicClass : PhotographedRelicClasses)
 	{
-		TArray<TPair<FName, TSubclassOf<ANPBaseRelic>>> ValidRelics;
-		for (const FName RowName : RelicDropTable->GetRowNames())
+		UClass* LoadedClass = RelicClass.Get();
+		if (LoadedClass
+			&& LoadedClass->IsChildOf(ANPBaseRelic::StaticClass())
+			&& !LoadedClass->HasAnyClassFlags(CLASS_Abstract))
 		{
-			const FNPRelicTableRow* Row = RelicDropTable->FindRow<FNPRelicTableRow>(
-				RowName,
-				TEXT("GoblinRelicDrop"),
-				false);
-			UClass* RelicClass = Row ? Row->RelicClass.LoadSynchronous() : nullptr;
-			if (RelicClass && RelicClass->IsChildOf(ANPBaseRelic::StaticClass())
-				&& !RelicClass->HasAnyClassFlags(CLASS_Abstract))
-			{
-				ValidRelics.Emplace(RowName, RelicClass);
-			}
-		}
-
-		if (!ValidRelics.IsEmpty())
-		{
-			const TPair<FName, TSubclassOf<ANPBaseRelic>>& SelectedRelic =
-				ValidRelics[FMath::RandRange(0, ValidRelics.Num() - 1)];
-			SelectedRelicClass = SelectedRelic.Value;
-			SelectedRelicData.DataTable = RelicDropTable;
-			SelectedRelicData.RowName = SelectedRelic.Key;
-		}
-		else
-		{
-			UE_LOG(
-				LogNPGoblinCharacter,
-				Warning,
-				TEXT("촬영 보상 테이블에 유효한 유물 행이 없습니다. Goblin=%s Table=%s"),
-				*GetNameSafe(this),
-				*GetNameSafe(RelicDropTable));
+			ValidRelicClasses.Add(RelicClass);
 		}
 	}
 
-	if (!SelectedRelicClass)
+	if (ValidRelicClasses.IsEmpty())
 	{
 		UE_LOG(
 			LogNPGoblinCharacter,
 			Warning,
-			TEXT("촬영 보상 유물 클래스가 설정되지 않았습니다. Goblin=%s"),
+			TEXT("촬영 보상 유물 배열에 유효한 클래스가 없습니다. Goblin=%s"),
 			*GetNameSafe(this));
 		return;
 	}
+	const TSubclassOf<ANPBaseRelic> SelectedRelicClass =
+		ValidRelicClasses[FMath::RandRange(0, ValidRelicClasses.Num() - 1)];
 
 	const FVector SpawnLocation = GetActorLocation()
 		+ GetActorTransform().TransformVectorNoScale(PhotographedRelicSpawnOffset);
@@ -635,10 +671,6 @@ void ANPGoblinCharacter::TrySpawnPhotographedRelic()
 		return;
 	}
 
-	if (!SelectedRelicData.RowName.IsNone())
-	{
-		Relic->SetRelicTableData(SelectedRelicData);
-	}
 	Relic->FinishSpawning(SpawnTransform);
 
 	const FVector2D HorizontalDirection = FMath::RandPointInCircle(1.0f).GetSafeNormal();
@@ -651,10 +683,10 @@ void ANPGoblinCharacter::TrySpawnPhotographedRelic()
 	UE_LOG(
 		LogNPGoblinCharacter,
 		Display,
-		TEXT("고블린 촬영 보상 유물 생성 완료. Goblin=%s Relic=%s Row=%s Location=%s PhysicsLaunch=%s Velocity=%s"),
+		TEXT("고블린 촬영 보상 유물 생성 완료. Goblin=%s Relic=%s Class=%s Location=%s PhysicsLaunch=%s Velocity=%s"),
 		*GetNameSafe(this),
 		*GetNameSafe(Relic),
-		*SelectedRelicData.RowName.ToString(),
+		*GetNameSafe(SelectedRelicClass.Get()),
 		*Relic->GetActorLocation().ToCompactString(),
 		bLaunched ? TEXT("true") : TEXT("false"),
 		*LaunchVelocity.ToCompactString());

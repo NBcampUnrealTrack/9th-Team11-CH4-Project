@@ -13,6 +13,8 @@
 #include "UObject/UnrealType.h"
 #endif
 
+DEFINE_LOG_CATEGORY_STATIC(LogNPBreakableRelic, Log, All);
+
 ANPBreakableRelic::ANPBreakableRelic(
 	const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -56,7 +58,16 @@ void ANPBreakableRelic::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (GeometryCollectionComponent->GetRestCollection())
+	if (!IsValid(GeometryCollectionComponent))
+	{
+		UE_LOG(
+			LogNPBreakableRelic,
+			Error,
+			TEXT("파괴 유물에 BrokenGeometry 컴포넌트가 없습니다. Actor=%s Class=%s"),
+			*GetNameSafe(this),
+			*GetNameSafe(GetClass()));
+	}
+	else if (GeometryCollectionComponent->GetRestCollection())
 	{
 		if (HasAuthority())
 		{
@@ -69,15 +80,31 @@ void ANPBreakableRelic::BeginPlay()
 	}
 
 	ApplyBrokenState();
-	ImpactReceiveComponent->OnDamaged.AddUObject(
-		this,
-		&ANPBreakableRelic::HandleDurabilityDamaged);
-	ImpactReceiveComponent->OnDepleted.AddUObject(
-		this,
-		&ANPBreakableRelic::HandleDurabilityDepleted);
-	GrabbableComponent->OnGrabStarted.AddUObject(
-		this,
-		&ANPBreakableRelic::HandleBreakableGrabStarted);
+	if (IsValid(ImpactReceiveComponent))
+	{
+		ImpactReceiveComponent->OnDamaged.AddUObject(
+			this,
+			&ANPBreakableRelic::HandleDurabilityDamaged);
+		ImpactReceiveComponent->OnDepleted.AddUObject(
+			this,
+			&ANPBreakableRelic::HandleDurabilityDepleted);
+	}
+	else
+	{
+		UE_LOG(
+			LogNPBreakableRelic,
+			Error,
+			TEXT("파괴 유물에 ImpactReceiveComponent가 없습니다. Actor=%s Class=%s"),
+			*GetNameSafe(this),
+			*GetNameSafe(GetClass()));
+	}
+
+	if (IsValid(GrabbableComponent))
+	{
+		GrabbableComponent->OnGrabStarted.AddUObject(
+			this,
+			&ANPBreakableRelic::HandleBreakableGrabStarted);
+	}
 }
 
 void ANPBreakableRelic::GetLifetimeReplicatedProps(

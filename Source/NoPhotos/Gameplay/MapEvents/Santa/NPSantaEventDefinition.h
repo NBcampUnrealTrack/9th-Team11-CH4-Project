@@ -29,6 +29,10 @@ public:
 	const TArray<TSubclassOf<ANPBaseRelic>>& GetRelicClasses() const { return RelicClasses; }
 	float GetGiftDropHeightOffset() const { return GiftDropHeightOffset; }
 
+	/** Content Browser에서 선택한 유물 BP들을 일반 선물 후보 배열에 중복 없이 추가합니다. */
+	UFUNCTION(CallInEditor, Category="Santa Event|Gifts", meta=(DisplayName="선택한 유물 클래스 가져오기"))
+	void ImportSelectedRelicClasses();
+
 private:
 	/** 사용자가 산타/썰매 외형을 설정한 NPSantaFlightActor 파생 BP입니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Santa Event", meta=(AllowPrivateAccess="true"))

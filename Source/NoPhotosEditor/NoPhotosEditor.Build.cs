@@ -22,6 +22,7 @@ public class NoPhotosEditor : ModuleRules
                 "Engine",
                 "BlueprintGraph",
                 "KismetCompiler",
+                "PropertyEditor",
                 "Slate",
                 "SlateCore",
                 "UnrealEd"
