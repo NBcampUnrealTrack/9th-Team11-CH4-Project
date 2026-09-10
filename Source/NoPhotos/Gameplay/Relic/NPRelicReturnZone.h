@@ -89,12 +89,12 @@ private:
 
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastNotifyRelicDelivered(
-  ANPBaseRelic* DeliveredRelic,
-const FTransform& DeliveryTransform,
-UStaticMesh* RelicMesh,
-const TArray<AActor*>& DeliveryTargets,
-int32 RelicPrice,
-bool bNotifyBlueprint);
+		ANPBaseRelic* DeliveredRelic,
+		const FTransform& DeliveryTransform,
+		UStaticMesh* RelicMesh,
+		const TArray<AActor*>& DeliveryTargets,
+		int32 RelicPrice,
+		bool bNotifyBlueprint);
 
 	TSet<TWeakObjectPtr<ANPBaseRelic>> OverlappingRelics;
 	TSet<TWeakObjectPtr<ANPBaseRelic>> DeliveryAttemptsInProgress;

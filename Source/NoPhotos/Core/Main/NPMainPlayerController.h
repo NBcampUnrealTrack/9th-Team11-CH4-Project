@@ -192,6 +192,7 @@ private:
 	void BindRoomGenerationState();
 	void SetMainWorldInputLocked(bool bLocked);
 	void ShowMainWorldLoadingOverlay();
+	void FinishTransitionLoadingScreenHandoff();
 	void HideMainWorldLoadingOverlay();
 	void ShowMainWorldLoadingFailure();
 
@@ -241,6 +242,7 @@ private:
 	double MainWorldLoadingShownAtRealTime = -1.0;
 	FTimerHandle MinimumMainWorldLoadingTimer;
 	TSet<FGuid> PendingSelectedPhotoIds;
+	bool bTransitionLoadingScreenHandoffScheduled = false;
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestRestartRoom();

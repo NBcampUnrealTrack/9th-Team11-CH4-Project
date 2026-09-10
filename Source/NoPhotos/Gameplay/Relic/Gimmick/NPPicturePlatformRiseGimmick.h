@@ -6,6 +6,8 @@
 
 class ANPBaseRelic;
 class FLifetimeProperty;
+class USoundAttenuation;
+class USoundBase;
 
 USTRUCT(BlueprintType)
 struct FNPPlatformRiseEntry
@@ -81,6 +83,20 @@ protected:
 	/** 1보다 크면 이동의 시작과 끝이 더 부드러워집니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Picture Platform Rise", meta=(ClampMin="1.0"))
 	float EaseExponent = 2.0f;
+
+	/** 발판 상승이 시작될 때 기믹 위치에서 한 번 재생할 3D 사운드입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Picture Platform Rise|Audio")
+	TObjectPtr<USoundBase> RiseStartSound;
+
+	/** 상승 시작음의 거리 감쇠 설정입니다. 지정하지 않으면 사운드 에셋 설정을 사용합니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Picture Platform Rise|Audio")
+	TObjectPtr<USoundAttenuation> RiseStartAttenuation;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Picture Platform Rise|Audio", meta=(ClampMin="0.0"))
+	float RiseStartVolume = 1.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Picture Platform Rise|Audio", meta=(ClampMin="0.01"))
+	float RiseStartPitch = 1.0f;
 
 private:
 	struct FPlatformRuntimeState

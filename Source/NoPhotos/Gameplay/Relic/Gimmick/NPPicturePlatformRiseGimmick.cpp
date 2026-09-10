@@ -1,6 +1,7 @@
 #include "Gameplay/Relic/Gimmick/NPPicturePlatformRiseGimmick.h"
 
 #include "Components/SceneComponent.h"
+#include "Core/Audio/NPSoundSubsystem.h"
 #include "GameFramework/GameStateBase.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Net/UnrealNetwork.h"
@@ -158,6 +159,23 @@ void ANPPicturePlatformRiseGimmick::BeginLocalRisePlayback()
 	if (!bRiseStartedEventBroadcast)
 	{
 		bRiseStartedEventBroadcast = true;
+
+		if (IsValid(RiseStartSound))
+		{
+			if (UNPSoundSubsystem* SoundSubsystem =
+				UNPSoundSubsystem::Get(this))
+			{
+				SoundSubsystem->PlaySFXAtLocation(
+					RiseStartSound,
+					GetActorLocation(),
+					GetActorRotation(),
+					RiseStartVolume,
+					RiseStartPitch,
+					0.0f,
+					RiseStartAttenuation);
+			}
+		}
+
 		OnPlatformRiseStarted.Broadcast();
 	}
 

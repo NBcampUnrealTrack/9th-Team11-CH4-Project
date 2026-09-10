@@ -75,6 +75,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Async Loading Screen")
 	static void StopLoadingScreen();
 
+	/** Remove the temporary viewport cover after the destination loading UMG is installed. */
+	UFUNCTION(BlueprintCallable, Category = "Async Loading Screen")
+	static void HideTransitionHandoffOverlay();
+
+	/** Used by the loading-screen module before map travel begins. */
+	static void ShowTransitionHandoffOverlay();
+
 	static inline int32 GetDisplayBackgroundIndex() { return DisplayBackgroundIndex; }
 	static inline int32 GetDisplayTipTextIndex() { return DisplayTipTextIndex; }
 	static inline int32 GetDisplayMovieIndex() { return DisplayMovieIndex; }
