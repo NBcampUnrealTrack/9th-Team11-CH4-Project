@@ -34,6 +34,19 @@ void UNPShowPicture::SetPicture(
 void UNPShowPicture::SetSelected(const bool InSelected)
 {
 	IsSelected = InSelected;
+
+	if (!IsValid(StampIcon))
+	{
+		return;
+	}
+
+	UTexture2D* StampTexture = IsSelected
+		? SelectedStampTexture.Get()
+		: UnselectedStampTexture.Get();
+	if (IsValid(StampTexture))
+	{
+		StampIcon->SetBrushFromTexture(StampTexture);
+	}
 }
 
 void UNPShowPicture::OnSelectButtonClicked()
