@@ -1,18 +1,96 @@
 #include "UI/Result/Result/NPResultPictureButton.h"
 
+#include "Blueprint/WidgetTree.h"
+#include "Brushes/SlateColorBrush.h"
+#include "Components/Border.h"
 #include "Components/Button.h"
+#include "Components/CanvasPanelSlot.h"
+#include "Components/Overlay.h"
+#include "Components/PanelWidget.h"
+#include "Components/TextBlock.h"
+#include "Components/Widget.h"
+#include "Core/Main/NPMainGameState.h"
+#include "Core/Main/NPMainPlayerController.h"
 #include "UI/Result/Pictures/NPResultPicturePreviewPopup.h"
 
 void UNPResultPictureButton::NativeConstruct()
 {
 	Super::NativeConstruct();
+	EnsureLikeButton();
+	EnsureLikeHoverVisual();
 
 	if (IsValid(ShowImageButton))
 	{
 		ShowImageButton->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleShowImageButtonClicked);
 		ShowImageButton->SetIsEnabled(PhotoId.IsValid());
 	}
+	if (IsValid(LikeButton))
+	{
+		LikeButton->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleLikeButtonClicked);
+		LikeButton->OnHovered.AddUniqueDynamic(this, &ThisClass::HandleLikeButtonHovered);
+		LikeButton->OnUnhovered.AddUniqueDynamic(this, &ThisClass::HandleLikeButtonUnhovered);
+	}
 
+	ObservedGameState = GetWorld() ? GetWorld()->GetGameState<ANPMainGameState>() : nullptr;
+	if (IsValid(ObservedGameState))
+	{
+		ObservedGameState->OnPhotoLikesChanged.AddUniqueDynamic(
+			this, &ThisClass::HandlePhotoLikesChanged);
+		ObservedGameState->OnPhotoFullyLiked.AddUniqueDynamic(
+			this, &ThisClass::HandlePhotoFullyLiked);
+	}
+	RefreshLikeState();
+}
+
+void UNPResultPictureButton::NativeDestruct()
+{
+	if (IsValid(ShowImageButton))
+	{
+		ShowImageButton->OnClicked.RemoveAll(this);
+	}
+	if (IsValid(LikeButton))
+	{
+		LikeButton->OnClicked.RemoveAll(this);
+		LikeButton->OnHovered.RemoveAll(this);
+		LikeButton->OnUnhovered.RemoveAll(this);
+	}
+	if (IsValid(ObservedGameState))
+	{
+		ObservedGameState->OnPhotoLikesChanged.RemoveDynamic(
+			this, &ThisClass::HandlePhotoLikesChanged);
+		ObservedGameState->OnPhotoFullyLiked.RemoveDynamic(
+			this, &ThisClass::HandlePhotoFullyLiked);
+	}
+	if (IsValid(LikeCountText))
+	{
+		LikeCountText->SetRenderScale(FullyLikedPulseBaseScale);
+	}
+
+	Super::NativeDestruct();
+}
+
+void UNPResultPictureButton::NativeTick(
+	const FGeometry& MyGeometry,
+	const float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+	if (!bFullyLikedPulseActive || !IsValid(LikeCountText))
+	{
+		return;
+	}
+
+	FullyLikedPulseElapsed += InDeltaTime;
+	const float Alpha = FMath::Clamp(
+		FullyLikedPulseElapsed / FullyLikedPulseDuration, 0.0f, 1.0f);
+	const float ScaleMultiplier = FMath::Lerp(
+		1.0f, FullyLikedPulseScale, FMath::Sin(Alpha * PI));
+	LikeCountText->SetRenderScale(FullyLikedPulseBaseScale * ScaleMultiplier);
+
+	if (Alpha >= 1.0f)
+	{
+		LikeCountText->SetRenderScale(FullyLikedPulseBaseScale);
+		bFullyLikedPulseActive = false;
+	}
 }
 
 void UNPResultPictureButton::InitializePhoto(
@@ -25,11 +103,183 @@ void UNPResultPictureButton::InitializePhoto(
 	{
 		ShowImageButton->SetIsEnabled(PhotoId.IsValid());
 	}
+	RefreshLikeState();
 }
 
 void UNPResultPictureButton::HandleShowImageButtonClicked()
 {
 	OpenPreview();
+}
+
+void UNPResultPictureButton::HandleLikeButtonClicked()
+{
+	ANPMainPlayerController* PlayerController =
+		Cast<ANPMainPlayerController>(GetOwningPlayer());
+	if (bLikeRequestPending || !IsValid(PlayerController)
+		|| !IsValid(ObservedGameState)
+		|| !ObservedGameState->CanPlayerLikePhoto(PhotoId, PlayerController->PlayerState))
+	{
+		return;
+	}
+
+	bLikeRequestPending = true;
+	LikeButton->SetIsEnabled(false);
+	PlayerController->ServerLikeResultPhoto(PhotoId);
+}
+
+void UNPResultPictureButton::HandleLikeButtonHovered()
+{
+	SetLikeHoverVisualVisible(true);
+}
+
+void UNPResultPictureButton::HandleLikeButtonUnhovered()
+{
+	SetLikeHoverVisualVisible(false);
+}
+
+void UNPResultPictureButton::HandlePhotoLikesChanged(const FGuid ChangedPhotoId)
+{
+	if (!ChangedPhotoId.IsValid() || ChangedPhotoId == PhotoId)
+	{
+		bLikeRequestPending = false;
+		RefreshLikeState();
+	}
+}
+
+void UNPResultPictureButton::HandlePhotoFullyLiked(
+	const FGuid FullyLikedPhotoId,
+	const int32 LikeCount)
+{
+	if (FullyLikedPhotoId != PhotoId)
+	{
+		return;
+	}
+
+	bLikeRequestPending = false;
+	if (IsValid(LikeCountText))
+	{
+		LikeCountText->SetText(FText::FromString(
+			FString::Printf(TEXT("♡ %d"), LikeCount)));
+	}
+	StartFullyLikedPulse();
+}
+
+void UNPResultPictureButton::EnsureLikeButton()
+{
+	if (IsValid(LikeButton))
+	{
+		if (!IsValid(LikeCountText))
+		{
+			LikeCountText = Cast<UTextBlock>(LikeButton->GetContent());
+		}
+		return;
+	}
+	if (!WidgetTree)
+	{
+		return;
+	}
+
+	UPanelWidget* RootPanel = Cast<UPanelWidget>(WidgetTree->RootWidget);
+	if (!IsValid(RootPanel))
+	{
+		return;
+	}
+
+	LikeButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("LikeButton"));
+	LikeCountText = WidgetTree->ConstructWidget<UTextBlock>(
+		UTextBlock::StaticClass(), TEXT("LikeCountText"));
+	LikeButton->AddChild(LikeCountText);
+	RootPanel->AddChild(LikeButton);
+
+	if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(LikeButton->Slot))
+	{
+		CanvasSlot->SetAnchors(FAnchors(0.5f, 1.0f));
+		CanvasSlot->SetAlignment(FVector2D(0.5f, 1.0f));
+		CanvasSlot->SetPosition(FVector2D(0.0f, -4.0f));
+		CanvasSlot->SetSize(FVector2D(90.0f, 30.0f));
+		CanvasSlot->SetZOrder(20);
+	}
+}
+
+void UNPResultPictureButton::EnsureLikeHoverVisual()
+{
+	if (!IsValid(LikeButton) || !WidgetTree)
+	{
+		return;
+	}
+	if (IsValid(LikeHoverDim))
+	{
+		SetLikeHoverVisualVisible(false);
+		return;
+	}
+
+	UWidget* ExistingContent = LikeButton->GetContent();
+	UOverlay* HoverOverlay = Cast<UOverlay>(ExistingContent);
+	if (!IsValid(HoverOverlay))
+	{
+		HoverOverlay = WidgetTree->ConstructWidget<UOverlay>(
+			UOverlay::StaticClass(), TEXT("LikeHoverOverlay"));
+		if (IsValid(ExistingContent))
+		{
+			LikeButton->RemoveChild(ExistingContent);
+		}
+		LikeButton->AddChild(HoverOverlay);
+		if (IsValid(ExistingContent))
+		{
+			HoverOverlay->AddChild(ExistingContent);
+		}
+	}
+
+	LikeHoverDim = WidgetTree->ConstructWidget<UBorder>(
+		UBorder::StaticClass(), TEXT("LikeHoverDim"));
+	const FSlateColorBrush DimBrush(
+		FLinearColor(0.0f, 0.0f, 0.0f, LikeHoverDimOpacity));
+	LikeHoverDim->SetBrush(DimBrush);
+	HoverOverlay->AddChild(LikeHoverDim);
+	SetLikeHoverVisualVisible(false);
+}
+
+void UNPResultPictureButton::SetLikeHoverVisualVisible(const bool bVisible) const
+{
+	if (IsValid(LikeHoverDim))
+	{
+		LikeHoverDim->SetVisibility(
+			bVisible ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
+	}
+}
+
+void UNPResultPictureButton::RefreshLikeState()
+{
+	if (!IsValid(LikeButton) || !IsValid(LikeCountText))
+	{
+		return;
+	}
+
+	const int32 LikeCount = IsValid(ObservedGameState)
+		? ObservedGameState->GetPhotoLikeCount(PhotoId)
+		: 0;
+	LikeCountText->SetText(FText::FromString(
+		FString::Printf(TEXT("♡ %d"), LikeCount)));
+
+	const ANPMainPlayerController* PlayerController =
+		Cast<ANPMainPlayerController>(GetOwningPlayer());
+	const bool bCanLike = IsValid(PlayerController)
+		&& IsValid(ObservedGameState)
+		&& ObservedGameState->CanPlayerLikePhoto(PhotoId, PlayerController->PlayerState);
+	LikeButton->SetIsEnabled(bCanLike && !bLikeRequestPending);
+}
+
+void UNPResultPictureButton::StartFullyLikedPulse()
+{
+	if (!IsValid(LikeCountText))
+	{
+		return;
+	}
+
+	FullyLikedPulseBaseScale = LikeCountText->GetRenderTransform().Scale;
+	LikeCountText->SetRenderTransformPivot(FVector2D(0.5f));
+	FullyLikedPulseElapsed = 0.0f;
+	bFullyLikedPulseActive = true;
 }
 
 void UNPResultPictureButton::OpenPreview() const

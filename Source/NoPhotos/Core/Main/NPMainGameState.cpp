@@ -28,6 +28,8 @@ void ANPMainGameState::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(ANPMainGameState, PhotoEvidence);
 	DOREPLIFETIME(ANPMainGameState, TransferredPhotoIds);
 	DOREPLIFETIME(ANPMainGameState, SelectedPhotos);
+	DOREPLIFETIME(ANPMainGameState, ResultParticipants);
+	DOREPLIFETIME(ANPMainGameState, PhotoLikes);
 }
 
 TArray<FNPPlayerRanking> ANPMainGameState::GetPlayerRankings() const
@@ -85,6 +87,93 @@ TArray<FGuid> ANPMainGameState::GetSelectedPhotoIds(const APlayerState* PlayerSt
 	}
 
 	return {};
+}
+
+int32 ANPMainGameState::GetPhotoLikeCount(const FGuid PhotoId) const
+{
+	for (const FNPPhotoLikeState& LikeState : PhotoLikes)
+	{
+		if (LikeState.PhotoId == PhotoId)
+		{
+			return LikeState.LikedPlayerStates.Num();
+		}
+	}
+
+	return 0;
+}
+
+int32 ANPMainGameState::GetMaximumPhotoLikeCount() const
+{
+	return FMath::Max(0, ResultParticipants.Num() - 1);
+}
+
+bool ANPMainGameState::HasPlayerLikedPhoto(
+	const FGuid PhotoId,
+	const APlayerState* PlayerState) const
+{
+	if (!IsValid(PlayerState))
+	{
+		return false;
+	}
+
+	for (const FNPPhotoLikeState& LikeState : PhotoLikes)
+	{
+		if (LikeState.PhotoId == PhotoId)
+		{
+			return LikeState.LikedPlayerStates.Contains(
+				const_cast<APlayerState*>(PlayerState));
+		}
+	}
+
+	return false;
+}
+
+bool ANPMainGameState::CanPlayerLikePhoto(
+	const FGuid PhotoId,
+	const APlayerState* PlayerState) const
+{
+	const APlayerState* PhotoOwner = FindSelectedPhotoOwner(PhotoId);
+	return PhotoId.IsValid()
+		&& IsValid(PlayerState)
+		&& IsValid(PhotoOwner)
+		&& PhotoOwner != PlayerState
+		&& ResultParticipants.Contains(const_cast<APlayerState*>(PlayerState))
+		&& GetMaximumPhotoLikeCount() > 0
+		&& !HasPlayerLikedPhoto(PhotoId, PlayerState)
+		&& GetPhotoLikeCount(PhotoId) < GetMaximumPhotoLikeCount();
+}
+
+bool ANPMainGameState::AddPhotoLike(
+	const FGuid& PhotoId,
+	APlayerState* PlayerState)
+{
+	if (!HasAuthority() || !CanPlayerLikePhoto(PhotoId, PlayerState))
+	{
+		return false;
+	}
+
+	FNPPhotoLikeState* LikeState = PhotoLikes.FindByPredicate(
+		[&PhotoId](const FNPPhotoLikeState& Entry)
+		{
+			return Entry.PhotoId == PhotoId;
+		});
+	if (!LikeState)
+	{
+		LikeState = &PhotoLikes.AddDefaulted_GetRef();
+		LikeState->PhotoId = PhotoId;
+	}
+
+	LikeState->LikedPlayerStates.Add(PlayerState);
+	const int32 LikeCount = LikeState->LikedPlayerStates.Num();
+	ForceNetUpdate();
+	OnPhotoLikesChanged.Broadcast(PhotoId);
+
+	if (LikeCount == GetMaximumPhotoLikeCount())
+	{
+		MulticastPhotoFullyLiked(PhotoId, LikeCount);
+	}
+
+	return true;
 }
 
 void ANPMainGameState::SetSelectedPhotoIds(APlayerState* PlayerState, const TArray<FGuid>& PhotoIds)
@@ -181,6 +270,22 @@ void ANPMainGameState::ConfirmPictureSelection(APlayerController* PlayerControll
 		return;
 	}
 
+	ResultParticipants.Reset();
+	for (FConstPlayerControllerIterator Iterator =
+		GetWorld()->GetPlayerControllerIterator();
+		Iterator;
+		++Iterator)
+	{
+		const APlayerController* ConnectedPlayerController = Iterator->Get();
+		if (IsValid(ConnectedPlayerController)
+			&& IsValid(ConnectedPlayerController->PlayerState))
+		{
+			ResultParticipants.AddUnique(ConnectedPlayerController->PlayerState);
+		}
+	}
+	PhotoLikes.Empty();
+	ForceNetUpdate();
+
 	for (FConstPlayerControllerIterator Iterator =
 		GetWorld()->GetPlayerControllerIterator();
 		Iterator;
@@ -275,6 +380,8 @@ void ANPMainGameState::StartMainGame(const int32 DurationSeconds)
 
 	//새게임 시작시 이전게임 완료상태 초기화
 	PictureSelectionCompletedPlayers.Empty();
+	ResultParticipants.Empty();
+	PhotoLikes.Empty();
 
 	LastLoggedRemainingTime = INDEX_NONE;
 	bFinalRankingsLogged = false;
@@ -407,6 +514,23 @@ void ANPMainGameState::OnRep_SelectedPhotos()
 	OnPhotoEvidenceChanged.Broadcast();
 }
 
+void ANPMainGameState::OnRep_PhotoLikes()
+{
+	OnPhotoLikesChanged.Broadcast(FGuid());
+}
+
+void ANPMainGameState::OnRep_ResultParticipants()
+{
+	OnPhotoLikesChanged.Broadcast(FGuid());
+}
+
+void ANPMainGameState::MulticastPhotoFullyLiked_Implementation(
+	const FGuid PhotoId,
+	const int32 LikeCount)
+{
+	OnPhotoFullyLiked.Broadcast(PhotoId, LikeCount);
+}
+
 bool ANPMainGameState::AreAllConnectedPlayersPictureSelectionComplete() const
 {
 	bool bHasConnectedPlayer = false;
@@ -435,6 +559,24 @@ bool ANPMainGameState::AreAllConnectedPlayersPictureSelectionComplete() const
 	}
 
 	return bHasConnectedPlayer;
+}
+
+APlayerState* ANPMainGameState::FindSelectedPhotoOwner(const FGuid& PhotoId) const
+{
+	if (!PhotoId.IsValid())
+	{
+		return nullptr;
+	}
+
+	for (const FNPPlayerSelectedPhotos& Selected : SelectedPhotos)
+	{
+		if (IsValid(Selected.PlayerState) && Selected.PhotoIds.Contains(PhotoId))
+		{
+			return Selected.PlayerState;
+		}
+	}
+
+	return nullptr;
 }
 
 void ANPMainGameState::LogLocalGameStatus()

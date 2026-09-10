@@ -84,6 +84,9 @@ public:
 	//서버가 선택 사진과 완료 상태를 확인
 	UFUNCTION(Server, Reliable)
 	void ServerConfirmPictureSelection(const TArray<FGuid>& SelectedPhotoIds);
+
+	UFUNCTION(Server, Reliable)
+	void ServerLikeResultPhoto(FGuid PhotoId);
 	void HandleSelectedPhotoStored(const FGuid& PhotoId);
 
 	/** 개발 빌드에서 현재 Pawn의 Grab 입력을 창 포커스와 무관하게 유지합니다. */
