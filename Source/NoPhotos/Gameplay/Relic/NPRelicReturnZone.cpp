@@ -3,13 +3,19 @@
 #include "Components/BoxComponent.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Gameplay/Relic/Components/NPRelicOwnershipComponent.h"
+#include "Gameplay/Relic/NPRelicDeliveryEffect.h"
 #include "Gameplay/Relic/NPRelicDeliveryService.h"
 #include "Core/Main/NPMainGameMode.h"
+#include "Core/NPPlayerState.h"
+#include "Components/StaticMeshComponent.h"
+#include "GameFramework/Pawn.h"
+#include "Kismet/GameplayStatics.h"
 
 ANPRelicReturnZone::ANPRelicReturnZone()
 {
 	PrimaryActorTick.bCanEverTick = false;
-	bReplicates = false;
+	bReplicates = true;
+	SetReplicateMovement(false);
 
 	ReturnVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("ReturnVolume"));
 	SetRootComponent(ReturnVolume);
@@ -152,7 +158,35 @@ bool ANPRelicReturnZone::TryDeliverOverlappingRelic(ANPBaseRelic* Relic)
 	}
 
 	DeliveryAttemptsInProgress.Add(Relic);
-	const FVector DeliveryLocation = Relic->GetRelicWorldLocation();
+	const int32 RelicPrice = Relic->GetCurrentPrice();
+	const UStaticMeshComponent* RelicMeshComponent =
+		Cast<UStaticMeshComponent>(Relic->GetRootComponent());
+	UStaticMesh* RelicMesh = RelicMeshComponent
+		? RelicMeshComponent->GetStaticMesh()
+		: nullptr;
+	const FTransform DeliveryTransform = RelicMeshComponent
+		? RelicMeshComponent->GetComponentTransform()
+		: Relic->GetActorTransform();
+
+	TArray<AActor*> DeliveryTargets;
+	if (UNPRelicOwnershipComponent* Ownership = Relic->GetOwnershipComponent())
+	{
+		TArray<ANPPlayerState*> Owners;
+		Ownership->GetCurrentOwners(Owners);
+		for (const ANPPlayerState* OwnerPlayerState : Owners)
+		{
+			APawn* OwnerPawn = OwnerPlayerState
+				? OwnerPlayerState->GetPawn()
+				: nullptr;
+			if (!IsValid(OwnerPawn))
+			{
+				continue;
+			}
+
+			DeliveryTargets.AddUnique(OwnerPawn);
+		}
+	}
+
 	const bool bDelivered = DeliveryService->TryDeliverRelic(Relic, this);
 	DeliveryAttemptsInProgress.Remove(Relic);
 	if (!bDelivered)
@@ -160,20 +194,79 @@ bool ANPRelicReturnZone::TryDeliverOverlappingRelic(ANPBaseRelic* Relic)
 		return false;
 	}
 
-	if (bDeliveryEffectEnabled)
+	const bool bHasDeliverySound = LowPriceSound
+		|| MidPriceSound
+		|| LargePriceSound;
+	if ((DeliveryEffectClass && IsValid(RelicMesh))
+		|| bDeliveryEffectEnabled
+		|| bHasDeliverySound)
 	{
-		MulticastNotifyRelicDelivered(Relic, DeliveryLocation);
-	}
-	UnregisterOverlappingRelic(Relic);
-	return true;
-}
-
-void ANPRelicReturnZone::MulticastNotifyRelicDelivered_Implementation(
-	ANPBaseRelic* DeliveredRelic,
-	const FVector_NetQuantize10 DeliveryLocation)
+MulticastNotifyRelicDelivered(
+    Relic,
+    DeliveryTransform,
+    RelicMesh,
+    DeliveryTargets,
+    RelicPrice,
+    bDeliveryEffectEnabled);
 {
-	if (GetNetMode() != NM_DedicatedServer)
+	if (GetNetMode() == NM_DedicatedServer)
 	{
-		BP_OnRelicDelivered(DeliveredRelic, DeliveryLocation);
+		return;
+	}
+
+	USoundBase* DeliverySound = nullptr;
+	if (RelicPrice <= LowPriceThreshold)
+	{
+		DeliverySound = LowPriceSound;
+	}
+	else if (RelicPrice <= MidPriceThreshold)
+	{
+		DeliverySound = MidPriceSound;
+	}
+	else
+	{
+		DeliverySound = LargePriceSound;
+	}
+
+	if (DeliverySound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(
+			this,
+			DeliverySound,
+			DeliveryTransform.GetLocation());
+	}
+
+	if (DeliveryEffectClass && IsValid(RelicMesh))
+	{
+		for (AActor* DeliveryTarget : DeliveryTargets)
+		{
+			if (!IsValid(DeliveryTarget))
+			{
+				continue;
+			}
+
+			FActorSpawnParameters SpawnParameters;
+			SpawnParameters.Owner = this;
+			SpawnParameters.SpawnCollisionHandlingOverride =
+				ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			if (ANPRelicDeliveryEffect* DeliveryEffect =
+				GetWorld()->SpawnActor<ANPRelicDeliveryEffect>(
+					DeliveryEffectClass,
+					DeliveryTransform,
+					SpawnParameters))
+			{
+				DeliveryEffect->InitializeEffect(
+					RelicMesh,
+					DeliveryTarget,
+					RelicPrice);
+			}
+		}
+	}
+
+	if (bNotifyBlueprint)
+	{
+BP_OnRelicDelivered(
+    DeliveredRelic,
+    DeliveryTransform.GetLocation());
 	}
 }

@@ -6,7 +6,10 @@
 
 class UBoxComponent;
 class UPrimitiveComponent;
+class USoundBase;
+class UStaticMesh;
 class ANPBaseRelic;
+class ANPRelicDeliveryEffect;
 class UNPRelicOwnershipComponent;
 
 /** 레벨에 배치하여 서버에서 Relic 반환 Overlap을 감지하는 구역입니다. */
@@ -59,6 +62,25 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic|Delivery", meta=(ClampMin="0.0", UIMin="0.0"))
 	float ReturnScoreMultiplier = 1.0f;
 
+	/** 반환 성공 시 로컬에서 생성할 Niagara 연출 액터입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic|Delivery")
+	TSubclassOf<ANPRelicDeliveryEffect> DeliveryEffectClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic|Delivery Audio", meta=(ClampMin="0"))
+	int32 LowPriceThreshold = 250;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic|Delivery Audio", meta=(ClampMin="0"))
+	int32 MidPriceThreshold = 450;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic|Delivery Audio")
+	TObjectPtr<USoundBase> LowPriceSound;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic|Delivery Audio")
+	TObjectPtr<USoundBase> MidPriceSound;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Relic|Delivery Audio")
+	TObjectPtr<USoundBase> LargePriceSound;
+
 private:
 	void RegisterOverlappingRelic(ANPBaseRelic* Relic);
 	void UnregisterOverlappingRelic(ANPBaseRelic* Relic);
@@ -67,8 +89,12 @@ private:
 
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastNotifyRelicDelivered(
-		ANPBaseRelic* DeliveredRelic,
-		FVector_NetQuantize10 DeliveryLocation);
+  ANPBaseRelic* DeliveredRelic,
+const FTransform& DeliveryTransform,
+UStaticMesh* RelicMesh,
+const TArray<AActor*>& DeliveryTargets,
+int32 RelicPrice,
+bool bNotifyBlueprint);
 
 	TSet<TWeakObjectPtr<ANPBaseRelic>> OverlappingRelics;
 	TSet<TWeakObjectPtr<ANPBaseRelic>> DeliveryAttemptsInProgress;
