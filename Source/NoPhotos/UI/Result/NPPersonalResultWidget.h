@@ -7,7 +7,6 @@
 class APlayerState;
 class UHorizontalBox;
 class UTextBlock;
-class UTexture2D;
 class UNPResultPictureButton;
 
 UCLASS()
@@ -18,8 +17,6 @@ class NOPHOTOS_API UNPPersonalResultWidget : public UNPUserWidget
 public:
 	void SetupResult(int32 InRank, const FString& InPlayerName,	int32 InScore,	APlayerState* InPlayerState);
 	void RefreshPictureButtons();
-	const TArray<FGuid>& GetPicturePhotoIds() const { return PicturePhotoIds; }
-	void SetPictureTexture(FGuid PhotoId, UTexture2D* Texture);
 
 private:
 	void CreatePictureButtons();
@@ -37,8 +34,4 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<APlayerState> ResultPlayerState;
-	UPROPERTY(Transient)
-	TMap<FGuid, TObjectPtr<UNPResultPictureButton>> PictureButtonsById;
-
-	TArray<FGuid> PicturePhotoIds;
 };

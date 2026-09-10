@@ -7,6 +7,11 @@
 #include "Gameplay/Photo/NPPhotoLog.h"
 #include "Gameplay/Photo/NPPhotoRepository.h"
 #include "Core/Main/NPMainGameMode.h"
+#include "Core/Main/NPMainGameState.h"
+#include "HAL/FileManager.h"
+#include "HAL/PlatformProcess.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 
 UNPPhotoTransferComponent::UNPPhotoTransferComponent()
 {
@@ -19,24 +24,36 @@ void UNPPhotoTransferComponent::BeginPlay()
 {
 	Super::BeginPlay();
 	ImageCodec = NewObject<UNPPhotoImageCodec>(this, TEXT("PhotoTransferImageCodec"));
+	EnsurePhotoEvidenceBinding();
+}
+
+void UNPPhotoTransferComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (IsValid(ObservedGameState))
+	{
+		ObservedGameState->OnPhotoEvidenceChanged.RemoveDynamic(
+			this, &ThisClass::HandlePhotoEvidenceChanged);
+	}
+	Super::EndPlay(EndPlayReason);
 }
 
 bool UNPPhotoTransferComponent::BeginUploadPhoto(
+	const FGuid& PhotoId,
 	const uint16 CaptureSequence,
 	const TArray<uint8>& JpegData,
 	const int32 Width,
 	const int32 Height)
 {
 	const APlayerController* Controller = Cast<APlayerController>(GetOwner());
-	if (!Controller || !Controller->IsLocalController() || PendingUpload.IsSet()
+	if (!Controller || !Controller->IsLocalController() || !PhotoId.IsValid()
 		|| JpegData.IsEmpty() || JpegData.Num() > MaximumPhotoBytes)
 	{
-		UE_LOG(LogNPPhoto, Warning, TEXT("[PhotoTransfer] Upload rejected locally. Bytes=%d Busy=%s"), JpegData.Num(), PendingUpload.IsSet() ? TEXT("true") : TEXT("false"));
+		UE_LOG(LogNPPhoto, Warning, TEXT("[PhotoTransfer] Upload rejected locally. Bytes=%d"), JpegData.Num());
 		return false;
 	}
 
 	FOutgoingTransfer Transfer;
-	Transfer.Header.PhotoId = FGuid::NewGuid();
+	Transfer.Header.PhotoId = PhotoId;
 	Transfer.Header.CaptureSequence = CaptureSequence;
 	Transfer.Header.TotalBytes = JpegData.Num();
 	Transfer.Header.TotalChunks = FMath::DivideAndRoundUp(JpegData.Num(), ChunkSize);
@@ -48,18 +65,49 @@ bool UNPPhotoTransferComponent::BeginUploadPhoto(
 		return false;
 	}
 
-	PendingUpload = MoveTemp(Transfer);
-	ServerBeginPhotoUpload(PendingUpload->Header);
-	UE_LOG(LogNPPhoto, Log, TEXT("[PhotoTransfer] Upload started. PhotoId=%s Bytes=%d Chunks=%d"), *PendingUpload->Header.PhotoId.ToString(), PendingUpload->Header.TotalBytes, PendingUpload->Header.TotalChunks);
+	QueuedUploads.Add(MoveTemp(Transfer));
+	StartNextUpload();
 	return true;
 }
 
-void UNPPhotoTransferComponent::RequestPhoto(const FGuid& PhotoId)
+void UNPPhotoTransferComponent::StartNextUpload()
 {
-	if (PhotoId.IsValid())
+	if (PendingUpload.IsSet() || QueuedUploads.IsEmpty())
 	{
-		ServerRequestPhoto(PhotoId);
+		return;
 	}
+
+	PendingUpload = MoveTemp(QueuedUploads[0]);
+	QueuedUploads.RemoveAt(0);
+	ServerBeginPhotoUpload(PendingUpload->Header);
+	UE_LOG(LogNPPhoto, Log, TEXT("[PhotoTransfer] Upload started. PhotoId=%s Bytes=%d Chunks=%d"), *PendingUpload->Header.PhotoId.ToString(), PendingUpload->Header.TotalBytes, PendingUpload->Header.TotalChunks);
+}
+
+void UNPPhotoTransferComponent::RequestPhoto(
+	const FGuid& PhotoId,
+	const bool bPrioritize)
+{
+	if (!PhotoId.IsValid() || ReceivedPhotoTextures.Contains(PhotoId))
+	{
+		return;
+	}
+
+	if (PhotoId == ActiveDownloadPhotoId)
+	{
+		return;
+	}
+
+	QueuedDownloadPhotoIds.Remove(PhotoId);
+	if (bPrioritize)
+	{
+		QueuedDownloadPhotoIds.Insert(PhotoId, 0);
+	}
+	else
+	{
+		QueuedDownloadPhotoIds.Add(PhotoId);
+	}
+	KnownDownloadPhotoIds.Add(PhotoId);
+	StartNextDownloadRequest();
 }
 
 UTexture2D* UNPPhotoTransferComponent::FindReceivedPhoto(const FGuid& PhotoId) const
@@ -68,12 +116,47 @@ UTexture2D* UNPPhotoTransferComponent::FindReceivedPhoto(const FGuid& PhotoId) c
 	return FoundTexture ? FoundTexture->Get() : nullptr;
 }
 
+bool UNPPhotoTransferComponent::SaveReceivedPhotoToDisk(
+	const FGuid& PhotoId,
+	FString& OutSavedPath) const
+{
+	OutSavedPath.Reset();
+	const TArray<uint8>* JpegData = ReceivedPhotoJpegData.Find(PhotoId);
+	if (!PhotoId.IsValid() || !JpegData || JpegData->IsEmpty())
+	{
+		return false;
+	}
+
+	const FString PhotoDirectory = FPaths::Combine(
+		FPlatformProcess::UserDir(),
+		TEXT("NoPhotos"),
+		TEXT("share"),
+		FDateTime::Now().ToString(TEXT("%Y_%m_%d")));
+	if (!IFileManager::Get().MakeDirectory(*PhotoDirectory, true))
+	{
+		return false;
+	}
+
+	OutSavedPath = FPaths::Combine(
+		PhotoDirectory,
+		FString::Printf(
+			TEXT("NoPhotos_%s.jpg"),
+			*PhotoId.ToString(EGuidFormats::DigitsWithHyphensLower)));
+	if (!FFileHelper::SaveArrayToFile(*JpegData, *OutSavedPath))
+	{
+		OutSavedPath.Reset();
+		return false;
+	}
+	return true;
+}
+
 void UNPPhotoTransferComponent::TickComponent(
 	float DeltaTime,
 	ELevelTick TickType,
 	FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	EnsurePhotoEvidenceBinding();
 
 	if (PendingUpload.IsSet())
 	{
@@ -90,6 +173,7 @@ void UNPPhotoTransferComponent::TickComponent(
 			Upload.bFinishSent = true;
 			ServerFinishPhotoUpload(Upload.Header.PhotoId);
 			PendingUpload.Reset();
+			StartNextUpload();
 		}
 	}
 
@@ -109,6 +193,64 @@ void UNPPhotoTransferComponent::TickComponent(
 			ClientFinishPhotoDownload(Download.Header.PhotoId);
 			PendingDownload.Reset();
 		}
+	}
+}
+
+void UNPPhotoTransferComponent::EnsurePhotoEvidenceBinding()
+{
+	const APlayerController* Controller = Cast<APlayerController>(GetOwner());
+	if (IsValid(ObservedGameState) || !Controller || !Controller->IsLocalController())
+	{
+		return;
+	}
+
+	ObservedGameState = GetWorld()
+		? GetWorld()->GetGameState<ANPMainGameState>()
+		: nullptr;
+	if (IsValid(ObservedGameState))
+	{
+		ObservedGameState->OnPhotoEvidenceChanged.AddUniqueDynamic(
+			this, &ThisClass::HandlePhotoEvidenceChanged);
+		HandlePhotoEvidenceChanged();
+	}
+}
+
+void UNPPhotoTransferComponent::HandlePhotoEvidenceChanged()
+{
+	if (!IsValid(ObservedGameState))
+	{
+		return;
+	}
+
+	for (const FGuid& PhotoId : ObservedGameState->GetTransferredPhotoIds())
+	{
+		if (PhotoId.IsValid() && !KnownDownloadPhotoIds.Contains(PhotoId)
+			&& !ReceivedPhotoTextures.Contains(PhotoId))
+		{
+			RequestPhoto(PhotoId);
+		}
+	}
+}
+
+void UNPPhotoTransferComponent::StartNextDownloadRequest()
+{
+	if (ActiveDownloadPhotoId.IsValid())
+	{
+		return;
+	}
+
+	while (!QueuedDownloadPhotoIds.IsEmpty())
+	{
+		const FGuid PhotoId = QueuedDownloadPhotoIds[0];
+		QueuedDownloadPhotoIds.RemoveAt(0);
+		if (!PhotoId.IsValid() || ReceivedPhotoTextures.Contains(PhotoId))
+		{
+			continue;
+		}
+
+		ActiveDownloadPhotoId = PhotoId;
+		ServerRequestPhoto(PhotoId);
+		return;
 	}
 }
 
@@ -143,7 +285,7 @@ void UNPPhotoTransferComponent::ServerBeginPhotoUpload_Implementation(
 	ANPMainGameMode* GameMode = GetWorld() ? GetWorld()->GetAuthGameMode<ANPMainGameMode>() : nullptr;
 	UNPPhotoRepository* Repository = GameMode ? GameMode->GetPhotoRepository() : nullptr;
 	if (!IsValidHeader(Header) || !Repository
-		|| !Repository->IsCaptureAuthorized(Controller, Header.CaptureSequence)
+		|| !Repository->IsCaptureAuthorized(Controller, Header.PhotoId, Header.CaptureSequence)
 		|| IncomingUpload.IsSet())
 	{
 		UE_LOG(LogNPPhoto, Warning, TEXT("[PhotoTransfer] Server rejected upload header. Sequence=%u"), Header.CaptureSequence);
@@ -242,7 +384,8 @@ void UNPPhotoTransferComponent::ServerRequestPhoto_Implementation(FGuid PhotoId)
 void UNPPhotoTransferComponent::ClientBeginPhotoDownload_Implementation(
 	const FNPPhotoTransferHeader& Header)
 {
-	if (!IsValidHeader(Header) || IncomingDownload.IsSet())
+	if (!IsValidHeader(Header) || IncomingDownload.IsSet()
+		|| Header.PhotoId != ActiveDownloadPhotoId)
 	{
 		return;
 	}
@@ -282,6 +425,11 @@ void UNPPhotoTransferComponent::ClientFinishPhotoDownload_Implementation(FGuid P
 {
 	if (!IncomingDownload.IsSet())
 	{
+		if (PhotoId == ActiveDownloadPhotoId)
+		{
+			ActiveDownloadPhotoId.Invalidate();
+			StartNextDownloadRequest();
+		}
 		return;
 	}
 
@@ -292,12 +440,17 @@ void UNPPhotoTransferComponent::ClientFinishPhotoDownload_Implementation(FGuid P
 		|| Download.Data.Num() != Download.Header.TotalBytes
 		|| !ImageCodec)
 	{
+		ActiveDownloadPhotoId.Invalidate();
+		StartNextDownloadRequest();
 		return;
 	}
 
 	if (UTexture2D* Texture = ImageCodec->DecodeJpegToTexture(Download.Data))
 	{
 		ReceivedPhotoTextures.Add(PhotoId, Texture);
+		ReceivedPhotoJpegData.Add(PhotoId, MoveTemp(Download.Data));
 		OnPhotoTextureReceived.Broadcast(PhotoId, Texture);
 	}
+	ActiveDownloadPhotoId.Invalidate();
+	StartNextDownloadRequest();
 }

@@ -6,6 +6,7 @@
 
 class UTexture2D;
 class UNPPhotoImageCodec;
+class ANPMainGameState;
 
 USTRUCT()
 struct FNPPhotoTransferHeader
@@ -48,22 +49,25 @@ public:
 	UNPPhotoTransferComponent();
 
 	bool BeginUploadPhoto(
+		const FGuid& PhotoId,
 		uint16 CaptureSequence,
 		const TArray<uint8>& JpegData,
 		int32 Width,
 		int32 Height);
 
 	UFUNCTION(BlueprintCallable, Category="Photo|Transfer")
-	void RequestPhoto(const FGuid& PhotoId);
+	void RequestPhoto(const FGuid& PhotoId, bool bPrioritize = false);
 
 	UFUNCTION(BlueprintPure, Category="Photo|Transfer")
 	UTexture2D* FindReceivedPhoto(const FGuid& PhotoId) const;
+	bool SaveReceivedPhotoToDisk(const FGuid& PhotoId, FString& OutSavedPath) const;
 
 	UPROPERTY(BlueprintAssignable, Category="Photo|Transfer")
 	FNPOnPhotoTextureReceived OnPhotoTextureReceived;
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(
 		float DeltaTime,
 		ELevelTick TickType,
@@ -90,6 +94,12 @@ private:
 		const FOutgoingTransfer& Transfer,
 		int32 ChunkIndex,
 		TArray<uint8>& OutChunk);
+	void StartNextUpload();
+	void EnsurePhotoEvidenceBinding();
+	void StartNextDownloadRequest();
+
+	UFUNCTION()
+	void HandlePhotoEvidenceChanged();
 
 	UFUNCTION(Server, Reliable)
 	void ServerBeginPhotoUpload(const FNPPhotoTransferHeader& Header);
@@ -113,15 +123,23 @@ private:
 	void ClientFinishPhotoDownload(FGuid PhotoId);
 
 	TOptional<FOutgoingTransfer> PendingUpload;
+	TArray<FOutgoingTransfer> QueuedUploads;
 	TOptional<FIncomingTransfer> IncomingUpload;
 	TOptional<FOutgoingTransfer> PendingDownload;
 	TOptional<FIncomingTransfer> IncomingDownload;
+	TArray<FGuid> QueuedDownloadPhotoIds;
+	TSet<FGuid> KnownDownloadPhotoIds;
+	FGuid ActiveDownloadPhotoId;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNPPhotoImageCodec> ImageCodec;
 
 	UPROPERTY(Transient)
 	TMap<FGuid, TObjectPtr<UTexture2D>> ReceivedPhotoTextures;
+	TMap<FGuid, TArray<uint8>> ReceivedPhotoJpegData;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ANPMainGameState> ObservedGameState;
 
 	static constexpr int32 ChunkSize = 16 * 1024;
 	static constexpr int32 MaximumPhotoBytes = 256 * 1024;

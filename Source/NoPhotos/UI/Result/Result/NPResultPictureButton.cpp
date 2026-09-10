@@ -1,7 +1,6 @@
 #include "UI/Result/Result/NPResultPictureButton.h"
 
 #include "Components/Button.h"
-#include "Engine/Texture2D.h"
 #include "UI/Result/Pictures/NPResultPicturePreviewPopup.h"
 
 void UNPResultPictureButton::NativeConstruct()
@@ -11,25 +10,20 @@ void UNPResultPictureButton::NativeConstruct()
 	if (IsValid(ShowImageButton))
 	{
 		ShowImageButton->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleShowImageButtonClicked);
-		ShowImageButton->SetIsEnabled(IsValid(PictureTexture));
+		ShowImageButton->SetIsEnabled(PhotoId.IsValid());
 	}
 
 }
 
-void UNPResultPictureButton::SetPictureTexture(
-	UTexture2D* InTexture,
+void UNPResultPictureButton::InitializePhoto(
+	const FGuid InPhotoId,
 	const FString& InCapturedPlayerName)
 {
-	if (!IsValid(InTexture))
-	{
-		return;
-	}
-
-	PictureTexture = InTexture;
+	PhotoId = InPhotoId;
 	CapturedPlayerName = InCapturedPlayerName;
 	if (IsValid(ShowImageButton))
 	{
-		ShowImageButton->SetIsEnabled(true);
+		ShowImageButton->SetIsEnabled(PhotoId.IsValid());
 	}
 }
 
@@ -40,7 +34,7 @@ void UNPResultPictureButton::HandleShowImageButtonClicked()
 
 void UNPResultPictureButton::OpenPreview() const
 {
-	if (!IsValid(PictureTexture) || !IsValid(PreviewPopupWidgetClass))
+	if (!PhotoId.IsValid() || !IsValid(PreviewPopupWidgetClass))
 	{
 		return;
 	}
@@ -53,6 +47,6 @@ void UNPResultPictureButton::OpenPreview() const
 	}
 
 	PreviewPopup->AddToViewport(200);
-	PreviewPopup->OpenWithTexture(PictureTexture, CapturedPlayerName);
+	PreviewPopup->OpenForPhoto(PhotoId, CapturedPlayerName);
 }
 

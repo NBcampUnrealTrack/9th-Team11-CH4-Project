@@ -30,7 +30,7 @@ public:
 	FNPPhotoEvidenceResult HandlePhotoCaptureRequest(const FNPPhotoCaptureRequest& Request);
 	UNPPhotoRepository* GetPhotoRepository() const { return PhotoRepository; }
 	UNPRelicDeliveryService* GetRelicDeliveryService() const { return RelicDeliveryService; }
-	void HandlePhotoStored(APlayerController* Photographer, uint16 CaptureSequence, const FGuid& PhotoId);
+	void HandlePhotoStored(APlayerController* Photographer, const FGuid& PhotoId);
 	void RegisterPlayerWorldReady(ANPMainPlayerController* PlayerController);
 
 	virtual void InitGame(

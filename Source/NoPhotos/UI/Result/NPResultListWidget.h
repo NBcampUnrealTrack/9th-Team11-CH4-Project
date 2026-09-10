@@ -8,9 +8,7 @@
 
 class UVerticalBox;
 class ANPMainGameState;
-class UNPPhotoTransferComponent;
 class UNPPersonalResultWidget;
-class UTexture2D;
 
 UCLASS()
 class NOPHOTOS_API UNPResultListWidget : public UNPUserWidget
@@ -24,21 +22,11 @@ protected:
 	void RefreshResultList();
 	void AddNextResultEntry();
 	void RefreshPictureLists();
-	void RebuildPhotoDownloadQueue();
-	void RequestNextPhoto();
 
 	UFUNCTION()
 	void HandlePhotoEvidenceChanged();
-	UFUNCTION()
-	void HandlePhotoTextureReceived(FGuid PhotoId, UTexture2D* Texture);
 
 private:
-	struct FQueuedPhotoDownload
-	{
-		TWeakObjectPtr<UNPPersonalResultWidget> TargetWidget;
-		FGuid PhotoId;
-	};
-
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UVerticalBox> RankList;
 
@@ -47,15 +35,9 @@ private:
 
 	TArray<FNPPlayerRanking> PendingPlayerRankings;
 	TArray<TObjectPtr<UNPPersonalResultWidget>> ResultEntryWidgets;
-	TArray<FQueuedPhotoDownload> PendingPhotoDownloads;
-	TWeakObjectPtr<UNPPersonalResultWidget> DownloadTargetWidget;
-	FGuid DownloadingPhotoId;
-	bool bPhotoQueueRefreshPending = false;
 
 	UPROPERTY(Transient)
 	TObjectPtr<ANPMainGameState> ObservedGameState;
-	UPROPERTY(Transient)
-	TObjectPtr<UNPPhotoTransferComponent> TransferComponent;
 	int32 NextRankingIndex = INDEX_NONE;
 	FTimerHandle ResultEntryTimer;
 };

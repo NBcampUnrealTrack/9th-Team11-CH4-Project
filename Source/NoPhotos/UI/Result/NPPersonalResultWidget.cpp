@@ -42,8 +42,6 @@ void UNPPersonalResultWidget::CreatePictureButtons()
 	}
 
 	PictureList->ClearChildren();
-	PictureButtonsById.Empty();
-	PicturePhotoIds.Empty();
 	if (!IsValid(ResultPlayerState) || !IsValid(PictureButtonWidgetClass))
 	{
 		return;
@@ -55,8 +53,7 @@ void UNPPersonalResultWidget::CreatePictureButtons()
 		return;
 	}
 
-	PicturePhotoIds = GameState->GetSelectedPhotoIds(ResultPlayerState);
-	for (const FGuid& PhotoId : PicturePhotoIds)
+	for (const FGuid& PhotoId : GameState->GetSelectedPhotoIds(ResultPlayerState))
 	{
 		if (!PhotoId.IsValid())
 		{
@@ -70,35 +67,16 @@ void UNPPersonalResultWidget::CreatePictureButtons()
 			continue;
 		}
 
-		PictureList->AddChild(PictureButton);
-		PictureButtonsById.Add(PhotoId, PictureButton);
-	}
-}
-
-void UNPPersonalResultWidget::SetPictureTexture(const FGuid PhotoId, UTexture2D* Texture)
-{
-	if (!IsValid(Texture))
-	{
-		return;
-	}
-
-	if (TObjectPtr<UNPResultPictureButton>* PictureButton = PictureButtonsById.Find(PhotoId))
-	{
-		if (IsValid(*PictureButton))
+		FString CapturedPlayerName;
+		for (const FNPReplicatedPhotoEvidence& Evidence : GameState->GetPhotoEvidence())
 		{
-			FString CapturedPlayerName;
-			if (ANPMainGameState* GameState = GetWorld() ? GetWorld()->GetGameState<ANPMainGameState>() : nullptr)
+			if (Evidence.PhotoId == PhotoId && IsValid(Evidence.Thief))
 			{
-				for (const FNPReplicatedPhotoEvidence& Evidence : GameState->GetPhotoEvidence())
-				{
-					if (Evidence.PhotoId == PhotoId && IsValid(Evidence.Thief))
-					{
-						CapturedPlayerName = Evidence.Thief->GetPlayerName();
-						break;
-					}
-				}
+				CapturedPlayerName = Evidence.Thief->GetPlayerName();
+				break;
 			}
-			(*PictureButton)->SetPictureTexture(Texture, CapturedPlayerName);
 		}
+		PictureButton->InitializePhoto(PhotoId, CapturedPlayerName);
+		PictureList->AddChild(PictureButton);
 	}
 }

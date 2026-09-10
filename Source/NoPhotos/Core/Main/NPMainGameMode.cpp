@@ -64,13 +64,6 @@ FNPPhotoEvidenceResult ANPMainGameMode::HandlePhotoCaptureRequest(const FNPPhoto
 
 	Result = PhotoEvidenceService->EvaluatePhoto(Request);
 	PlayPhotoWorldFeedback(Result);
-	if (PhotoRepository
-		&& (Result.bSuccess
-			|| Result.bReactiveTargetSuccess
-			|| Result.FailureReason == ENPPhotoEvidenceFailureReason::NoValidEvidence))
-	{
-		PhotoRepository->AuthorizeCapture(Request.Photographer, Request.CaptureSequence);
-	}
 	if (!Result.bSuccess && !Result.bReactiveTargetSuccess)
 	{
 		UE_LOG(LogNPPhoto, Warning, TEXT("[GameMode] Photo evidence rejected. Reason=%d"),
@@ -117,6 +110,7 @@ FNPPhotoEvidenceResult ANPMainGameMode::HandlePhotoCaptureRequest(const FNPPhoto
 	}
 	if (Result.bSuccess)
 	{
+		Result.PhotoId = FGuid::NewGuid();
 		if (ANPMainGameState* MainGameState = GetGameState<ANPMainGameState>())
 		{
 			MainGameState->AddPhotoEvidence(Result, 0);
@@ -186,16 +180,16 @@ void ANPMainGameMode::PlayPhotoWorldFeedback(
 
 void ANPMainGameMode::HandlePhotoStored(
 	APlayerController* Photographer,
-	const uint16 CaptureSequence,
 	const FGuid& PhotoId)
 {
 	if (ANPMainGameState* MainGameState = GetGameState<ANPMainGameState>())
 	{
 		MainGameState->RegisterTransferredPhoto(PhotoId);
-		MainGameState->AttachPhotoId(
-			Photographer ? Photographer->PlayerState : nullptr,
-			CaptureSequence,
-			PhotoId);
+	}
+	if (ANPMainPlayerController* PlayerController =
+		Cast<ANPMainPlayerController>(Photographer))
+	{
+		PlayerController->HandleSelectedPhotoStored(PhotoId);
 	}
 }
 

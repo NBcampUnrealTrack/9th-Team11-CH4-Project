@@ -8,7 +8,7 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
-#include "Gameplay/Photo/NPPhotoTransferComponent.h"
+#include "Gameplay/Photo/NPPhotoCaptureComponent.h"
 #include "Core/Main/NPMainGameState.h"
 #include "Core/Main/NPMainPlayerController.h"
 #include "UI/Result/Pictures/NPPictureList.h"
@@ -53,13 +53,7 @@ void UNPSelectPictureWidget::NativeConstruct()
 	if (ANPMainPlayerController* Controller =
 		Cast<ANPMainPlayerController>(GetOwningPlayer()))
 	{
-		TransferComponent = Controller->GetPhotoTransferComponent();
-		if (IsValid(TransferComponent))
-		{
-			TransferComponent->OnPhotoTextureReceived.AddUniqueDynamic(
-				this,
-				&UNPSelectPictureWidget::HandlePhotoTextureReceived);
-		}
+		PhotoCaptureComponent = Controller->GetPhotoCaptureComponent();
 	}
 
 	ObservedGameState = GetWorld()
@@ -91,13 +85,6 @@ void UNPSelectPictureWidget::NativeConstruct()
 
 void UNPSelectPictureWidget::NativeDestruct()
 {
-	if (IsValid(TransferComponent))
-	{
-		TransferComponent->OnPhotoTextureReceived.RemoveDynamic(
-			this,
-			&UNPSelectPictureWidget::HandlePhotoTextureReceived);
-	}
-
 	if (IsValid(ObservedGameState))
 	{
 		ObservedGameState->OnPhotoEvidenceChanged.RemoveDynamic(
@@ -291,95 +278,37 @@ void UNPSelectPictureWidget::HandlePictureSelectionStateChanged()
 
 void UNPSelectPictureWidget::RequestOwnedPictures()
 {
-	if (!IsValid(ObservedGameState))
-	{
-		ObservedGameState = GetWorld()
-			? GetWorld()->GetGameState<ANPMainGameState>()
-			: nullptr;
-
-		if (IsValid(ObservedGameState))
-		{
-			ObservedGameState->OnPhotoEvidenceChanged.AddUniqueDynamic(
-				this,
-				&UNPSelectPictureWidget::HandlePhotoEvidenceChanged);
-		}
-	}
-
 	APlayerController* OwningPlayer = GetOwningPlayer();
-	APlayerState* LocalPlayerState =
-		IsValid(OwningPlayer) ? OwningPlayer->PlayerState : nullptr;
-
-	if (!IsValid(ObservedGameState) || !IsValid(LocalPlayerState))
+	APlayerState* LocalPlayerState = IsValid(OwningPlayer)
+		? OwningPlayer->PlayerState
+		: nullptr;
+	if (!IsValid(PhotoCaptureComponent) || !IsValid(PictureListWidget)
+		|| !IsValid(ObservedGameState) || !IsValid(LocalPlayerState))
 	{
 		return;
 	}
 
-	for (const FNPReplicatedPhotoEvidence& Evidence :
-		ObservedGameState->GetPhotoEvidence())
+	for (const FNPReplicatedPhotoEvidence& Evidence : ObservedGameState->GetPhotoEvidence())
 	{
-		if (Evidence.Photographer != LocalPlayerState
-			|| !Evidence.PhotoId.IsValid()
-			|| RequestedPhotoIds.Contains(Evidence.PhotoId))
+		const FGuid& PhotoId = Evidence.PhotoId;
+		if (Evidence.Photographer != LocalPlayerState)
+		{
+			continue;
+		}
+		if (!PhotoId.IsValid() || RequestedPhotoIds.Contains(PhotoId))
 		{
 			continue;
 		}
 
-		RequestedPhotoIds.Add(Evidence.PhotoId);
-		PendingPhotoIds.Add(Evidence.PhotoId);
-	}
-
-	RequestNextPicture();
-}
-
-void UNPSelectPictureWidget::RequestNextPicture()
-{
-	if (!IsValid(TransferComponent)
-		|| !IsValid(PictureListWidget)
-		|| DownloadingPhotoId.IsValid())
-	{
-		return;
-	}
-
-	while (!PendingPhotoIds.IsEmpty())
-	{
-		const FGuid NextPhotoId = PendingPhotoIds[0];
-		PendingPhotoIds.RemoveAt(0);
-
-		if (!NextPhotoId.IsValid())
+		UTexture2D* Texture = PhotoCaptureComponent->FindLocalPhotoTexture(PhotoId);
+		if (!IsValid(Texture))
 		{
 			continue;
 		}
 
-		DownloadingPhotoId = NextPhotoId;
-
-		if (UTexture2D* CachedTexture =
-			TransferComponent->FindReceivedPhoto(DownloadingPhotoId))
-		{
-			HandlePhotoTextureReceived(DownloadingPhotoId, CachedTexture);
-			return;
-		}
-
-		TransferComponent->RequestPhoto(DownloadingPhotoId);
-		return;
-	}
-}
-
-void UNPSelectPictureWidget::HandlePhotoTextureReceived(
-	const FGuid PhotoId,
-	UTexture2D* Texture)
-{
-	if (PhotoId != DownloadingPhotoId || !IsValid(Texture))
-	{
-		return;
-	}
-
-	DownloadingPhotoId.Invalidate();
-
-	PictureTextures.Add(Texture);
-	PicturePhotoIds.Add(PhotoId);
-
-	if (IsValid(PictureListWidget))
-	{
+		RequestedPhotoIds.Add(PhotoId);
+		PictureTextures.Add(Texture);
+		PicturePhotoIds.Add(PhotoId);
 		PictureListWidget->AddPicture(Texture);
 	}
 
@@ -389,7 +318,6 @@ void UNPSelectPictureWidget::HandlePhotoTextureReceived(
 	}
 
 	UpdateSelectedPictureCountText();
-	RequestNextPicture();
 }
 
 void UNPSelectPictureWidget::ShowPicture(
