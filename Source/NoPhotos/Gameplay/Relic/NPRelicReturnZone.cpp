@@ -201,13 +201,26 @@ bool ANPRelicReturnZone::TryDeliverOverlappingRelic(ANPBaseRelic* Relic)
 		|| bDeliveryEffectEnabled
 		|| bHasDeliverySound)
 	{
-MulticastNotifyRelicDelivered(
-    Relic,
-    DeliveryTransform,
-    RelicMesh,
-    DeliveryTargets,
-    RelicPrice,
-    bDeliveryEffectEnabled);
+		MulticastNotifyRelicDelivered(
+			Relic,
+			DeliveryTransform,
+			RelicMesh,
+			DeliveryTargets,
+			RelicPrice,
+			bDeliveryEffectEnabled);
+	}
+
+	UnregisterOverlappingRelic(Relic);
+	return true;
+}
+
+void ANPRelicReturnZone::MulticastNotifyRelicDelivered_Implementation(
+	ANPBaseRelic* DeliveredRelic,
+	const FTransform& DeliveryTransform,
+	UStaticMesh* RelicMesh,
+	const TArray<AActor*>& DeliveryTargets,
+	const int32 RelicPrice,
+	const bool bNotifyBlueprint)
 {
 	if (GetNetMode() == NM_DedicatedServer)
 	{
@@ -265,8 +278,8 @@ MulticastNotifyRelicDelivered(
 
 	if (bNotifyBlueprint)
 	{
-BP_OnRelicDelivered(
-    DeliveredRelic,
-    DeliveryTransform.GetLocation());
+		BP_OnRelicDelivered(
+			DeliveredRelic,
+			DeliveryTransform.GetLocation());
 	}
 }
