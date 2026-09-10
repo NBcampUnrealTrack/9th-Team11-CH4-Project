@@ -17,6 +17,7 @@
 #include "Framework/Application/SlateApplication.h"
 #include "AsyncLoadingScreenLibrary.h"
 #include "Engine/Texture2D.h"
+#include "UObject/UObjectGlobals.h"
 
 #define LOCTEXT_NAMESPACE "FAsyncLoadingScreenModule"
 
@@ -30,7 +31,11 @@ void FAsyncLoadingScreenModule::StartupModule()
 		if (IsMoviePlayerEnabled())
 		{
 			GetMoviePlayer()->OnPrepareLoadingScreen().AddRaw(this, &FAsyncLoadingScreenModule::PreSetupLoadingScreen);				
-		}				
+		}
+
+		PreLoadMapHandle = FCoreUObjectDelegates::PreLoadMap.AddRaw(
+			this,
+			&FAsyncLoadingScreenModule::HandlePreLoadMap);
 
 		// Prepare the startup screen, the PreSetupLoadingScreen callback won't be called
 		// if we've already explicitly setup the loading screen
@@ -47,12 +52,39 @@ void FAsyncLoadingScreenModule::ShutdownModule()
 	{
 		// TODO: Unregister later
 		GetMoviePlayer()->OnPrepareLoadingScreen().RemoveAll(this);
+		if (PreLoadMapHandle.IsValid())
+		{
+			FCoreUObjectDelegates::PreLoadMap.Remove(PreLoadMapHandle);
+			PreLoadMapHandle.Reset();
+		}
+		UAsyncLoadingScreenLibrary::HideTransitionHandoffOverlay();
 	}
 }
 
 bool FAsyncLoadingScreenModule::IsGameModule() const
 {
 	return true;
+}
+
+void FAsyncLoadingScreenModule::HandlePreLoadMap(const FString& LevelName)
+{
+	const ULoadingScreenSettings* Settings =
+		GetDefault<ULoadingScreenSettings>();
+	const bool bNeedsHandoff = Settings
+		&& Settings->TransitionHandoffMapNames.ContainsByPredicate(
+			[&LevelName](const FString& MapName)
+			{
+				return !MapName.IsEmpty() && LevelName.Contains(MapName);
+			});
+
+	if (bNeedsHandoff)
+	{
+		UAsyncLoadingScreenLibrary::ShowTransitionHandoffOverlay();
+	}
+	else
+	{
+		UAsyncLoadingScreenLibrary::HideTransitionHandoffOverlay();
+	}
 }
 
 void FAsyncLoadingScreenModule::PreSetupLoadingScreen()

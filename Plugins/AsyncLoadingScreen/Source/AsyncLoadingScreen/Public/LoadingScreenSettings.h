@@ -692,6 +692,13 @@ public:
 	 */
 	UPROPERTY(Config, EditAnywhere, Category = "General")
 	FALoadingScreenSettings DefaultLoadingScreen;
+
+	/**
+	 * Destination map names that keep an opaque Slate cover behind the MoviePlayer
+	 * until the destination PlayerController installs its world-loading UMG.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Transition Handoff")
+	TArray<FString> TransitionHandoffMapNames;
 	
 	/**
 	 * Classic Layout settings.

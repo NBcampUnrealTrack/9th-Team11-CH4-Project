@@ -62,6 +62,8 @@ public:
 	bool IsStartupLoadingScreen() { return bIsStartupLoadingScreen; }
 
 private:
+	void HandlePreLoadMap(const FString& LevelName);
+
 	/**
 	 * Loading screen callback, it won't be called if we've already explicitly setup the loading screen
 	 */
@@ -79,4 +81,5 @@ private:
 private:
 
 	bool bIsStartupLoadingScreen = false;
+	FDelegateHandle PreLoadMapHandle;
 };
