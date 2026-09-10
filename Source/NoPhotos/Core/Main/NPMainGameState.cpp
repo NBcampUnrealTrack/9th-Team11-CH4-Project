@@ -354,6 +354,7 @@ void ANPMainGameState::FinishMainGame()
 	RefreshPlayerRankings();
 	ForceNetUpdate();
 	OnMainGameStateChanged.Broadcast();
+	OnMainGameEnded.Broadcast();
 	OnPictureSelectionStateChanged.Broadcast();
 	TryLogFinalRankings();
 
@@ -383,6 +384,14 @@ void ANPMainGameState::OnRep_MainGameState()
 	}
 
 	TryLogFinalRankings();
+}
+
+void ANPMainGameState::OnRep_MainGameEnded()
+{
+	if (bMainGameEnded)
+	{
+		OnMainGameEnded.Broadcast();
+	}
 }
 
 void ANPMainGameState::OnRep_PictureSelectionCompletedPlayers()
