@@ -70,6 +70,10 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void TickComponent(
+		float DeltaTime,
+		ELevelTick TickType,
+		FActorComponentTickFunction* ThisTickFunction) override;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Photo|Capture", meta=(ClampMin="64"))
 	int32 CaptureWidth = 1024;
@@ -94,6 +98,11 @@ private:
 	};
 
 	void InitializeLocalCapture();
+	void ApplySceneCaptureLightingSettings();
+	bool SynchronizeSceneCapture(
+		APlayerController* PlayerController,
+		ANPStablePhysicsPawn* Pawn);
+	void FinalizePendingCapture();
 	bool IsPhotographerGrabbing() const;
 	void CancelPhotoAttempt();
 	void StoreLocalCorrectPhoto(
@@ -130,8 +139,13 @@ private:
 	TMap<FGuid, TObjectPtr<UTexture2D>> LocalPhotoTextures;
 
 	static constexpr int32 MaximumLocalCorrectPhotos = 30;
+	static constexpr int32 CaptureWarmupFrameCount = 3;
 
 	double LastServerCaptureTime = -TNumericLimits<double>::Max();
+	FVector PendingCaptureLocation = FVector::ZeroVector;
+	FRotator PendingCaptureRotation = FRotator::ZeroRotator;
+	TWeakObjectPtr<ANPStablePhysicsPawn> PendingCapturePawn;
+	int32 PendingCaptureFramesRemaining = 0;
 	uint16 NextCaptureSequence = 0;
 	bool bPhotoAttemptInProgress = false;
 	bool bPhotoModeActive = false;

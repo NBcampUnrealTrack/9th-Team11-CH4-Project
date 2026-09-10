@@ -1,5 +1,6 @@
 #include "Gameplay/Photo/NPPhotoCaptureComponent.h"
 
+#include "Camera/CameraComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/Engine.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -19,7 +20,8 @@
 
 UNPPhotoCaptureComponent::UNPPhotoCaptureComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = false;
 	SetIsReplicatedByDefault(true);
 }
 
@@ -37,8 +39,48 @@ void UNPPhotoCaptureComponent::BeginPlay()
 
 void UNPPhotoCaptureComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	CancelPhotoAttempt();
 	ExitPhotoMode();
 	Super::EndPlay(EndPlayReason);
+}
+
+void UNPPhotoCaptureComponent::TickComponent(
+	const float DeltaTime,
+	const ELevelTick TickType,
+	FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (!bPhotoAttemptInProgress)
+	{
+		SetComponentTickEnabled(false);
+		return;
+	}
+
+	APlayerController* PlayerController = Cast<APlayerController>(GetOwner());
+	ANPStablePhysicsPawn* Pawn = PlayerController
+		? Cast<ANPStablePhysicsPawn>(PlayerController->GetPawn())
+		: nullptr;
+	if (!PlayerController
+		|| !PlayerController->IsLocalController()
+		|| !Pawn
+		|| PendingCapturePawn.Get() != Pawn
+		|| !SceneCapture
+		|| !PhotoRenderTarget)
+	{
+		UE_LOG(
+			LogNPPhoto,
+			Warning,
+			TEXT("[Capture] Pending capture canceled: capture context became invalid."));
+		CancelPhotoAttempt();
+		return;
+	}
+
+	--PendingCaptureFramesRemaining;
+	if (PendingCaptureFramesRemaining <= 0)
+	{
+		FinalizePendingCapture();
+	}
 }
 
 void UNPPhotoCaptureComponent::TogglePhotoMode()
@@ -102,6 +144,7 @@ bool UNPPhotoCaptureComponent::CanTakePhotoLocally() const
 		&& PlayerController->IsLocalController()
 		&& GetWorld()
 		&& bPhotoModeActive
+		&& !bPhotoAttemptInProgress
 		&& Pawn
 		&& Pawn->IsPhotoViewReady()
 		&& !IsPhotographerGrabbing();
@@ -169,20 +212,26 @@ bool UNPPhotoCaptureComponent::TakePhoto()
 	}
 	UE_LOG(LogNPPhoto, Log, TEXT("[Montage] PhotoShotMontage started. Pawn=%s"), *GetNameSafe(Pawn));
 
-	FVector CameraLocation;
-	FRotator CameraRotation;
-	PlayerController->GetPlayerViewPoint(CameraLocation, CameraRotation);
-	SceneCapture->SetWorldLocationAndRotation(CameraLocation, CameraRotation);
+	if (!ImageCodec || !SynchronizeSceneCapture(PlayerController, Pawn))
+	{
+		CancelPhotoAttempt();
+		return false;
+	}
+
+	PlayerController->GetPlayerViewPoint(
+		PendingCaptureLocation,
+		PendingCaptureRotation);
+	PendingCapturePawn = Pawn;
+	PendingCaptureFramesRemaining = CaptureWarmupFrameCount;
+	SceneCapture->bCaptureEveryFrame = true;
+	SetComponentTickEnabled(true);
 	UE_LOG(
 		LogNPPhoto,
 		Log,
-		TEXT("[Capture] Capturing scene. Location=%s Rotation=%s Target=%s"),
-		*CameraLocation.ToCompactString(),
-		*CameraRotation.ToCompactString(),
+		TEXT("[Capture] Warmup started. Frames=%d Target=%s"),
+		CaptureWarmupFrameCount,
 		*GetNameSafe(PhotoRenderTarget));
-	SceneCapture->CaptureScene();
-	UE_LOG(LogNPPhoto, Log, TEXT("[Capture] CaptureScene requested successfully."));
-	OnPhotoCaptured.Broadcast(PhotoRenderTarget);
+
 	if (ANPMainPlayerController* MainPlayerController = Cast<ANPMainPlayerController>(PlayerController))
 	{
 		MainPlayerController->PlayPhotoFlash();
@@ -196,26 +245,95 @@ bool UNPPhotoCaptureComponent::TakePhoto()
 			*GetNameSafe(PlayerController));
 	}
 
-	bPhotoAttemptInProgress = false;
-	const uint16 CaptureSequence = ++NextCaptureSequence;
-	if (!ImageCodec)
-	{
-		return false;
-	}
-
-	TArray<uint8> JpegData;
-	if (!ImageCodec->EncodeRenderTargetToJpeg(PhotoRenderTarget, JpegQuality, JpegData))
-	{
-		return false;
-	}
-	PendingJpegPhotos.Add(CaptureSequence, MoveTemp(JpegData));
-	ServerRequestTakePhoto(CameraLocation, CameraRotation.Vector(), CaptureSequence);
 	return true;
 }
 
 void UNPPhotoCaptureComponent::CancelPhotoAttempt()
 {
+	PendingCaptureFramesRemaining = 0;
+	PendingCaptureLocation = FVector::ZeroVector;
+	PendingCaptureRotation = FRotator::ZeroRotator;
+	PendingCapturePawn.Reset();
+	SetComponentTickEnabled(false);
+	if (SceneCapture)
+	{
+		SceneCapture->bCaptureEveryFrame = false;
+	}
 	bPhotoAttemptInProgress = false;
+}
+
+bool UNPPhotoCaptureComponent::SynchronizeSceneCapture(
+	APlayerController* PlayerController,
+	ANPStablePhysicsPawn* Pawn)
+{
+	if (!PlayerController || !Pawn || !SceneCapture || !PhotoRenderTarget)
+	{
+		return false;
+	}
+
+	FVector CameraLocation;
+	FRotator CameraRotation;
+	PlayerController->GetPlayerViewPoint(CameraLocation, CameraRotation);
+	SceneCapture->SetWorldLocationAndRotation(CameraLocation, CameraRotation);
+
+	if (const UCameraComponent* PlayerCamera =
+		Pawn->FindComponentByClass<UCameraComponent>())
+	{
+		SceneCapture->PostProcessSettings =
+			PlayerCamera->PostProcessSettings;
+		SceneCapture->PostProcessBlendWeight =
+			PlayerCamera->PostProcessBlendWeight;
+	}
+	ApplySceneCaptureLightingSettings();
+
+	return true;
+}
+
+void UNPPhotoCaptureComponent::FinalizePendingCapture()
+{
+	APlayerController* PlayerController = Cast<APlayerController>(GetOwner());
+	ANPStablePhysicsPawn* Pawn = PlayerController
+		? Cast<ANPStablePhysicsPawn>(PlayerController->GetPawn())
+		: nullptr;
+	if (!PlayerController
+		|| !PlayerController->IsLocalController()
+		|| !Pawn
+		|| PendingCapturePawn.Get() != Pawn
+		|| !ImageCodec
+		|| !SceneCapture
+		|| !PhotoRenderTarget)
+	{
+		CancelPhotoAttempt();
+		return;
+	}
+
+	SceneCapture->bCaptureEveryFrame = false;
+	SceneCapture->CaptureScene();
+	OnPhotoCaptured.Broadcast(PhotoRenderTarget);
+
+	const uint16 CaptureSequence = ++NextCaptureSequence;
+	TArray<uint8> JpegData;
+	if (!ImageCodec->EncodeRenderTargetToJpeg(
+		PhotoRenderTarget,
+		JpegQuality,
+		JpegData))
+	{
+		CancelPhotoAttempt();
+		return;
+	}
+
+	PendingJpegPhotos.Add(CaptureSequence, MoveTemp(JpegData));
+	ServerRequestTakePhoto(
+		PendingCaptureLocation,
+		PendingCaptureRotation.Vector(),
+		CaptureSequence);
+	UE_LOG(
+		LogNPPhoto,
+		Log,
+		TEXT("[Capture] Warmup completed and photo stored. Frames=%d Sequence=%u"),
+		CaptureWarmupFrameCount,
+		CaptureSequence);
+	CancelPhotoAttempt();
 }
 
 bool UNPPhotoCaptureComponent::IsPhotographerGrabbing() const
@@ -258,6 +376,7 @@ void UNPPhotoCaptureComponent::InitializeLocalCapture()
 	SceneCapture->bCaptureEveryFrame = false;
 	SceneCapture->bCaptureOnMovement = false;
 	SceneCapture->bAlwaysPersistRenderingState = true;
+	ApplySceneCaptureLightingSettings();
 	SceneCapture->RegisterComponent();
 	UE_LOG(
 		LogNPPhoto,
@@ -266,6 +385,21 @@ void UNPPhotoCaptureComponent::InitializeLocalCapture()
 		CaptureWidth,
 		CaptureHeight,
 		CaptureFOV);
+}
+
+void UNPPhotoCaptureComponent::ApplySceneCaptureLightingSettings()
+{
+	if (!SceneCapture)
+	{
+		return;
+	}
+
+	FPostProcessSettings& Settings = SceneCapture->PostProcessSettings;
+	Settings.bOverride_DynamicGlobalIlluminationMethod = true;
+	Settings.DynamicGlobalIlluminationMethod =
+		EDynamicGlobalIlluminationMethod::Lumen;
+	Settings.bOverride_ReflectionMethod = true;
+	Settings.ReflectionMethod = EReflectionMethod::Lumen;
 }
 
 void UNPPhotoCaptureComponent::ServerRequestTakePhoto_Implementation(
