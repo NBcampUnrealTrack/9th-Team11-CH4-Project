@@ -12,17 +12,25 @@
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "Gameplay/Photo/NPPhotoTransferComponent.h"
+#include "InputCoreTypes.h"
+#include "Brushes/SlateColorBrush.h"
 #include "TimerManager.h"
 
 void UNPResultPicturePreviewPopup::NativeConstruct()
 {
 	Super::NativeConstruct();
+	SetIsFocusable(true);
+	EnsureModalBackdrop();
 	EnsureDownloadButton();
 	EnsureLikeControls();
 
 	if (IsValid(CloseButton))
 	{
 		CloseButton->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleCloseClicked);
+	}
+	if (IsValid(BackdropButton))
+	{
+		BackdropButton->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleBackdropClicked);
 	}
 	if (IsValid(DownloadButton))
 	{
@@ -50,6 +58,7 @@ void UNPResultPicturePreviewPopup::NativeConstruct()
 			this, &ThisClass::HandlePhotoFullyLiked);
 	}
 	RefreshLikeState();
+	SetKeyboardFocus();
 }
 
 void UNPResultPicturePreviewPopup::NativeDestruct()
@@ -62,6 +71,18 @@ void UNPResultPicturePreviewPopup::NativeDestruct()
 	{
 		TransferComponent->OnPhotoTextureReceived.RemoveDynamic(
 			this, &ThisClass::HandlePhotoTextureReceived);
+	}
+	if (IsValid(CloseButton))
+	{
+		CloseButton->OnClicked.RemoveAll(this);
+	}
+	if (IsValid(BackdropButton))
+	{
+		BackdropButton->OnClicked.RemoveAll(this);
+	}
+	if (IsValid(DownloadButton))
+	{
+		DownloadButton->OnClicked.RemoveAll(this);
 	}
 	if (IsValid(LikeButton))
 	{
@@ -79,6 +100,19 @@ void UNPResultPicturePreviewPopup::NativeDestruct()
 		LikeCountText->SetRenderScale(FullyLikedPulseBaseScale);
 	}
 	Super::NativeDestruct();
+}
+
+FReply UNPResultPicturePreviewPopup::NativeOnPreviewKeyDown(
+	const FGeometry& InGeometry,
+	const FKeyEvent& InKeyEvent)
+{
+	if (InKeyEvent.GetKey() == EKeys::Escape)
+	{
+		HandleCloseClicked();
+		return FReply::Handled();
+	}
+
+	return Super::NativeOnPreviewKeyDown(InGeometry, InKeyEvent);
 }
 
 void UNPResultPicturePreviewPopup::NativeTick(
@@ -113,6 +147,7 @@ void UNPResultPicturePreviewPopup::OpenForPhoto(
 	bPhotoRequestPending = false;
 	bLikeRequestPending = false;
 	RefreshLikeState();
+	SetKeyboardFocus();
 	if (IsValid(PreviewImage))
 	{
 		PreviewImage->SetVisibility(ESlateVisibility::Hidden);
@@ -157,6 +192,11 @@ void UNPResultPicturePreviewPopup::OpenForPhoto(
 void UNPResultPicturePreviewPopup::HandleCloseClicked()
 {
 	RemoveFromParent();
+}
+
+void UNPResultPicturePreviewPopup::HandleBackdropClicked()
+{
+	HandleCloseClicked();
 }
 
 void UNPResultPicturePreviewPopup::HandleDownloadClicked()
@@ -333,6 +373,42 @@ void UNPResultPicturePreviewPopup::EnsureLikeControls()
 		LikeCountText = WidgetTree->ConstructWidget<UTextBlock>(
 			UTextBlock::StaticClass(), TEXT("LikeCountText"));
 		RootPanel->AddChild(LikeCountText);
+	}
+}
+
+void UNPResultPicturePreviewPopup::EnsureModalBackdrop()
+{
+	if (IsValid(BackdropButton))
+	{
+		return;
+	}
+	if (!WidgetTree)
+	{
+		return;
+	}
+
+	UPanelWidget* RootPanel = Cast<UPanelWidget>(WidgetTree->RootWidget);
+	if (!IsValid(RootPanel))
+	{
+		return;
+	}
+
+	BackdropButton = WidgetTree->ConstructWidget<UButton>(
+		UButton::StaticClass(), TEXT("BackdropButton"));
+	const FSlateColorBrush DimBrush(
+		FLinearColor(0.0f, 0.0f, 0.0f, BackdropOpacity));
+	FButtonStyle BackdropStyle;
+	BackdropStyle.SetNormal(DimBrush);
+	BackdropStyle.SetHovered(DimBrush);
+	BackdropStyle.SetPressed(DimBrush);
+	BackdropButton->SetStyle(BackdropStyle);
+	RootPanel->AddChild(BackdropButton);
+
+	if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(BackdropButton->Slot))
+	{
+		CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+		CanvasSlot->SetOffsets(FMargin(0.0f));
+		CanvasSlot->SetZOrder(-100);
 	}
 }
 

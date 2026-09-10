@@ -1,10 +1,14 @@
 #include "UI/Result/Result/NPResultPictureButton.h"
 
 #include "Blueprint/WidgetTree.h"
+#include "Brushes/SlateColorBrush.h"
+#include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Components/Overlay.h"
 #include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
+#include "Components/Widget.h"
 #include "Core/Main/NPMainGameState.h"
 #include "Core/Main/NPMainPlayerController.h"
 #include "UI/Result/Pictures/NPResultPicturePreviewPopup.h"
@@ -13,6 +17,7 @@ void UNPResultPictureButton::NativeConstruct()
 {
 	Super::NativeConstruct();
 	EnsureLikeButton();
+	EnsureLikeHoverVisual();
 
 	if (IsValid(ShowImageButton))
 	{
@@ -22,6 +27,8 @@ void UNPResultPictureButton::NativeConstruct()
 	if (IsValid(LikeButton))
 	{
 		LikeButton->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleLikeButtonClicked);
+		LikeButton->OnHovered.AddUniqueDynamic(this, &ThisClass::HandleLikeButtonHovered);
+		LikeButton->OnUnhovered.AddUniqueDynamic(this, &ThisClass::HandleLikeButtonUnhovered);
 	}
 
 	ObservedGameState = GetWorld() ? GetWorld()->GetGameState<ANPMainGameState>() : nullptr;
@@ -44,6 +51,8 @@ void UNPResultPictureButton::NativeDestruct()
 	if (IsValid(LikeButton))
 	{
 		LikeButton->OnClicked.RemoveAll(this);
+		LikeButton->OnHovered.RemoveAll(this);
+		LikeButton->OnUnhovered.RemoveAll(this);
 	}
 	if (IsValid(ObservedGameState))
 	{
@@ -118,6 +127,16 @@ void UNPResultPictureButton::HandleLikeButtonClicked()
 	PlayerController->ServerLikeResultPhoto(PhotoId);
 }
 
+void UNPResultPictureButton::HandleLikeButtonHovered()
+{
+	SetLikeHoverVisualVisible(true);
+}
+
+void UNPResultPictureButton::HandleLikeButtonUnhovered()
+{
+	SetLikeHoverVisualVisible(false);
+}
+
 void UNPResultPictureButton::HandlePhotoLikesChanged(const FGuid ChangedPhotoId)
 {
 	if (!ChangedPhotoId.IsValid() || ChangedPhotoId == PhotoId)
@@ -179,6 +198,53 @@ void UNPResultPictureButton::EnsureLikeButton()
 		CanvasSlot->SetPosition(FVector2D(0.0f, -4.0f));
 		CanvasSlot->SetSize(FVector2D(90.0f, 30.0f));
 		CanvasSlot->SetZOrder(20);
+	}
+}
+
+void UNPResultPictureButton::EnsureLikeHoverVisual()
+{
+	if (!IsValid(LikeButton) || !WidgetTree)
+	{
+		return;
+	}
+	if (IsValid(LikeHoverDim))
+	{
+		SetLikeHoverVisualVisible(false);
+		return;
+	}
+
+	UWidget* ExistingContent = LikeButton->GetContent();
+	UOverlay* HoverOverlay = Cast<UOverlay>(ExistingContent);
+	if (!IsValid(HoverOverlay))
+	{
+		HoverOverlay = WidgetTree->ConstructWidget<UOverlay>(
+			UOverlay::StaticClass(), TEXT("LikeHoverOverlay"));
+		if (IsValid(ExistingContent))
+		{
+			LikeButton->RemoveChild(ExistingContent);
+		}
+		LikeButton->AddChild(HoverOverlay);
+		if (IsValid(ExistingContent))
+		{
+			HoverOverlay->AddChild(ExistingContent);
+		}
+	}
+
+	LikeHoverDim = WidgetTree->ConstructWidget<UBorder>(
+		UBorder::StaticClass(), TEXT("LikeHoverDim"));
+	const FSlateColorBrush DimBrush(
+		FLinearColor(0.0f, 0.0f, 0.0f, LikeHoverDimOpacity));
+	LikeHoverDim->SetBrush(DimBrush);
+	HoverOverlay->AddChild(LikeHoverDim);
+	SetLikeHoverVisualVisible(false);
+}
+
+void UNPResultPictureButton::SetLikeHoverVisualVisible(const bool bVisible) const
+{
+	if (IsValid(LikeHoverDim))
+	{
+		LikeHoverDim->SetVisibility(
+			bVisible ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
 	}
 }
 

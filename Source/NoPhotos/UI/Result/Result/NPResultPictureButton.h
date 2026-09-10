@@ -5,6 +5,7 @@
 #include "NPResultPictureButton.generated.h"
 
 class UButton;
+class UBorder;
 class UTextBlock;
 class ANPMainGameState;
 class UNPResultPicturePreviewPopup;
@@ -28,12 +29,18 @@ private:
 	UFUNCTION()
 	void HandleLikeButtonClicked();
 	UFUNCTION()
+	void HandleLikeButtonHovered();
+	UFUNCTION()
+	void HandleLikeButtonUnhovered();
+	UFUNCTION()
 	void HandlePhotoLikesChanged(FGuid ChangedPhotoId);
 	UFUNCTION()
 	void HandlePhotoFullyLiked(FGuid FullyLikedPhotoId, int32 LikeCount);
 
 	void OpenPreview() const;
 	void EnsureLikeButton();
+	void EnsureLikeHoverVisual();
+	void SetLikeHoverVisualVisible(bool bVisible) const;
 	void RefreshLikeState();
 	void StartFullyLikedPulse();
 
@@ -46,6 +53,9 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> LikeCountText;
 
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UBorder> LikeHoverDim;
+
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UNPResultPicturePreviewPopup> PreviewPopupWidgetClass;
 
@@ -54,6 +64,9 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "UI|Like", meta = (ClampMin = "0.01", UIMin = "0.01", Units = "s"))
 	float FullyLikedPulseDuration = 0.4f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Like", meta = (ClampMin = "0.0", ClampMax = "1.0", UIMin = "0.0", UIMax = "1.0"))
+	float LikeHoverDimOpacity = 0.3f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<ANPMainGameState> ObservedGameState;

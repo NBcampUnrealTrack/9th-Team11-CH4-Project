@@ -23,10 +23,15 @@ protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	virtual FReply NativeOnPreviewKeyDown(
+		const FGeometry& InGeometry,
+		const FKeyEvent& InKeyEvent) override;
 
 private:
 	UFUNCTION()
 	void HandleCloseClicked();
+	UFUNCTION()
+	void HandleBackdropClicked();
 	UFUNCTION()
 	void HandleDownloadClicked();
 	UFUNCTION()
@@ -41,6 +46,7 @@ private:
 
 	void EnsureDownloadButton();
 	void EnsureLikeControls();
+	void EnsureModalBackdrop();
 	void DisplayPhoto(UTexture2D* Texture);
 	void SetDownloadButtonText(const FText& Text) const;
 	void RefreshLikeState();
@@ -51,6 +57,9 @@ private:
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> CloseButton;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> BackdropButton;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> DownloadButton;
@@ -75,6 +84,9 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "UI|Like", meta = (ClampMin = "0.01", UIMin = "0.01", Units = "s"))
 	float FullyLikedPulseDuration = 0.4f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Popup", meta = (ClampMin = "0.0", ClampMax = "1.0", UIMin = "0.0", UIMax = "1.0"))
+	float BackdropOpacity = 0.65f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNPPhotoTransferComponent> TransferComponent;
