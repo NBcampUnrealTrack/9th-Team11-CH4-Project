@@ -180,6 +180,7 @@ private:
 	void BindRoomGenerationState();
 	void SetMainWorldInputLocked(bool bLocked);
 	void ShowMainWorldLoadingOverlay();
+	void FinishTransitionLoadingScreenHandoff();
 	void HideMainWorldLoadingOverlay();
 	void ShowMainWorldLoadingFailure();
 
@@ -228,6 +229,7 @@ private:
 	bool bReportedMainWorldReady = false;
 	double MainWorldLoadingShownAtRealTime = -1.0;
 	FTimerHandle MinimumMainWorldLoadingTimer;
+	bool bTransitionLoadingScreenHandoffScheduled = false;
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestRestartRoom();

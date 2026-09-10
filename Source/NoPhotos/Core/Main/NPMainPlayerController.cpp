@@ -1,5 +1,6 @@
 #include "Core/Main/NPMainPlayerController.h"
 
+#include "AsyncLoadingScreenLibrary.h"
 #include "Core/Main/NPMainGameMode.h"
 #include "Core/Main/NPMainGameState.h"
 #include "Core/NPPlayerState.h"
@@ -473,6 +474,20 @@ void ANPMainPlayerController::ShowMainWorldLoadingOverlay()
 	{
 		MainWorldLoadingWidget->ShowLoading();
 	}
+
+	if (!bTransitionLoadingScreenHandoffScheduled)
+	{
+		bTransitionLoadingScreenHandoffScheduled = true;
+		GetWorldTimerManager().SetTimerForNextTick(
+			this,
+			&ThisClass::FinishTransitionLoadingScreenHandoff);
+	}
+}
+
+void ANPMainPlayerController::FinishTransitionLoadingScreenHandoff()
+{
+	bTransitionLoadingScreenHandoffScheduled = false;
+	UAsyncLoadingScreenLibrary::HideTransitionHandoffOverlay();
 }
 
 void ANPMainPlayerController::HideMainWorldLoadingOverlay()

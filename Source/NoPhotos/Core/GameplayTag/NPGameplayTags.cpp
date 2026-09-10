@@ -60,6 +60,9 @@ namespace NPGameplayTags
 		GameplayCue_Photo_WorldFeedback_Photographed,
 		"GameplayCue.Photo.WorldFeedback.Photographed");
 	UE_DEFINE_GAMEPLAY_TAG(
+		GameplayCue_Photo_AimStart,
+		"GameplayCue.Photo.AimStart");
+	UE_DEFINE_GAMEPLAY_TAG(
 		GameplayCue_Photo_Shutter,
 		"GameplayCue.Photo.Shutter");
 	UE_DEFINE_GAMEPLAY_TAG(

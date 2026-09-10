@@ -50,6 +50,8 @@ namespace NPGameplayTags
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Status_PhotoStun);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Photo_WorldFeedback_Photographer);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Photo_WorldFeedback_Photographed);
+	/** 사진 조준 Ability가 성공적으로 시작된 순간의 3D 준비음 연출입니다. */
+	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Photo_AimStart);
 	/** 서버가 승인한 사진 촬영 순간의 3D 셔터음 및 월드 연출입니다. */
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Photo_Shutter);
 	/** 스포트라이트 아래에서 유물 가치가 증가한 순간 재생하는 GameplayCue입니다. */
