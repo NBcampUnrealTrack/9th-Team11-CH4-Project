@@ -48,6 +48,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Sound|BGM")
 	void StopBGM(float FadeOutDuration = 1.0f);
 
+	/** 기존 Ambient를 페이드아웃하고 새 Ambient를 페이드인합니다. BGM 볼륨을 사용합니다. */
+	UFUNCTION(BlueprintCallable, Category = "Sound|Ambient")
+	void PlayAmbient(USoundBase* Sound, float FadeDuration = 1.0f, float Volume = 1.0f);
+
 	UFUNCTION(BlueprintPure, Category = "Sound|Volume")
 	float GetMasterVolume() const { return MasterVolume; }
 
@@ -70,8 +74,12 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UAudioComponent> CurrentBGMComponent;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> CurrentAmbientComponent;
+
 	float MasterVolume = 1.0f;
 	float SFXVolume = 1.0f;
 	float BGMVolume = 1.0f;
 	float CurrentBGMBaseVolume = 1.0f;
+	float CurrentAmbientBaseVolume = 1.0f;
 };
