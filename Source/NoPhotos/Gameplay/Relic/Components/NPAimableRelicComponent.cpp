@@ -30,39 +30,124 @@ UNPAimableRelicComponent::UNPAimableRelicComponent()
 		UNPKnockbackGameplayEffect::StaticClass();
 }
 
+void UNPAimableRelicComponent::SetMuzzleSourceComponent(
+	USceneComponent* InMuzzleSourceComponent)
+{
+	MuzzleSourceComponent = InMuzzleSourceComponent;
+}
+
 bool UNPAimableRelicComponent::TryFire(
 	ANPReplicatedStablePhysicsPawn* ShooterPawn,
 	UAbilitySystemComponent* SourceAbilitySystem,
 	const FVector& CameraLocation,
 	const FVector& CameraForward)
 {
+	if (!IsValid(ShooterPawn))
+	{
+		return false;
+	}
+
+	return TryFireInternal(
+		ShooterPawn,
+		ShooterPawn,
+		SourceAbilitySystem,
+		CameraLocation,
+		CameraForward,
+		true,
+		nullptr,
+		nullptr,
+		FVector::ZeroVector);
+}
+
+bool UNPAimableRelicComponent::TryFireFromWorldDirection(
+	AActor* SourceActor,
+	UAbilitySystemComponent* SourceAbilitySystem,
+	const FVector& FireDirection)
+{
+	return TryFireInternal(
+		SourceActor,
+		nullptr,
+		SourceAbilitySystem,
+		GetMuzzleTransform().GetLocation(),
+		FireDirection,
+		false,
+		nullptr,
+		nullptr,
+		FVector::ZeroVector);
+}
+
+bool UNPAimableRelicComponent::TryFireAtTarget(
+	AActor* SourceActor,
+	UAbilitySystemComponent* SourceAbilitySystem,
+	AActor* TargetActor,
+	UPrimitiveComponent* TargetComponent,
+	const FVector& TargetLocation)
+{
+	const FVector MuzzleLocation = GetMuzzleTransform().GetLocation();
+	if (!IsValid(TargetActor)
+		|| !IsValid(TargetComponent)
+		|| TargetLocation.ContainsNaN())
+	{
+		return false;
+	}
+
+	return TryFireInternal(
+		SourceActor,
+		nullptr,
+		SourceAbilitySystem,
+		MuzzleLocation,
+		TargetLocation - MuzzleLocation,
+		false,
+		TargetActor,
+		TargetComponent,
+		TargetLocation);
+}
+
+bool UNPAimableRelicComponent::TryFireInternal(
+	AActor* SourceActor,
+	ANPReplicatedStablePhysicsPawn* AimAssistSourcePawn,
+	UAbilitySystemComponent* SourceAbilitySystem,
+	const FVector& TraceStart,
+	const FVector& FireDirection,
+	const bool bAllowAimAssist,
+	AActor* ExplicitTargetActor,
+	UPrimitiveComponent* ExplicitTargetComponent,
+	const FVector& ExplicitTargetLocation)
+{
 	AActor* Relic = GetOwner();
 	UWorld* World = GetWorld();
 	if (!IsValid(Relic)
 		|| !Relic->HasAuthority()
 		|| !IsValid(World)
-		|| !IsValid(ShooterPawn)
+		|| !IsValid(SourceActor)
 		|| !IsValid(SourceAbilitySystem)
 		|| !AimSettings.KnockbackEffectClass)
 	{
 		return false;
 	}
 
-	if (!TryConsumeFireCooldown())
+	const FVector AimDirection = FireDirection.GetSafeNormal();
+	if (AimDirection.IsNearlyZero())
 	{
 		return false;
 	}
-
-	const FVector TraceStart = CameraLocation;
-	const FVector AimDirection = CameraForward.GetSafeNormal();
-	if (AimDirection.IsNearlyZero())
+	const bool bHasExplicitTarget = IsValid(ExplicitTargetActor)
+		&& IsValid(ExplicitTargetComponent);
+	const float MaximumRange = FMath::Max(AimSettings.MaximumRange, 1.0f);
+	if (bHasExplicitTarget
+		&& FVector::DistSquared(TraceStart, ExplicitTargetLocation)
+		> FMath::Square(MaximumRange))
+	{
+		return false;
+	}
+	if (!TryConsumeFireCooldown())
 	{
 		return false;
 	}
 	FGameplayCueParameters FireCueParameters;
 	FireCueParameters.Location = GetMuzzleTransform().GetLocation();
 	FireCueParameters.Normal = AimDirection;
-	FireCueParameters.Instigator = ShooterPawn;
+	FireCueParameters.Instigator = SourceActor;
 	FireCueParameters.EffectCauser = Relic;
 	if (FireGameplayCueTag.IsValid())
 	{
@@ -71,19 +156,35 @@ bool UNPAimableRelicComponent::TryFire(
 			FireCueParameters);
 	}
 
-	const FVector TraceEnd = TraceStart
-		+ AimDirection * FMath::Max(AimSettings.MaximumRange, 1.0f);
+	const FVector TraceEnd = bHasExplicitTarget
+		? ExplicitTargetLocation
+		: TraceStart + AimDirection * MaximumRange;
 
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(AimableRelicFire), true);
-	QueryParams.AddIgnoredActor(ShooterPawn);
+	QueryParams.AddIgnoredActor(SourceActor);
 	QueryParams.AddIgnoredActor(Relic);
+	if (bHasExplicitTarget)
+	{
+		QueryParams.AddIgnoredActor(ExplicitTargetActor);
+	}
 	FHitResult Hit;
-	const bool bPrimaryHit = World->LineTraceSingleByChannel(
+	bool bPrimaryHit = World->LineTraceSingleByChannel(
 		Hit,
 		TraceStart,
 		TraceEnd,
 		AimSettings.TraceChannel,
 		QueryParams);
+	if (!bPrimaryHit && bHasExplicitTarget)
+	{
+		Hit = FHitResult(
+			ExplicitTargetActor,
+			ExplicitTargetComponent,
+			ExplicitTargetLocation,
+			-AimDirection);
+		Hit.TraceStart = TraceStart;
+		Hit.TraceEnd = ExplicitTargetLocation;
+		bPrimaryHit = true;
+	}
 
 	if (bPrimaryHit)
 	{
@@ -92,7 +193,7 @@ bool UNPAimableRelicComponent::TryFire(
 			Log,
 			TEXT("[AimableRelic] Trace hit. Relic=%s Shooter=%s Actor=%s Component=%s Bone=%s Location=%s"),
 			*GetNameSafe(Relic),
-			*GetNameSafe(ShooterPawn),
+			*GetNameSafe(SourceActor),
 			*GetNameSafe(Hit.GetActor()),
 			*GetNameSafe(Hit.GetComponent()),
 			*Hit.BoneName.ToString(),
@@ -105,7 +206,7 @@ bool UNPAimableRelicComponent::TryFire(
 			Log,
 			TEXT("[AimableRelic] Trace missed. Relic=%s Shooter=%s Start=%s End=%s"),
 			*GetNameSafe(Relic),
-			*GetNameSafe(ShooterPawn),
+			*GetNameSafe(SourceActor),
 			*TraceStart.ToCompactString(),
 			*TraceEnd.ToCompactString());
 	}
@@ -114,14 +215,17 @@ bool UNPAimableRelicComponent::TryFire(
 		? Cast<ANPStablePhysicsPawn>(Hit.GetActor())
 		: nullptr;
 	bool bAssistedHit = false;
-	if (!IsValid(TargetPawn) && AimSettings.AimAssistRadius > 0.0f)
+	if (bAllowAimAssist
+		&& IsValid(AimAssistSourcePawn)
+		&& !IsValid(TargetPawn)
+		&& AimSettings.AimAssistRadius > 0.0f)
 	{
 		FHitResult AssistedHit;
 		if (TryFindAssistedPlayer(
 			World,
 			TraceStart,
 			TraceEnd,
-			ShooterPawn,
+			AimAssistSourcePawn,
 			Relic,
 			AssistedHit))
 		{
@@ -158,7 +262,7 @@ bool UNPAimableRelicComponent::TryFire(
 	{
 		FGameplayEffectContextHandle ImpactContext =
 			SourceAbilitySystem->MakeEffectContext();
-		ImpactContext.AddInstigator(ShooterPawn, Relic);
+		ImpactContext.AddInstigator(SourceActor, Relic);
 		ImpactContext.AddHitResult(Hit, true);
 		FGameplayCueParameters ImpactCueParameters(ImpactContext);
 		ImpactCueParameters.Location = Hit.ImpactPoint;
@@ -196,7 +300,7 @@ bool UNPAimableRelicComponent::TryFire(
 			*GetNameSafe(Hit.GetComponent()));
 		return true;
 	}
-	if (!IsValid(TargetPawn) || TargetPawn == ShooterPawn)
+	if (!IsValid(TargetPawn) || TargetPawn == SourceActor)
 	{
 		return true;
 	}
@@ -218,7 +322,7 @@ bool UNPAimableRelicComponent::TryFire(
 	HorizontalDirection.Normalize();
 	if (HorizontalDirection.IsNearlyZero())
 	{
-		HorizontalDirection = ShooterPawn->GetActorForwardVector().GetSafeNormal2D();
+		HorizontalDirection = SourceActor->GetActorForwardVector().GetSafeNormal2D();
 	}
 	const FVector KnockbackVelocity =
 		HorizontalDirection * FMath::Max(AimSettings.HorizontalKnockbackStrength, 0.0f)
@@ -285,12 +389,12 @@ bool UNPAimableRelicComponent::TryConsumeFireCooldown()
 
 FTransform UNPAimableRelicComponent::GetMuzzleTransform() const
 {
-	const AActor* Relic = GetOwner();
-	const USceneComponent* RelicMesh = Relic
-		? Cast<USceneComponent>(Relic->GetRootComponent())
-		: nullptr;
-	return IsValid(RelicMesh)
-		? RelicMesh->GetSocketTransform(MuzzleSocketName)
+	const AActor* Owner = GetOwner();
+	const USceneComponent* MuzzleSource = MuzzleSourceComponent.IsValid()
+		? MuzzleSourceComponent.Get()
+		: (Owner ? Cast<USceneComponent>(Owner->GetRootComponent()) : nullptr);
+	return IsValid(MuzzleSource)
+		? MuzzleSource->GetSocketTransform(MuzzleSocketName)
 		: FTransform::Identity;
 }
 
