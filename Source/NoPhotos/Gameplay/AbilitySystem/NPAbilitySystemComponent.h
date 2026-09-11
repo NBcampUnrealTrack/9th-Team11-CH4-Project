@@ -4,8 +4,6 @@
 #include "GameplayAbilitySpecHandle.h"
 #include "NPAbilitySystemComponent.generated.h"
 
-class UEnhancedInputComponent;
-class UInputAction;
 class UNPScanAbility;
 
 UCLASS(ClassGroup=(Abilities), meta=(BlueprintSpawnableComponent))
@@ -17,10 +15,8 @@ public:
 	UNPAbilitySystemComponent();
 
 	void InitializeForOwner();
-	void BindRelicUseInput(
-		UEnhancedInputComponent* EnhancedInputComponent,
-		UInputAction* RelicUseAction);
 	void SetHeldRelic(AActor* Relic);
+	void ActivateScanOrRelicUseAbility();
 
 	/** 조준 입력 라우터가 호출합니다. */
 	void ActivateRelicAimAbility();

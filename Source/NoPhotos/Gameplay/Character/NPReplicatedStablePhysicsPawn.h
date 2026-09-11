@@ -100,7 +100,6 @@ protected:
 	virtual void OnRep_Controller() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
-	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 	virtual void ApplyMoveInput(const FVector& WorldMoveInput) override;
 	virtual void ApplyJumpRequest() override;
 	virtual void ApplyRightHandState(bool bActive) override;
@@ -223,9 +222,6 @@ private:
 	/** GAS 상태에 따라 원본 이동 입력의 전후/좌우 성분을 반전합니다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Control Reversal", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UNPControlReversalComponent> ControlReversal;
-
-	UPROPERTY(EditDefaultsOnly, Category="Input")
-	TObjectPtr<UInputAction> RelicUseAction;
 
 	/** 유물 증거 사진에 찍혔을 때 Drop과 일시적인 조작 차단을 처리합니다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Photo|Penalty", meta=(AllowPrivateAccess="true"))

@@ -1,7 +1,6 @@
 #include "Gameplay/AbilitySystem/NPAbilitySystemComponent.h"
 
 #include "Core/GameplayTag/NPGameplayTags.h"
-#include "EnhancedInputComponent.h"
 #include "GameplayAbilitySpec.h"
 #include "Gameplay/Character/Abilities/NPScanAbility.h"
 #include "Gameplay/Character/NPStablePhysicsPawn.h"
@@ -9,7 +8,6 @@
 #include "Gameplay/Photo/Abilities/NPPhotoShotAbility.h"
 #include "Gameplay/Relic/Components/NPUsableRelicComponent.h"
 #include "GameplayEffect.h"
-#include "InputAction.h"
 
 UNPAbilitySystemComponent::UNPAbilitySystemComponent()
 {
@@ -46,22 +44,6 @@ void UNPAbilitySystemComponent::InitializeForOwner()
 			bDefaultAbilitiesGranted = true;
 		}
 	}
-}
-
-void UNPAbilitySystemComponent::BindRelicUseInput(
-	UEnhancedInputComponent* EnhancedInputComponent,
-	UInputAction* RelicUseAction)
-{
-	if (!EnhancedInputComponent || !RelicUseAction)
-	{
-		return;
-	}
-
-	EnhancedInputComponent->BindAction(
-		RelicUseAction,
-		ETriggerEvent::Started,
-		this,
-		&UNPAbilitySystemComponent::ActivateRelicUseAbility);
 }
 
 void UNPAbilitySystemComponent::SetHeldRelic(AActor* Relic)
@@ -137,6 +119,17 @@ void UNPAbilitySystemComponent::SetHeldRelic(AActor* Relic)
 			Relic);
 		HeldRelicAbilityHandles.Add(GiveAbility(AbilitySpec));
 	}
+}
+
+void UNPAbilitySystemComponent::ActivateScanOrRelicUseAbility()
+{
+	if (HasMatchingGameplayTag(NPGameplayTags::State_Relic_Carrying_Usable))
+	{
+		ActivateRelicUseAbility();
+		return;
+	}
+
+	ActivateScanAbility();
 }
 
 void UNPAbilitySystemComponent::ActivateRelicUseAbility()

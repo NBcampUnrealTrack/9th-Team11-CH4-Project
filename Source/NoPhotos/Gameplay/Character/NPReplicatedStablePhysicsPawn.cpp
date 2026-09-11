@@ -5,7 +5,6 @@
 #include "Core/Main/NPMainGameState.h"
 #include "Gameplay/AbilitySystem/Effects/NPLeaderGameplayEffect.h"
 #include "Components/SkeletalMeshComponent.h"
-#include "EnhancedInputComponent.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
 #include "PhysicsEngine/BodyInstance.h"
@@ -293,21 +292,6 @@ void ANPReplicatedStablePhysicsPawn::MulticastCompleteTemporaryRagdollRecovery_I
 		FVector::ZeroVector,
 		false);
 	Super::CompleteTemporaryRagdollRecovery();
-}
-
-void ANPReplicatedStablePhysicsPawn::SetupPlayerInputComponent(
-	UInputComponent* PlayerInputComponent)
-{
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
-
-	UEnhancedInputComponent* EnhancedInputComponent =
-		Cast<UEnhancedInputComponent>(PlayerInputComponent);
-	if (EnhancedInputComponent && RelicUseAction)
-	{
-		AbilitySystem->BindRelicUseInput(
-			EnhancedInputComponent,
-			RelicUseAction);
-	}
 }
 
 void ANPReplicatedStablePhysicsPawn::Tick(float DeltaSeconds)
