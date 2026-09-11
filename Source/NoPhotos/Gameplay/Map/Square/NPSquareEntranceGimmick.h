@@ -9,6 +9,9 @@ class AStaticMeshActor;
 class UArrowComponent;
 class UBoxComponent;
 class UGrabbableComponent;
+class UAudioComponent;
+class USoundAttenuation;
+class USoundBase;
 class UStaticMeshComponent;
 
 UENUM()
@@ -81,10 +84,34 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Entrance", meta=(ClampMin="1.0", Units="cm"))
 	float PushOutPadding = 15.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Entrance|Sound")
+	TObjectPtr<USoundBase> GimmickSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Entrance|Sound")
+	TObjectPtr<USoundAttenuation> GimmickSoundAttenuation;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Entrance|Sound", meta=(ClampMin="1"))
+	int32 SoundPlayCount = 3;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Entrance|Sound", meta=(ClampMin="0.0", Units="s"))
+	float SoundPlayInterval = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Entrance|Sound", meta=(ClampMin="0.01", Units="s"))
+	float SoundPlayDuration = 3.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Entrance|Sound", meta=(ClampMin="0.01"))
+	float MinSoundPitch = 0.9f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Entrance|Sound", meta=(ClampMin="0.01"))
+	float MaxSoundPitch = 1.1f;
+
 private:
 	void HandleGrabCountChanged(int32 Count);
 	void SetPhase(ENPSquareEntrancePhase Phase);
 	void ApplyState();
+	void StartSoundSequence();
+	void PlayNextSound();
+	void StopSoundSequence();
 	bool PushPlayersOutsideBarriers();
 	float GetServerTime() const;
 	float GetSequenceDuration(bool bFalling) const;
@@ -96,7 +123,11 @@ private:
 	FNPSquareEntranceState State;
 
 	TWeakObjectPtr<UGrabbableComponent> Grabbable;
+	TArray<TWeakObjectPtr<UAudioComponent>> ActiveSoundComponents;
 	TArray<FTransform> FinalTransforms;
+	FTimerHandle SoundSequenceTimerHandle;
+	ENPSquareEntrancePhase AppliedSoundPhase = ENPSquareEntrancePhase::Idle;
+	int32 PlayedSoundCount = 0;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UStaticMeshComponent>> DisappearVisuals;
