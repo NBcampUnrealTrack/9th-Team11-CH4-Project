@@ -28,6 +28,7 @@ public:
 	bool IsBroken() const { return CurrentHealth <= 0; }
 
 	void IgnoreGrabImpact();
+	void DepleteDurability(const FVector& ImpactLocation);
 	void SetImpactThresholds(float InMinThreshold, float InMaxThreshold);
 	/** 루트가 아닌 Primitive에서 충격을 받을 오브젝트가 지정할 수 있습니다. */
 	void SetImpactTargetComponent(UPrimitiveComponent* InTargetComponent);

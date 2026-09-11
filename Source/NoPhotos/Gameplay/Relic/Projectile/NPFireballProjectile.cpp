@@ -11,6 +11,8 @@
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "Gameplay/Character/NPStablePhysicsPawn.h"
+#include "Gameplay/Relic/Case/NPRelicCase.h"
+#include "Gameplay/Relic/Components/NPImpactReceiveComponent.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "GameplayEffect.h"
 #include "GameFramework/ProjectileMovementComponent.h"
@@ -198,11 +200,8 @@ void ANPFireballProjectile::ApplyExplosionImpulse(
 		return;
 	}
 
-	FCollisionObjectQueryParams ObjectQuery;
-	ObjectQuery.AddObjectTypesToQuery(ECC_Pawn);
-	ObjectQuery.AddObjectTypesToQuery(ECC_WorldDynamic);
-	ObjectQuery.AddObjectTypesToQuery(ECC_PhysicsBody);
-	ObjectQuery.AddObjectTypesToQuery(ECC_Destructible);
+	const FCollisionObjectQueryParams ObjectQuery(
+		FCollisionObjectQueryParams::AllObjects);
 
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(FireballExplosion), false);
 	QueryParams.AddIgnoredActor(this);
@@ -218,20 +217,62 @@ void ANPFireballProjectile::ApplyExplosionImpulse(
 		QueryParams);
 
 	TSet<TWeakObjectPtr<AActor>> AffectedActors;
+	TSet<TWeakObjectPtr<UNPImpactReceiveComponent>> DepletedDurabilityComponents;
+	TSet<TWeakObjectPtr<UPrimitiveComponent>> AffectedPhysicsComponents;
 	for (const FOverlapResult& Overlap : Overlaps)
 	{
 		AActor* TargetActor = Overlap.GetActor();
-		const TWeakObjectPtr<AActor> TargetKey(TargetActor);
 		if (!IsValid(TargetActor)
-			|| TargetActor == SourceRelic
-			|| AffectedActors.Contains(TargetKey))
+			|| TargetActor == SourceRelic)
 		{
 			continue;
 		}
-		AffectedActors.Add(TargetKey);
 
-		FVector HorizontalDirection = TargetActor->GetActorLocation()
-			- ExplosionLocation;
+		ANPStablePhysicsPawn* TargetPawn = Cast<ANPStablePhysicsPawn>(TargetActor);
+		ANPBaseRelic* TargetRelic = Cast<ANPBaseRelic>(TargetActor);
+		UPrimitiveComponent* TargetPhysicsComponent = Overlap.GetComponent();
+		if (TargetPawn || TargetRelic)
+		{
+			const TWeakObjectPtr<AActor> TargetKey(TargetActor);
+			if (AffectedActors.Contains(TargetKey))
+			{
+				continue;
+			}
+			AffectedActors.Add(TargetKey);
+		}
+		else
+		{
+			const TWeakObjectPtr<UPrimitiveComponent> ComponentKey(
+				TargetPhysicsComponent);
+			if (!IsValid(TargetPhysicsComponent)
+				|| !TargetPhysicsComponent->IsSimulatingPhysics()
+				|| AffectedPhysicsComponents.Contains(ComponentKey))
+			{
+				continue;
+			}
+			AffectedPhysicsComponents.Add(ComponentKey);
+		}
+
+		const FVector TargetLocation = TargetPhysicsComponent
+			&& !TargetPawn
+			&& !TargetRelic
+			? TargetPhysicsComponent->GetComponentLocation()
+			: TargetActor->GetActorLocation();
+		if (TargetActor->IsA<ANPRelicCase>())
+		{
+			UNPImpactReceiveComponent* ImpactReceiveComponent =
+				TargetActor->FindComponentByClass<UNPImpactReceiveComponent>();
+			const TWeakObjectPtr<UNPImpactReceiveComponent> ComponentKey(
+				ImpactReceiveComponent);
+			if (IsValid(ImpactReceiveComponent)
+				&& !DepletedDurabilityComponents.Contains(ComponentKey))
+			{
+				DepletedDurabilityComponents.Add(ComponentKey);
+				ImpactReceiveComponent->DepleteDurability(ExplosionLocation);
+			}
+		}
+
+		FVector HorizontalDirection = TargetLocation - ExplosionLocation;
 		HorizontalDirection.Z = 0.0f;
 		if (!HorizontalDirection.Normalize())
 		{
@@ -240,7 +281,7 @@ void ANPFireballProjectile::ApplyExplosionImpulse(
 
 		const float Distance = FVector::Distance(
 			ExplosionLocation,
-			TargetActor->GetActorLocation());
+			TargetLocation);
 		const float StrengthAlpha = 1.0f - FMath::Clamp(
 			Distance / Radius,
 			0.0f,
@@ -261,13 +302,20 @@ void ANPFireballProjectile::ApplyExplosionImpulse(
 			continue;
 		}
 
-		if (TargetActor->IsA<ANPStablePhysicsPawn>())
+		if (TargetPawn)
 		{
 			ApplyCharacterKnockback(TargetActor, KnockbackVelocity);
 		}
-		else if (ANPBaseRelic* TargetRelic = Cast<ANPBaseRelic>(TargetActor))
+		else if (TargetRelic)
 		{
 			TargetRelic->ReleaseWithVelocityImpulse(KnockbackVelocity);
+		}
+		else
+		{
+			TargetPhysicsComponent->AddImpulse(
+				KnockbackVelocity,
+				NAME_None,
+				true);
 		}
 	}
 }

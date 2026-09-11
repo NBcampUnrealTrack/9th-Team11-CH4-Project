@@ -73,6 +73,21 @@ void UNPImpactReceiveComponent::IgnoreGrabImpact()
 	}
 }
 
+void UNPImpactReceiveComponent::DepleteDurability(
+	const FVector& ImpactLocation)
+{
+	AActor* Owner = GetOwner();
+	if (!Owner || !Owner->HasAuthority() || CurrentHealth <= 0)
+	{
+		return;
+	}
+
+	const int32 Damage = CurrentHealth;
+	CurrentHealth = 0;
+	OnDamaged.Broadcast(Damage, CurrentHealth, MaxHealth);
+	OnDepleted.Broadcast(ImpactLocation);
+}
+
 void UNPImpactReceiveComponent::SetImpactThresholds(
 	const float InMinThreshold,
 	const float InMaxThreshold)
