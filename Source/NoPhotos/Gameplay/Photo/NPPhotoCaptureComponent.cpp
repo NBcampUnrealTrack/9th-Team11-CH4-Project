@@ -4,9 +4,11 @@
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/Engine.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "EngineUtils.h"
 #include "Engine/World.h"
 #include "Core/GameplayTag/NPGameplayTags.h"
 #include "Gameplay/AbilitySystem/NPAbilitySystemComponent.h"
+#include "Gameplay/Character/NPLeaderCrown.h"
 #include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -275,6 +277,11 @@ bool UNPPhotoCaptureComponent::SynchronizeSceneCapture(
 	FRotator CameraRotation;
 	PlayerController->GetPlayerViewPoint(CameraLocation, CameraRotation);
 	SceneCapture->SetWorldLocationAndRotation(CameraLocation, CameraRotation);
+	SceneCapture->HiddenActors.Reset();
+	for (TActorIterator<ANPLeaderCrown> It(GetWorld()); It; ++It)
+	{
+		SceneCapture->HiddenActors.Add(*It);
+	}
 
 	if (const UCameraComponent* PlayerCamera =
 		Pawn->FindComponentByClass<UCameraComponent>())
