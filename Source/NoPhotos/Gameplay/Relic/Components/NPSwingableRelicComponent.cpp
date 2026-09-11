@@ -3,6 +3,7 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Components/PrimitiveComponent.h"
+#include "Core/Audio/NPSoundSubsystem.h"
 #include "Core/GameplayTag/NPGameplayTags.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
@@ -12,10 +13,13 @@
 #include "GameplayEffect.h"
 #include "NoPhotos.h"
 #include "PhysicsEngine/BodyInstance.h"
+#include "Sound/SoundBase.h"
+#include "TimerManager.h"
 
 UNPSwingableRelicComponent::UNPSwingableRelicComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+	SetIsReplicatedByDefault(true);
 	SetUseAbilityClass(UNPRelicUseAbility::StaticClass());
 	SwingSettings.KnockbackEffectClass =
 		UNPKnockbackGameplayEffect::StaticClass();
@@ -35,6 +39,50 @@ void UNPSwingableRelicComponent::StartSwingCooldown()
 			NextSwingAllowedTime,
 			World->GetTimeSeconds()
 				+ FMath::Max(0.0f, SwingSettings.CooldownAfterSwing));
+	}
+}
+
+void UNPSwingableRelicComponent::StartSwingSound()
+{
+	UWorld* World = GetWorld();
+	if (!World || !GetOwner() || !GetOwner()->HasAuthority() || !SwingSettings.SwingSound
+		|| World->GetTimerManager().IsTimerActive(SwingSoundTimer))
+	{
+		return;
+	}
+
+	World->GetTimerManager().SetTimer(
+		SwingSoundTimer, this, &ThisClass::PlaySwingSound,
+		FMath::Max(0.01f, SwingSettings.SoundInterval), true);
+	PlaySwingSound();
+}
+
+void UNPSwingableRelicComponent::StopSwingSound()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(SwingSoundTimer);
+	}
+}
+
+void UNPSwingableRelicComponent::PlaySwingSound()
+{
+	AActor* OwnerActor = GetOwner();
+	if (!OwnerActor || !OwnerActor->HasAuthority() || !SwingSettings.SwingSound)
+	{
+		return;
+	}
+
+	const float MinPitch = FMath::Max(0.01f, FMath::Min(SwingSettings.MinimumPitch, SwingSettings.MaximumPitch));
+	const float MaxPitch = FMath::Max(MinPitch, FMath::Max(SwingSettings.MinimumPitch, SwingSettings.MaximumPitch));
+	MulticastPlaySwingSound(OwnerActor->GetActorLocation(), FMath::FRandRange(MinPitch, MaxPitch));
+}
+
+void UNPSwingableRelicComponent::MulticastPlaySwingSound_Implementation(FVector Location, float Pitch)
+{
+	if (UNPSoundSubsystem* SoundSubsystem = UNPSoundSubsystem::Get(this))
+	{
+		SoundSubsystem->PlaySFXAtLocation(SwingSettings.SwingSound, Location, FRotator::ZeroRotator, 1.0f, Pitch);
 	}
 }
 
@@ -105,6 +153,7 @@ void UNPSwingableRelicComponent::EndPlay(
 	const EEndPlayReason::Type EndPlayReason)
 {
 	StopHitDetection();
+	StopSwingSound();
 	Super::EndPlay(EndPlayReason);
 }
 
