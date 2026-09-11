@@ -625,6 +625,12 @@ void ANPMainPlayerController::SetupInputComponent()
 
 bool ANPMainPlayerController::InputKey(const FInputKeyEventArgs& Params)
 {
+	if (IsLocalController() && Params.Key == EKeys::Escape && Params.Event == IE_Pressed)
+	{
+		ToggleOptionPanel();
+		return true;
+	}
+
 	if (IsLocalController() && IsValid(ChatComponent) && ChatComponent->IsChatInputOpen()
 		&& Params.Key == EKeys::LeftMouseButton && Params.Event == IE_Pressed)
 	{
@@ -633,6 +639,35 @@ bool ANPMainPlayerController::InputKey(const FInputKeyEventArgs& Params)
 	}
 
 	return Super::InputKey(Params);
+}
+
+void ANPMainPlayerController::ToggleOptionPanel()
+{
+	if (!IsLocalController() || !IsValid(OptionPanelWidgetClass))
+	{
+		return;
+	}
+
+	UNPUIManagerSubsystem* UIManager = GetGameInstance()
+		? GetGameInstance()->GetSubsystem<UNPUIManagerSubsystem>()
+		: nullptr;
+	if (!IsValid(UIManager))
+	{
+		return;
+	}
+
+	if (UNPUserWidget* TopWidget = UIManager->GetTopWidget();
+		IsValid(TopWidget) && TopWidget->IsA(OptionPanelWidgetClass))
+	{
+		UIManager->RequestPopWidget();
+		return;
+	}
+
+	if (UNPUserWidget* OptionPanel = UIManager->PushWidget(OptionPanelWidgetClass, 1000))
+	{
+		OptionPanel->SetInputModeState(ENPWidgetInputMode::GameAndUI);
+		UIManager->RefreshTopWidgetInputMode();
+	}
 }
 
 void ANPMainPlayerController::HandleAimStarted()
