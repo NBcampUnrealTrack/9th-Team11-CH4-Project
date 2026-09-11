@@ -150,6 +150,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UNPUserWidget> ResultWidgetClass;
 
+	//옵션 위젯 클래스
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Option")
+	TSubclassOf<UNPUserWidget> OptionPanelWidgetClass;
+
 	/** 맵 로딩 이후 방 Level Instance와 다른 플레이어 준비를 기다리는 UMG입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Loading")
 	TSubclassOf<UNPMainWorldLoadingWidget> MainWorldLoadingWidgetClass;
@@ -199,6 +203,7 @@ private:
 	void HandleAimStarted();
 	void HandleAimReleased();
 	void HandleFireStarted();
+	void ToggleOptionPanel();
 	void BindAimCrosshairToAbilitySystem();
 	void UnbindAimCrosshairFromAbilitySystem();
 	void HandleRelicAimingTagChanged(const FGameplayTag Tag, int32 NewCount);

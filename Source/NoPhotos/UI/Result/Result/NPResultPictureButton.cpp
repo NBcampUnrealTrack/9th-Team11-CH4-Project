@@ -11,6 +11,8 @@
 #include "Components/Widget.h"
 #include "Core/Main/NPMainGameState.h"
 #include "Core/Main/NPMainPlayerController.h"
+#include "Engine/GameInstance.h"
+#include "SubSystem/NPUIManagerSubsystem.h"
 #include "UI/Result/Pictures/NPResultPicturePreviewPopup.h"
 
 void UNPResultPictureButton::NativeConstruct()
@@ -289,14 +291,24 @@ void UNPResultPictureButton::OpenPreview() const
 		return;
 	}
 
-	UNPResultPicturePreviewPopup* PreviewPopup =
-		CreateWidget<UNPResultPicturePreviewPopup>(GetOwningPlayer(), PreviewPopupWidgetClass);
+	UGameInstance* GameInstance = GetGameInstance();
+	UNPUIManagerSubsystem* UIManager = IsValid(GameInstance)
+		? GameInstance->GetSubsystem<UNPUIManagerSubsystem>()
+		: nullptr;
+	if (!IsValid(UIManager))
+	{
+		return;
+	}
+
+	UNPResultPicturePreviewPopup* PreviewPopup = Cast<UNPResultPicturePreviewPopup>(
+		UIManager->PushWidget(PreviewPopupWidgetClass, 200));
 	if (!IsValid(PreviewPopup))
 	{
 		return;
 	}
 
-	PreviewPopup->AddToViewport(200);
+	PreviewPopup->SetInputModeState(ENPWidgetInputMode::UIOnly);
+	UIManager->RefreshTopWidgetInputMode();
 	PreviewPopup->OpenForPhoto(PhotoId, CapturedPlayerName);
 }
 

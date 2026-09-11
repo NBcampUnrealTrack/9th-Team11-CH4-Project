@@ -91,7 +91,7 @@ void UNPBonusRelicWidget::InitBonusItemList()
 		ANPBaseRelic* Relic = AssignedQuestRelics[RelicIndex];
 		const FNPRelicTableRow* RelicData = IsValid(Relic) ? Relic->GetRelicTableData() : nullptr;
 		const FString RelicName = RelicData && !RelicData->DisplayName.IsEmpty()
-			? RelicData->DisplayName.ToString()	: TEXT("이름 없는 유물");
+			? RelicData->DisplayName.ToString()	: TEXT("깨진 유물");
 
 		UNPBonusItemWidget* ItemWidget = CreateWidget<UNPBonusItemWidget>(this, BonusItemWidgetClass);
 		if (IsValid(ItemWidget))

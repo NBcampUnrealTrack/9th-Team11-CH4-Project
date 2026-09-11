@@ -9,11 +9,14 @@
 #include "Components/TextBlock.h"
 #include "Core/Main/NPMainGameState.h"
 #include "Core/Main/NPMainPlayerController.h"
+#include "Engine/GameInstance.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "Gameplay/Photo/NPPhotoTransferComponent.h"
 #include "InputCoreTypes.h"
 #include "Brushes/SlateColorBrush.h"
+#include "SubSystem/NPUIManagerSubsystem.h"
+#include "TimerManager.h"
 
 void UNPResultPicturePreviewPopup::NativeConstruct()
 {
@@ -181,7 +184,13 @@ void UNPResultPicturePreviewPopup::OpenForPhoto(
 
 void UNPResultPicturePreviewPopup::HandleCloseClicked()
 {
-	RemoveFromParent();
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (UNPUIManagerSubsystem* UIManager = GameInstance->GetSubsystem<UNPUIManagerSubsystem>())
+		{
+			UIManager->RequestPopWidget();
+		}
+	}
 }
 
 void UNPResultPicturePreviewPopup::HandleBackdropClicked()

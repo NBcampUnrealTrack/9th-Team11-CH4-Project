@@ -87,6 +87,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UNPUserWidget> LobbyWidgetClass;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Option")
+	TSubclassOf<UNPUserWidget> OptionPanelWidgetClass;
+
 	bool bIsMouseInput = false;
 
 private:
@@ -94,5 +97,6 @@ private:
 	void SetCharacterInputMappingEnabled(bool bEnabled);
 	void SetLobbyInputMappingEnabled(bool bEnabled);
 	void ApplyLobbyInputMode();
+	void ToggleOptionPanel();
 	void ShowSingleScreen(TSubclassOf<UNPUserWidget> WidgetClass);
 };
