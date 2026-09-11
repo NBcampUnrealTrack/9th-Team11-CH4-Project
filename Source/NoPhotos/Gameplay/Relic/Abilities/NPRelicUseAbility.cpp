@@ -95,6 +95,7 @@ void UNPRelicUseAbility::ActivateAbility(
 		LockedGrabbableComponent = GrabbableRelic;
 	}
 	SwingableRelicComponent = SwingableRelic;
+	SwingableRelicComponent->StartSwingSound();
 	if (SwingableRelicComponent.IsValid() && ActorInfo)
 	{
 		SwingableRelicComponent->StartHitDetection(
@@ -136,6 +137,7 @@ void UNPRelicUseAbility::EndAbility(
 	if (SwingableRelicComponent.IsValid())
 	{
 		SwingableRelicComponent->StopHitDetection();
+		SwingableRelicComponent->StopSwingSound();
 	}
 	SwingableRelicComponent.Reset();
 
