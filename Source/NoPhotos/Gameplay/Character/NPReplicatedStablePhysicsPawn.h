@@ -168,6 +168,8 @@ private:
 	void UpdateViewRotationReplication(float DeltaSeconds);
 	void SetReplicatedViewRotation(const FRotator& NewViewRotation);
 	void SetServerRightHandState(bool bActive);
+	void CancelGrab();
+	void ResetLocalGrabState();
 
 	/** 다른 클라이언트에서도 오른손 IK 상태를 동일하게 표시하기 위한 값입니다. */
 	UPROPERTY(ReplicatedUsing=OnRep_RightHandActive)
