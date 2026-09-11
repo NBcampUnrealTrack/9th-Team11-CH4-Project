@@ -444,6 +444,11 @@ void ANPMainPlayerController::SetMainWorldInputLocked(const bool bLocked)
 
 	if (bLocked)
 	{
+		if (UNPAbilitySystemComponent* AbilitySystem = ResolveAbilitySystem())
+		{
+			AbilitySystem->CancelPhotoAimAbility();
+		}
+
 		if (ANPStablePhysicsPawn* StablePawn =
 			Cast<ANPStablePhysicsPawn>(GetPawn()))
 		{
@@ -651,6 +656,12 @@ void ANPMainPlayerController::HandleAimStarted()
 		return;
 	}
 
+	if (bMainWorldInputLocked)
+	{
+		AbilitySystem->CancelPhotoAimAbility();
+		return;
+	}
+
 	AbilitySystem->CancelRelicAimAbility();
 	AbilitySystem->TogglePhotoAimAbility();
 }
@@ -682,6 +693,12 @@ void ANPMainPlayerController::HandleFireStarted()
 	if (AbilitySystem->HasMatchingGameplayTag(
 		NPGameplayTags::State_Photo_Aiming))
 	{
+		if (bMainWorldInputLocked)
+		{
+			AbilitySystem->CancelPhotoAimAbility();
+			return;
+		}
+
 		AbilitySystem->ActivatePhotoShotAbility();
 	}
 }
