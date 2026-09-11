@@ -327,7 +327,9 @@ private:
 	void RestorePhotoMeshCollision();
 	FTimerHandle PhotoMeshCollisionTimer;
 	TEnumAsByte<ECollisionEnabled::Type> PhotoMeshOriginalCollision = ECollisionEnabled::NoCollision;
+	TEnumAsByte<ECollisionResponse> PhotoCapsuleOriginalPhysicsBodyResponse = ECR_Block;
 	bool bPhotoMeshCollisionTemporarilyDisabled = false;
+	bool bPhotoCapsulePhysicsBodyTemporarilyIgnored = false;
 
 	void SetLifecycleState(ENPGoblinLifecycleState NewState);
 	void NotifyLifecycleStateChanged();

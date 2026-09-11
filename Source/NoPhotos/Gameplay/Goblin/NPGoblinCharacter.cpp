@@ -579,19 +579,34 @@ void ANPGoblinCharacter::StopPhotoReaction()
 void ANPGoblinCharacter::Multicast_TemporarilyDisablePhotoMeshCollision_Implementation(
 	const float Duration)
 {
-	USkeletalMeshComponent* GoblinMesh = GetMesh();
-	if (!IsValid(GoblinMesh) || Duration <= 0.0f)
+	if (Duration <= 0.0f)
 	{
 		return;
 	}
 
-	if (!bPhotoMeshCollisionTemporarilyDisabled)
+	if (USkeletalMeshComponent* GoblinMesh = GetMesh())
 	{
-		PhotoMeshOriginalCollision = GoblinMesh->GetCollisionEnabled();
-		bPhotoMeshCollisionTemporarilyDisabled = true;
+		if (!bPhotoMeshCollisionTemporarilyDisabled)
+		{
+			PhotoMeshOriginalCollision = GoblinMesh->GetCollisionEnabled();
+			bPhotoMeshCollisionTemporarilyDisabled = true;
+		}
+		GoblinMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 
-	GoblinMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	// 촬영 보상 유물은 PhysicsActor(PhysicsBody)로 생성됩니다. 캡슐 전체를 끄지 않고
+	// 이 채널만 잠시 무시하여 점프 중 유물 반동으로 고블린이 사출되는 것을 막습니다.
+	if (UCapsuleComponent* GoblinCapsule = GetCapsuleComponent())
+	{
+		if (!bPhotoCapsulePhysicsBodyTemporarilyIgnored)
+		{
+			PhotoCapsuleOriginalPhysicsBodyResponse =
+				GoblinCapsule->GetCollisionResponseToChannel(ECC_PhysicsBody);
+			bPhotoCapsulePhysicsBodyTemporarilyIgnored = true;
+		}
+		GoblinCapsule->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Ignore);
+	}
+
 	GetWorldTimerManager().SetTimer(
 		PhotoMeshCollisionTimer,
 		this,
@@ -603,17 +618,32 @@ void ANPGoblinCharacter::Multicast_TemporarilyDisablePhotoMeshCollision_Implemen
 void ANPGoblinCharacter::RestorePhotoMeshCollision()
 {
 	GetWorldTimerManager().ClearTimer(PhotoMeshCollisionTimer);
-	if (!bPhotoMeshCollisionTemporarilyDisabled)
+	if (!bPhotoMeshCollisionTemporarilyDisabled
+		&& !bPhotoCapsulePhysicsBodyTemporarilyIgnored)
 	{
 		return;
 	}
 
-	bPhotoMeshCollisionTemporarilyDisabled = false;
-	if (LifecycleState != ENPGoblinLifecycleState::Despawning)
+	if (bPhotoMeshCollisionTemporarilyDisabled)
 	{
-		if (USkeletalMeshComponent* GoblinMesh = GetMesh())
+		bPhotoMeshCollisionTemporarilyDisabled = false;
+		if (LifecycleState != ENPGoblinLifecycleState::Despawning)
 		{
-			GoblinMesh->SetCollisionEnabled(PhotoMeshOriginalCollision);
+			if (USkeletalMeshComponent* GoblinMesh = GetMesh())
+			{
+				GoblinMesh->SetCollisionEnabled(PhotoMeshOriginalCollision);
+			}
+		}
+	}
+
+	if (bPhotoCapsulePhysicsBodyTemporarilyIgnored)
+	{
+		bPhotoCapsulePhysicsBodyTemporarilyIgnored = false;
+		if (UCapsuleComponent* GoblinCapsule = GetCapsuleComponent())
+		{
+			GoblinCapsule->SetCollisionResponseToChannel(
+				ECC_PhysicsBody,
+				PhotoCapsuleOriginalPhysicsBodyResponse);
 		}
 	}
 }
