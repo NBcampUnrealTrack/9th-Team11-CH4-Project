@@ -10,6 +10,7 @@
 #include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 #include "Gameplay/Relic/Abilities/NPRelicAimAbility.h"
 #include "Gameplay/Relic/Abilities/NPRelicFireAbility.h"
+#include "Gameplay/Relic/Components/NPImpactReceiveComponent.h"
 #include "Gameplay/Relic/Projectile/NPAimableRelicVisualProjectile.h"
 #include "GameplayEffect.h"
 #include "GameFramework/Actor.h"
@@ -165,6 +166,21 @@ bool UNPAimableRelicComponent::TryFire(
 		SourceAbilitySystem->ExecuteGameplayCue(
 			NPGameplayTags::GameplayCue_Relic_Aimable_Impact,
 			ImpactCueParameters);
+	}
+	if (bPrimaryHit)
+	{
+		AActor* HitActor = Hit.GetActor();
+		UNPImpactReceiveComponent* ImpactReceiver = HitActor
+			? HitActor->FindComponentByClass<UNPImpactReceiveComponent>()
+			: nullptr;
+		if (ImpactReceiver)
+		{
+			ImpactReceiver->ApplyExternalImpact(
+				Hit.GetComponent(),
+				Relic,
+				AimSettings.DurabilityImpactStrength,
+				Hit.ImpactPoint);
+		}
 	}
 
 	if (bPrimaryHit && !IsValid(TargetPawn))
