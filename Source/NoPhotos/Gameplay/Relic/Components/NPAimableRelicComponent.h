@@ -35,6 +35,10 @@ struct NOPHOTOS_API FNPRelicAimSettings
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Knockback", meta=(ClampMin="0.0", Units="cm/s"))
 	float UpwardKnockbackStrength = 350.0f;
 
+	/** 서버 Trace가 내구도 컴포넌트에 전달할 충격량입니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Impact", meta=(ClampMin="0.0"))
+	float DurabilityImpactStrength = 300.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Trace")
 	TEnumAsByte<ECollisionChannel> TraceChannel = ECC_Visibility;
 

@@ -36,6 +36,13 @@ public:
 	void SetImpactTargetComponents(
 		const TArray<UPrimitiveComponent*>& InTargetComponents);
 
+	/** 서버에서 확정된 Trace 등의 비물리 충격을 기존 내구도 규칙으로 적용합니다. */
+	bool ApplyExternalImpact(
+		UPrimitiveComponent* HitComponent,
+		AActor* ImpactSource,
+		float ImpactStrength,
+		const FVector& ImpactLocation);
+
 	FOnDurabilityDamaged OnDamaged;
 	FOnDurabilityDepleted OnDepleted;
 
@@ -75,6 +82,12 @@ protected:
 	float GrabImpactIgnoreDuration = 0.25f;
 
 private:
+	bool ApplyImpact(
+		UPrimitiveComponent* HitComponent,
+		AActor* ImpactSource,
+		float ImpactStrength,
+		const FVector& ImpactLocation);
+
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UPrimitiveComponent>> ImpactTargetComponents;
 

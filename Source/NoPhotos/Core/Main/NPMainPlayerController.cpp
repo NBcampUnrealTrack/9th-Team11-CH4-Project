@@ -18,6 +18,7 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerState.h"
 #include "InputCoreTypes.h"
+#include "GameplayEffect.h"
 #include "Gameplay/Photo/NPPhotoCaptureComponent.h"
 #include "Gameplay/Photo/NPPhotoFlashWidget.h"
 #include "Gameplay/Photo/NPPhotoLog.h"
@@ -715,12 +716,20 @@ void ANPMainPlayerController::BindAimCrosshairToAbilitySystem()
 			EGameplayTagEventType::NewOrRemoved).AddUObject(
 				this,
 				&ThisClass::HandlePhotoAimingTagChanged);
+		PhotoCooldownTagChangedHandle = AbilitySystem->RegisterGameplayTagEvent(
+			NPGameplayTags::Cooldown_Photo_Shot,
+			EGameplayTagEventType::NewOrRemoved).AddUObject(
+				this,
+				&ThisClass::HandlePhotoCooldownTagChanged);
 	}
 
 	SetAimCrosshairActive(AbilitySystem->HasMatchingGameplayTag(
 		NPGameplayTags::State_Relic_Aiming));
 	SetPhotoAimWidgetActive(AbilitySystem->HasMatchingGameplayTag(
 		NPGameplayTags::State_Photo_Aiming));
+	HandlePhotoCooldownTagChanged(
+		NPGameplayTags::Cooldown_Photo_Shot,
+		AbilitySystem->GetTagCount(NPGameplayTags::Cooldown_Photo_Shot));
 }
 
 void ANPMainPlayerController::UnbindAimCrosshairFromAbilitySystem()
@@ -741,10 +750,19 @@ void ANPMainPlayerController::UnbindAimCrosshairFromAbilitySystem()
 				EGameplayTagEventType::NewOrRemoved).Remove(
 					PhotoAimingTagChangedHandle);
 		}
+		if (PhotoCooldownTagChangedHandle.IsValid())
+		{
+			AbilitySystem->RegisterGameplayTagEvent(
+				NPGameplayTags::Cooldown_Photo_Shot,
+				EGameplayTagEventType::NewOrRemoved).Remove(
+					PhotoCooldownTagChangedHandle);
+		}
 	}
 
 	RelicAimingTagChangedHandle.Reset();
 	PhotoAimingTagChangedHandle.Reset();
+	PhotoCooldownTagChangedHandle.Reset();
+	StopPhotoCooldownDisplayUpdates(false);
 	AimCrosshairAbilitySystem.Reset();
 }
 
@@ -762,6 +780,19 @@ void ANPMainPlayerController::HandlePhotoAimingTagChanged(
 	SetPhotoAimWidgetActive(NewCount > 0);
 }
 
+void ANPMainPlayerController::HandlePhotoCooldownTagChanged(
+	const FGameplayTag Tag,
+	const int32 NewCount)
+{
+	if (NewCount > 0)
+	{
+		BeginPhotoCooldownDisplayUpdates();
+		return;
+	}
+
+	StopPhotoCooldownDisplayUpdates(true);
+}
+
 void ANPMainPlayerController::SetAimCrosshairActive(const bool bActive)
 {
 	if (IsLocalController() && IsValid(AimCrosshairWidget))
@@ -775,7 +806,104 @@ void ANPMainPlayerController::SetPhotoAimWidgetActive(const bool bActive)
 	if (IsLocalController() && IsValid(PhotoAimWidget))
 	{
 		PhotoAimWidget->SetAimActive(bActive);
+		UpdatePhotoCooldownDisplay();
 	}
+}
+
+void ANPMainPlayerController::BeginPhotoCooldownDisplayUpdates()
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	UpdatePhotoCooldownDisplay();
+	GetWorldTimerManager().SetTimer(
+		PhotoCooldownDisplayTimer,
+		this,
+		&ThisClass::UpdatePhotoCooldownDisplay,
+		FMath::Max(0.02f, PhotoCooldownDisplayUpdateInterval),
+		true);
+}
+
+void ANPMainPlayerController::StopPhotoCooldownDisplayUpdates(
+	const bool bShowFullyCharged)
+{
+	GetWorldTimerManager().ClearTimer(PhotoCooldownDisplayTimer);
+	if (bShowFullyCharged && IsValid(PhotoAimWidget))
+	{
+		PhotoAimWidget->SetCooldownDisplay(
+			PhotoCooldownCellCount,
+			PhotoCooldownCellCount,
+			0.0f,
+			0.0f);
+	}
+}
+
+void ANPMainPlayerController::UpdatePhotoCooldownDisplay()
+{
+	if (!IsLocalController() || !IsValid(PhotoAimWidget))
+	{
+		return;
+	}
+
+	UNPAbilitySystemComponent* AbilitySystem =
+		AimCrosshairAbilitySystem.Get();
+	if (!IsValid(AbilitySystem)
+		|| !AbilitySystem->HasMatchingGameplayTag(
+			NPGameplayTags::Cooldown_Photo_Shot))
+	{
+		PhotoAimWidget->SetCooldownDisplay(
+			PhotoCooldownCellCount,
+			PhotoCooldownCellCount,
+			0.0f,
+			0.0f);
+		return;
+	}
+
+	FGameplayTagContainer CooldownTags;
+	CooldownTags.AddTag(NPGameplayTags::Cooldown_Photo_Shot);
+	const FGameplayEffectQuery Query =
+		FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(CooldownTags);
+	const TArray<TPair<float, float>> Times =
+		AbilitySystem->GetActiveEffectsTimeRemainingAndDuration(Query);
+
+	float RemainingTime = 0.0f;
+	float Duration = 0.0f;
+	for (const TPair<float, float>& Time : Times)
+	{
+		if (Time.Key > RemainingTime)
+		{
+			RemainingTime = Time.Key;
+			Duration = Time.Value;
+		}
+	}
+
+	if (Duration <= 0.0f)
+	{
+		PhotoAimWidget->SetCooldownDisplay(
+			0,
+			PhotoCooldownCellCount,
+			RemainingTime,
+			Duration);
+		return;
+	}
+
+	const float ChargedRatio = FMath::Clamp(
+		1.0f - RemainingTime / Duration,
+		0.0f,
+		1.0f);
+	const int32 ChargedCellCount = FMath::Clamp(
+		FMath::FloorToInt(
+			ChargedRatio * static_cast<float>(PhotoCooldownCellCount)
+			+ KINDA_SMALL_NUMBER),
+		0,
+		PhotoCooldownCellCount);
+	PhotoAimWidget->SetCooldownDisplay(
+		ChargedCellCount,
+		PhotoCooldownCellCount,
+		RemainingTime,
+		Duration);
 }
 
 bool ANPMainPlayerController::IsHoldingAimableRelic() const

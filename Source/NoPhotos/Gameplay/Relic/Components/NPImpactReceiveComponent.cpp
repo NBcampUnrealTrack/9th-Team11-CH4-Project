@@ -103,19 +103,56 @@ void UNPImpactReceiveComponent::HandleHit(
 	const FVector NormalImpulse,
 	const FHitResult& Hit)
 {
+	AActor* ImpactSource = OtherActor;
+	if (!ImpactSource && OtherComponent)
+	{
+		ImpactSource = OtherComponent->GetOwner();
+	}
+	const FVector ImpactLocation = Hit.ImpactPoint.IsNearlyZero()
+		? HitComponent->GetComponentLocation()
+		: FVector(Hit.ImpactPoint);
+	ApplyImpact(
+		HitComponent,
+		ImpactSource,
+		NormalImpulse.Size(),
+		ImpactLocation);
+}
+
+bool UNPImpactReceiveComponent::ApplyExternalImpact(
+	UPrimitiveComponent* HitComponent,
+	AActor* ImpactSource,
+	const float ImpactStrength,
+	const FVector& ImpactLocation)
+{
+	return ApplyImpact(
+		HitComponent,
+		ImpactSource,
+		FMath::Max(ImpactStrength, 0.0f),
+		ImpactLocation);
+}
+
+bool UNPImpactReceiveComponent::ApplyImpact(
+	UPrimitiveComponent* HitComponent,
+	AActor* ImpactSource,
+	const float ImpactStrength,
+	const FVector& ImpactLocation)
+{
 	AActor* Owner = GetOwner();
-	if (!Owner || !Owner->HasAuthority() || CurrentHealth <= 0)
+	if (!Owner
+		|| !Owner->HasAuthority()
+		|| CurrentHealth <= 0
+		|| !IsValid(HitComponent)
+		|| !ImpactTargetComponents.Contains(HitComponent))
 	{
-		return;
+		return false;
 	}
-	if (OtherActor == Owner ||
-		(OtherComponent && OtherComponent->GetOwner() == Owner))
+	if (ImpactSource == Owner)
 	{
-		return;
+		return false;
 	}
-	if (OtherActor && OtherActor->IsA<ANPStablePhysicsPawn>())
+	if (ImpactSource && ImpactSource->IsA<ANPStablePhysicsPawn>())
 	{
-		return;
+		return false;
 	}
 
 	const UWorld* World = GetWorld();
@@ -123,10 +160,9 @@ void UNPImpactReceiveComponent::HandleHit(
 	if (CurrentTime < IgnoreDamageUntilTime
 		|| CurrentTime < NextDamageAllowedTime)
 	{
-		return;
+		return false;
 	}
 
-	const float ImpactStrength = NormalImpulse.Size();
 	const float ValidMinImpact = FMath::Min(
 		MinImpactThreshold,
 		MaxImpactThreshold);
@@ -135,7 +171,7 @@ void UNPImpactReceiveComponent::HandleHit(
 		MaxImpactThreshold);
 	if (ImpactStrength < ValidMinImpact)
 	{
-		return;
+		return false;
 	}
 
 	const int32 ValidMinDamage = FMath::Max(
@@ -162,9 +198,11 @@ void UNPImpactReceiveComponent::HandleHit(
 
 	if (CurrentHealth <= 0)
 	{
-		const FVector ImpactLocation = Hit.ImpactPoint.IsNearlyZero()
+		const FVector ValidImpactLocation = ImpactLocation.IsNearlyZero()
 			? HitComponent->GetComponentLocation()
-			: FVector(Hit.ImpactPoint);
-		OnDepleted.Broadcast(ImpactLocation);
+			: ImpactLocation;
+		OnDepleted.Broadcast(ValidImpactLocation);
 	}
+
+	return true;
 }

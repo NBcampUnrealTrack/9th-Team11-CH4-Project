@@ -203,8 +203,12 @@ private:
 	void UnbindAimCrosshairFromAbilitySystem();
 	void HandleRelicAimingTagChanged(const FGameplayTag Tag, int32 NewCount);
 	void HandlePhotoAimingTagChanged(const FGameplayTag Tag, int32 NewCount);
+	void HandlePhotoCooldownTagChanged(const FGameplayTag Tag, int32 NewCount);
 	void SetAimCrosshairActive(bool bActive);
 	void SetPhotoAimWidgetActive(bool bActive);
+	void BeginPhotoCooldownDisplayUpdates();
+	void StopPhotoCooldownDisplayUpdates(bool bShowFullyCharged);
+	void UpdatePhotoCooldownDisplay();
 	bool IsHoldingAimableRelic() const;
 	UNPAbilitySystemComponent* ResolveAbilitySystem() const;
 	bool ShouldUseTouchControls() const;
@@ -236,6 +240,16 @@ private:
 	TWeakObjectPtr<UNPAbilitySystemComponent> AimCrosshairAbilitySystem;
 	FDelegateHandle RelicAimingTagChangedHandle;
 	FDelegateHandle PhotoAimingTagChangedHandle;
+	FDelegateHandle PhotoCooldownTagChangedHandle;
+	FTimerHandle PhotoCooldownDisplayTimer;
+
+	/** WBP_NPPhotoAim의 배터리를 구성하는 충전 칸 수입니다. */
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Aim", meta = (ClampMin = "1", UIMin = "1"))
+	int32 PhotoCooldownCellCount = 5;
+
+	/** 활성 쿨다운 Effect의 남은 시간을 UI에 반영하는 로컬 갱신 간격입니다. */
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Aim", meta = (ClampMin = "0.02", UIMin = "0.02", Units = "s"))
+	float PhotoCooldownDisplayUpdateInterval = 0.1f;
 
 	bool bMainWorldInputLocked = false;
 	bool bReportedMainWorldReady = false;
