@@ -1,6 +1,7 @@
 #include "UI/Result/NPPersonalResultWidget.h"
 
 #include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/TextBlock.h"
 #include "Core/Main/NPMainGameState.h"
 #include "Engine/World.h"
@@ -77,6 +78,11 @@ void UNPPersonalResultWidget::CreatePictureButtons()
 			}
 		}
 		PictureButton->InitializePhoto(PhotoId, CapturedPlayerName);
-		PictureList->AddChild(PictureButton);
+		if (UHorizontalBoxSlot* PictureSlot = Cast<UHorizontalBoxSlot>(PictureList->AddChild(PictureButton)))
+		{
+			FMargin SlotPadding = PictureSlot->GetPadding();
+			SlotPadding.Left = -5.0f;
+			PictureSlot->SetPadding(SlotPadding);
+		}
 	}
 }
