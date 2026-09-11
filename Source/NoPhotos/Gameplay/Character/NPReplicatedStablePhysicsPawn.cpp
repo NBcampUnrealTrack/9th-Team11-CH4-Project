@@ -255,12 +255,14 @@ void ANPReplicatedStablePhysicsPawn::StartTemporaryRagdoll()
 {
 	if (HasAuthority())
 	{
+		CancelGrab();
 		MulticastStartTemporaryRagdoll();
 	}
 }
 
 void ANPReplicatedStablePhysicsPawn::MulticastStartTemporaryRagdoll_Implementation()
 {
+	ResetLocalGrabState();
 	BeginTemporaryRagdoll();
 }
 
@@ -472,9 +474,10 @@ void ANPReplicatedStablePhysicsPawn::ApplyJumpRequest()
 
 void ANPReplicatedStablePhysicsPawn::ApplyRightHandState(bool bActive)
 {
-	if (bActive && IsPhotoStunned())
+	if (bActive
+		&& (IsPhotoStunned() || IsTemporaryRagdollOrRecovering()))
 	{
-		CancelGrabForPhotoStun();
+		CancelGrab();
 		return;
 	}
 
@@ -641,7 +644,8 @@ void ANPReplicatedStablePhysicsPawn::ServerRequestAimableRelicFire_Implementatio
 void ANPReplicatedStablePhysicsPawn::ServerSetRightHandActive_Implementation(
 	bool bActive)
 {
-	if (bActive && IsPhotoStunned())
+	if (bActive
+		&& (IsPhotoStunned() || IsTemporaryRagdollOrRecovering()))
 	{
 		SetServerRightHandState(false);
 		return;
@@ -659,6 +663,25 @@ bool ANPReplicatedStablePhysicsPawn::IsPhotoStunned() const
 
 void ANPReplicatedStablePhysicsPawn::CancelGrabForPhotoStun()
 {
+	CancelGrab();
+}
+
+void ANPReplicatedStablePhysicsPawn::CancelGrab()
+{
+	ResetLocalGrabState();
+
+	if (HasAuthority())
+	{
+		SetServerRightHandState(false);
+	}
+	else if (IsLocallyControlled())
+	{
+		ServerSetRightHandActive(false);
+	}
+}
+
+void ANPReplicatedStablePhysicsPawn::ResetLocalGrabState()
+{
 #if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
 	bDebugGrabLocked = false;
 	bDebugGrabWasConfirmed = false;
@@ -671,15 +694,6 @@ void ANPReplicatedStablePhysicsPawn::CancelGrabForPhotoStun()
 	ClearRightHandIKWorldTarget();
 	RightHandGrab->SetGameplayNotificationsEnabled(true);
 	RightHandGrab->SetGrabRequested(false);
-
-	if (HasAuthority())
-	{
-		SetServerRightHandState(false);
-	}
-	else if (IsLocallyControlled())
-	{
-		ServerSetRightHandActive(false);
-	}
 }
 
 void ANPReplicatedStablePhysicsPawn::OnRep_RightHandActive()
