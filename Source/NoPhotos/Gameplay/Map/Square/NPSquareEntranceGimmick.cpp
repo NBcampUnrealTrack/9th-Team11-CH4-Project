@@ -2,6 +2,7 @@
 
 #include "CollisionQueryParams.h"
 #include "CollisionShape.h"
+#include "Components/AudioComponent.h"
 #include "Components/ArrowComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -12,7 +13,10 @@
 #include "GameFramework/Pawn.h"
 #include "Gameplay/Interaction/Components/GrabbableComponent.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
+#include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
+#include "Sound/SoundBase.h"
+#include "TimerManager.h"
 
 ANPSquareEntranceGimmick::ANPSquareEntranceGimmick()
 {
@@ -84,6 +88,7 @@ void ANPSquareEntranceGimmick::BeginPlay()
 
 void ANPSquareEntranceGimmick::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	StopSoundSequence();
 	if (Grabbable.IsValid())
 	{
 		Grabbable->OnActiveGrabCountChanged.RemoveAll(this);
@@ -180,6 +185,18 @@ void ANPSquareEntranceGimmick::ApplyState()
 	const bool bFalling = State.Phase == ENPSquareEntrancePhase::Falling;
 	const bool bStacked = State.Phase == ENPSquareEntrancePhase::Stacked;
 	const bool bDisappearing = State.Phase == ENPSquareEntrancePhase::Disappearing;
+	if (State.Phase != AppliedSoundPhase)
+	{
+		AppliedSoundPhase = State.Phase;
+		if (bFalling)
+		{
+			StartSoundSequence();
+		}
+		else if (bIdle || bDisappearing)
+		{
+			StopSoundSequence();
+		}
+	}
 	if (bFalling && FallingAreaBarrier->GetCollisionEnabled() == ECollisionEnabled::NoCollision
 		&& !PushPlayersOutsideBarriers())
 	{
@@ -237,6 +254,88 @@ void ANPSquareEntranceGimmick::ApplyState()
 	{
 		EntranceBarrier->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
+}
+
+void ANPSquareEntranceGimmick::StartSoundSequence()
+{
+	StopSoundSequence();
+	if (GetNetMode() == NM_DedicatedServer || !IsValid(GimmickSound) || SoundPlayCount < 1)
+	{
+		return;
+	}
+
+	PlayNextSound();
+	if (PlayedSoundCount >= SoundPlayCount)
+	{
+		return;
+	}
+
+	const float Interval = FMath::Max(0.0f, SoundPlayInterval);
+	if (Interval <= 0.0f)
+	{
+		while (PlayedSoundCount < SoundPlayCount)
+		{
+			PlayNextSound();
+		}
+		return;
+	}
+
+	GetWorldTimerManager().SetTimer(
+		SoundSequenceTimerHandle,
+		this,
+		&ANPSquareEntranceGimmick::PlayNextSound,
+		Interval,
+		true);
+}
+
+void ANPSquareEntranceGimmick::PlayNextSound()
+{
+	if (PlayedSoundCount >= SoundPlayCount || !IsValid(GimmickSound))
+	{
+		GetWorldTimerManager().ClearTimer(SoundSequenceTimerHandle);
+		return;
+	}
+
+	ActiveSoundComponents.RemoveAll([](const TWeakObjectPtr<UAudioComponent>& AudioComponent)
+	{
+		return !AudioComponent.IsValid() || !AudioComponent->IsPlaying();
+	});
+	const float MinPitch = FMath::Max(0.01f, FMath::Min(MinSoundPitch, MaxSoundPitch));
+	const float MaxPitch = FMath::Max(MinPitch, FMath::Max(MinSoundPitch, MaxSoundPitch));
+	UAudioComponent* AudioComponent = UGameplayStatics::SpawnSoundAtLocation(
+		this,
+		GimmickSound,
+		GetActorLocation(),
+		FRotator::ZeroRotator,
+		1.0f,
+		FMath::FRandRange(MinPitch, MaxPitch),
+		0.0f,
+		GimmickSoundAttenuation);
+	if (IsValid(AudioComponent))
+	{
+		AudioComponent->StopDelayed(FMath::Max(0.01f, SoundPlayDuration));
+		ActiveSoundComponents.Add(AudioComponent);
+	}
+	++PlayedSoundCount;
+
+	if (PlayedSoundCount >= SoundPlayCount)
+	{
+		GetWorldTimerManager().ClearTimer(SoundSequenceTimerHandle);
+	}
+}
+
+void ANPSquareEntranceGimmick::StopSoundSequence()
+{
+	GetWorldTimerManager().ClearTimer(SoundSequenceTimerHandle);
+	for (const TWeakObjectPtr<UAudioComponent>& AudioComponent : ActiveSoundComponents)
+	{
+		if (AudioComponent.IsValid())
+		{
+			AudioComponent->Stop();
+		}
+	}
+	ActiveSoundComponents.Reset();
+	PlayedSoundCount = 0;
 }
 
 bool ANPSquareEntranceGimmick::PushPlayersOutsideBarriers()

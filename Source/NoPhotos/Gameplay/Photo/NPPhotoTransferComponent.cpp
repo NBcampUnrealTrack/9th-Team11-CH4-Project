@@ -29,6 +29,10 @@ void UNPPhotoTransferComponent::BeginPlay()
 
 void UNPPhotoTransferComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(DownloadTimeoutTimer);
+	}
 	if (IsValid(ObservedGameState))
 	{
 		ObservedGameState->OnPhotoEvidenceChanged.RemoveDynamic(
@@ -190,8 +194,9 @@ void UNPPhotoTransferComponent::TickComponent(
 		else if (!Download.bFinishSent)
 		{
 			Download.bFinishSent = true;
-			ClientFinishPhotoDownload(Download.Header.PhotoId);
+			const FGuid CompletedPhotoId = Download.Header.PhotoId;
 			PendingDownload.Reset();
+			ClientFinishPhotoDownload(CompletedPhotoId);
 		}
 	}
 }
@@ -249,9 +254,75 @@ void UNPPhotoTransferComponent::StartNextDownloadRequest()
 		}
 
 		ActiveDownloadPhotoId = PhotoId;
-		ServerRequestPhoto(PhotoId);
+		ActiveDownloadRetryCount = 0;
+		SendActiveDownloadRequest();
 		return;
 	}
+}
+
+void UNPPhotoTransferComponent::SendActiveDownloadRequest()
+{
+	if (!ActiveDownloadPhotoId.IsValid()
+		|| ReceivedPhotoTextures.Contains(ActiveDownloadPhotoId))
+	{
+		return;
+	}
+
+	if (!IncomingDownload.IsSet())
+	{
+		ServerRequestPhoto(ActiveDownloadPhotoId);
+	}
+	RestartDownloadTimeout();
+}
+
+void UNPPhotoTransferComponent::RestartDownloadTimeout()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			DownloadTimeoutTimer,
+			this,
+			&ThisClass::HandleDownloadRequestTimeout,
+			DownloadRequestTimeoutSeconds,
+			false);
+	}
+}
+
+void UNPPhotoTransferComponent::HandleDownloadAttemptFailed()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(DownloadTimeoutTimer);
+	}
+	IncomingDownload.Reset();
+
+	if (!ActiveDownloadPhotoId.IsValid())
+	{
+		StartNextDownloadRequest();
+		return;
+	}
+
+	if (ActiveDownloadRetryCount < MaximumDownloadRetryCount)
+	{
+		++ActiveDownloadRetryCount;
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().SetTimerForNextTick(
+				this, &ThisClass::SendActiveDownloadRequest);
+		}
+		return;
+	}
+
+	const FGuid FailedPhotoId = ActiveDownloadPhotoId;
+	ActiveDownloadPhotoId.Invalidate();
+	ActiveDownloadRetryCount = 0;
+	OnPhotoDownloadFailed.Broadcast(FailedPhotoId);
+	StartNextDownloadRequest();
+}
+
+void UNPPhotoTransferComponent::HandleDownloadRequestTimeout()
+{
+	HandleDownloadAttemptFailed();
 }
 
 bool UNPPhotoTransferComponent::IsValidHeader(const FNPPhotoTransferHeader& Header)
@@ -394,6 +465,7 @@ void UNPPhotoTransferComponent::ClientBeginPhotoDownload_Implementation(
 	Download.Header = Header;
 	Download.Data.Reserve(Header.TotalBytes);
 	IncomingDownload = MoveTemp(Download);
+	RestartDownloadTimeout();
 }
 
 void UNPPhotoTransferComponent::ClientReceivePhotoChunk_Implementation(
@@ -419,6 +491,7 @@ void UNPPhotoTransferComponent::ClientReceivePhotoChunk_Implementation(
 	}
 	Download.Data.Append(ChunkData);
 	++Download.NextChunkIndex;
+	RestartDownloadTimeout();
 }
 
 void UNPPhotoTransferComponent::ClientFinishPhotoDownload_Implementation(FGuid PhotoId)
@@ -427,8 +500,7 @@ void UNPPhotoTransferComponent::ClientFinishPhotoDownload_Implementation(FGuid P
 	{
 		if (PhotoId == ActiveDownloadPhotoId)
 		{
-			ActiveDownloadPhotoId.Invalidate();
-			StartNextDownloadRequest();
+			HandleDownloadAttemptFailed();
 		}
 		return;
 	}
@@ -440,17 +512,25 @@ void UNPPhotoTransferComponent::ClientFinishPhotoDownload_Implementation(FGuid P
 		|| Download.Data.Num() != Download.Header.TotalBytes
 		|| !ImageCodec)
 	{
-		ActiveDownloadPhotoId.Invalidate();
-		StartNextDownloadRequest();
+		HandleDownloadAttemptFailed();
 		return;
 	}
 
-	if (UTexture2D* Texture = ImageCodec->DecodeJpegToTexture(Download.Data))
+	UTexture2D* Texture = ImageCodec->DecodeJpegToTexture(Download.Data);
+	if (!IsValid(Texture))
 	{
-		ReceivedPhotoTextures.Add(PhotoId, Texture);
-		ReceivedPhotoJpegData.Add(PhotoId, MoveTemp(Download.Data));
-		OnPhotoTextureReceived.Broadcast(PhotoId, Texture);
+		HandleDownloadAttemptFailed();
+		return;
 	}
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(DownloadTimeoutTimer);
+	}
+	ReceivedPhotoTextures.Add(PhotoId, Texture);
+	ReceivedPhotoJpegData.Add(PhotoId, MoveTemp(Download.Data));
+	OnPhotoTextureReceived.Broadcast(PhotoId, Texture);
 	ActiveDownloadPhotoId.Invalidate();
+	ActiveDownloadRetryCount = 0;
 	StartNextDownloadRequest();
 }

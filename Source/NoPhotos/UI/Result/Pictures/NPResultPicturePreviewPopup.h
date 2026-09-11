@@ -42,7 +42,8 @@ private:
 	void HandlePhotoFullyLiked(FGuid FullyLikedPhotoId, int32 LikeCount);
 	UFUNCTION()
 	void HandlePhotoTextureReceived(FGuid ReceivedPhotoId, UTexture2D* Texture);
-	void HandleDownloadTimeout();
+	UFUNCTION()
+	void HandlePhotoDownloadFailed(FGuid FailedPhotoId);
 
 	void EnsureDownloadButton();
 	void EnsureLikeControls();
@@ -100,6 +101,4 @@ private:
 	bool bFullyLikedPulseActive = false;
 	float FullyLikedPulseElapsed = 0.0f;
 	FVector2D FullyLikedPulseBaseScale = FVector2D(1.0f);
-	FTimerHandle DownloadTimeoutTimer;
-	static constexpr float DownloadTimeoutSeconds = 5.0f;
 };

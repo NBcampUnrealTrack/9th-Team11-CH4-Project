@@ -49,6 +49,8 @@ void UNPResultPicturePreviewPopup::NativeConstruct()
 	{
 		TransferComponent->OnPhotoTextureReceived.AddUniqueDynamic(
 			this, &ThisClass::HandlePhotoTextureReceived);
+		TransferComponent->OnPhotoDownloadFailed.AddUniqueDynamic(
+			this, &ThisClass::HandlePhotoDownloadFailed);
 	}
 
 	ObservedGameState = GetWorld() ? GetWorld()->GetGameState<ANPMainGameState>() : nullptr;
@@ -65,14 +67,12 @@ void UNPResultPicturePreviewPopup::NativeConstruct()
 
 void UNPResultPicturePreviewPopup::NativeDestruct()
 {
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(DownloadTimeoutTimer);
-	}
 	if (IsValid(TransferComponent))
 	{
 		TransferComponent->OnPhotoTextureReceived.RemoveDynamic(
 			this, &ThisClass::HandlePhotoTextureReceived);
+		TransferComponent->OnPhotoDownloadFailed.RemoveDynamic(
+			this, &ThisClass::HandlePhotoDownloadFailed);
 	}
 	if (IsValid(CloseButton))
 	{
@@ -179,15 +179,6 @@ void UNPResultPicturePreviewPopup::OpenForPhoto(
 	{
 		bPhotoRequestPending = true;
 		TransferComponent->RequestPhoto(PhotoId, true);
-		if (UWorld* World = GetWorld())
-		{
-			World->GetTimerManager().SetTimer(
-				DownloadTimeoutTimer,
-				this,
-				&ThisClass::HandleDownloadTimeout,
-				DownloadTimeoutSeconds,
-				false);
-		}
 	}
 }
 
@@ -281,6 +272,22 @@ void UNPResultPicturePreviewPopup::HandlePhotoTextureReceived(
 	{
 		DisplayPhoto(Texture);
 	}
+}
+
+void UNPResultPicturePreviewPopup::HandlePhotoDownloadFailed(
+	const FGuid FailedPhotoId)
+{
+	if (FailedPhotoId != PhotoId)
+	{
+		return;
+	}
+
+	bPhotoRequestPending = false;
+	if (IsValid(DownloadButton))
+	{
+		DownloadButton->SetIsEnabled(false);
+	}
+	SetDownloadButtonText(FText::FromString(TEXT("사진 불러오기 실패")));
 }
 
 void UNPResultPicturePreviewPopup::EnsureDownloadButton()
@@ -456,10 +463,6 @@ void UNPResultPicturePreviewPopup::StartFullyLikedPulse()
 
 void UNPResultPicturePreviewPopup::DisplayPhoto(UTexture2D* Texture)
 {
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(DownloadTimeoutTimer);
-	}
 	if (IsValid(PreviewImage) && IsValid(Texture))
 	{
 		PreviewImage->SetBrushFromTexture(Texture);
@@ -472,17 +475,6 @@ void UNPResultPicturePreviewPopup::DisplayPhoto(UTexture2D* Texture)
 	}
 	SetDownloadButtonText(FText::FromString(TEXT("내려받기")));
 }
-
-void UNPResultPicturePreviewPopup::HandleDownloadTimeout()
-{
-	bPhotoRequestPending = false;
-	if (IsValid(DownloadButton))
-	{
-		DownloadButton->SetIsEnabled(false);
-	}
-	SetDownloadButtonText(FText::FromString(TEXT("사진 불러오기 실패")));
-}
-
 void UNPResultPicturePreviewPopup::SetDownloadButtonText(const FText& Text) const
 {
 	if (IsValid(DownloadButtonText))

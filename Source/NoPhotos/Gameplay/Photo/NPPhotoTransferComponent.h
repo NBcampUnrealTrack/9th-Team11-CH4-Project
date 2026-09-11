@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "TimerManager.h"
 #include "NPPhotoTransferComponent.generated.h"
 
 class UTexture2D;
@@ -39,6 +40,11 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	UTexture2D*,
 	Texture);
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FNPOnPhotoDownloadFailed,
+	FGuid,
+	PhotoId);
+
 /** JPEG의 분할 업로드, 서버 조립, 대상 클라이언트 다운로드를 담당합니다. */
 UCLASS(ClassGroup=(Photo), meta=(BlueprintSpawnableComponent))
 class NOPHOTOS_API UNPPhotoTransferComponent : public UActorComponent
@@ -64,6 +70,9 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category="Photo|Transfer")
 	FNPOnPhotoTextureReceived OnPhotoTextureReceived;
+
+	UPROPERTY(BlueprintAssignable, Category="Photo|Transfer")
+	FNPOnPhotoDownloadFailed OnPhotoDownloadFailed;
 
 protected:
 	virtual void BeginPlay() override;
@@ -97,6 +106,10 @@ private:
 	void StartNextUpload();
 	void EnsurePhotoEvidenceBinding();
 	void StartNextDownloadRequest();
+	void SendActiveDownloadRequest();
+	void RestartDownloadTimeout();
+	void HandleDownloadAttemptFailed();
+	void HandleDownloadRequestTimeout();
 
 	UFUNCTION()
 	void HandlePhotoEvidenceChanged();
@@ -130,6 +143,8 @@ private:
 	TArray<FGuid> QueuedDownloadPhotoIds;
 	TSet<FGuid> KnownDownloadPhotoIds;
 	FGuid ActiveDownloadPhotoId;
+	int32 ActiveDownloadRetryCount = 0;
+	FTimerHandle DownloadTimeoutTimer;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNPPhotoImageCodec> ImageCodec;
@@ -144,4 +159,6 @@ private:
 	static constexpr int32 ChunkSize = 16 * 1024;
 	static constexpr int32 MaximumPhotoBytes = 256 * 1024;
 	static constexpr int32 MaximumDimension = 2048;
+	static constexpr int32 MaximumDownloadRetryCount = 1;
+	static constexpr float DownloadRequestTimeoutSeconds = 5.0f;
 };
