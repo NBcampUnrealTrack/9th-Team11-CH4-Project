@@ -964,7 +964,7 @@ void ANPStablePhysicsPawn::HandleScanPressed()
 		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(this));
 	if (AbilitySystem)
 	{
-		AbilitySystem->ActivateScanAbility();
+		AbilitySystem->ActivateScanOrRelicUseAbility();
 	}
 }
 

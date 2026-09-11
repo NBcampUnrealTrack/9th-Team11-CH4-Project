@@ -1,12 +1,20 @@
 #include "Gameplay/Relic/Components/NPThrowableRelicComponent.h"
 
+#include "AbilitySystemBlueprintLibrary.h"
+#include "AbilitySystemComponent.h"
+#include "Components/AudioComponent.h"
 #include "Components/PrimitiveComponent.h"
+#include "Core/GameplayTag/NPGameplayTags.h"
+#include "DrawDebugHelpers.h"
 #include "Engine/World.h"
+#include "Gameplay/AbilitySystem/Effects/NPKnockbackGameplayEffect.h"
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Gameplay/Character/NPStablePhysicsPawn.h"
 #include "Gameplay/Interaction/Components/GrabbableComponent.h"
 #include "Gameplay/Relic/Abilities/NPThrowableRelicUseAbility.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
+#include "Kismet/GameplayStatics.h"
+#include "PhysicsEngine/BodyInstance.h"
 #include "TimerManager.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogNPThrowableRelic, Log, All);
@@ -16,6 +24,21 @@ UNPThrowableRelicComponent::UNPThrowableRelicComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 	SetIsReplicatedByDefault(true);
 	SetUseAbilityClass(UNPThrowableRelicUseAbility::StaticClass());
+	ThrowSettings.KnockbackEffectClass =
+		UNPKnockbackGameplayEffect::StaticClass();
+}
+
+void UNPThrowableRelicComponent::BeginPlay()
+{
+	Super::BeginPlay();
+	if (UGrabbableComponent* Grabbable = GetOwner()
+		? GetOwner()->FindComponentByClass<UGrabbableComponent>()
+		: nullptr)
+	{
+		Grabbable->OnGrabStarted.AddUObject(
+			this,
+			&ThisClass::HandleRelicGrabStarted);
+	}
 }
 
 bool UNPThrowableRelicComponent::CanThrow(
@@ -90,6 +113,10 @@ bool UNPThrowableRelicComponent::TryThrow(ANPStablePhysicsPawn* ThrowerPawn)
 	RelicMesh->WakeAllRigidBodies();
 	RelicMesh->SetPhysicsLinearVelocity(ThrowVelocity, false);
 	RelicMesh->SetPhysicsAngularVelocityInDegrees(AngularVelocity, false);
+	BeginFlight(RelicMesh);
+	ThrowInstigator = ThrowerPawn;
+	ThrowSourceAbilitySystem =
+		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(ThrowerPawn);
 	NextThrowAllowedTime = World->GetTimeSeconds()
 		+ (FMath::IsFinite(ThrowSettings.Cooldown)
 			? FMath::Max(0.0f, ThrowSettings.Cooldown)
@@ -109,6 +136,248 @@ bool UNPThrowableRelicComponent::TryThrow(ANPStablePhysicsPawn* ThrowerPawn)
 		*GetNameSafe(Relic), *GetNameSafe(ThrowerPawn),
 		*ThrowVelocity.ToCompactString(), *AngularVelocity.ToCompactString());
 	return true;
+}
+
+void UNPThrowableRelicComponent::BeginFlight(UPrimitiveComponent* RelicMesh)
+{
+	AActor* OwnerActor = GetOwner();
+	UWorld* World = GetWorld();
+	if (!IsValid(OwnerActor) || !OwnerActor->HasAuthority()
+		|| !IsValid(World) || !IsValid(RelicMesh))
+	{
+		return;
+	}
+
+	EndFlight(false);
+	FlightHitMesh = RelicMesh;
+	if (const FBodyInstance* BodyInstance = RelicMesh->GetBodyInstance())
+	{
+		bPreviousFlightNotifyRigidBodyCollision =
+			BodyInstance->bNotifyRigidBodyCollision;
+	}
+	else
+	{
+		bPreviousFlightNotifyRigidBodyCollision = false;
+	}
+	RelicMesh->SetNotifyRigidBodyCollision(true);
+	RelicMesh->OnComponentHit.AddUniqueDynamic(
+		this,
+		&ThisClass::HandleThrownRelicHit);
+	bFlightActive = true;
+
+	const float SafeMaximumDuration = FMath::IsFinite(MaximumFlyingSoundDuration)
+		? FMath::Max(0.1f, MaximumFlyingSoundDuration)
+		: 10.0f;
+	World->GetTimerManager().SetTimer(
+		FlightTimeoutTimer,
+		this,
+		&ThisClass::HandleFlightTimeout,
+		SafeMaximumDuration,
+		false);
+	MulticastBeginFlyingAudio();
+}
+
+void UNPThrowableRelicComponent::EndFlight(
+	const bool bPlayImpactSound,
+	const FVector& ImpactLocation)
+{
+	AActor* OwnerActor = GetOwner();
+	if (!IsValid(OwnerActor) || !OwnerActor->HasAuthority() || !bFlightActive)
+	{
+		return;
+	}
+
+	bFlightActive = false;
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(FlightTimeoutTimer);
+	}
+	if (UPrimitiveComponent* HitMesh = FlightHitMesh.Get())
+	{
+		HitMesh->OnComponentHit.RemoveDynamic(
+			this,
+			&ThisClass::HandleThrownRelicHit);
+		HitMesh->SetNotifyRigidBodyCollision(
+			bPreviousFlightNotifyRigidBodyCollision);
+	}
+	FlightHitMesh.Reset();
+	MulticastEndFlyingAudio(bPlayImpactSound, ImpactLocation);
+	ThrowInstigator.Reset();
+	ThrowSourceAbilitySystem.Reset();
+}
+
+void UNPThrowableRelicComponent::HandleThrownRelicHit(
+	UPrimitiveComponent* HitComponent,
+	AActor* OtherActor,
+	UPrimitiveComponent*,
+	FVector,
+	const FHitResult& Hit)
+{
+	if (!bFlightActive || HitComponent != FlightHitMesh.Get()
+		|| !Hit.bBlockingHit)
+	{
+		return;
+	}
+
+	TryApplyKnockback(HitComponent, OtherActor, Hit);
+	const FVector ImpactLocation = Hit.ImpactPoint.IsNearlyZero()
+		? HitComponent->GetComponentLocation()
+		: FVector(Hit.ImpactPoint);
+	EndFlight(true, ImpactLocation);
+}
+
+void UNPThrowableRelicComponent::TryApplyKnockback(
+	UPrimitiveComponent* HitComponent,
+	AActor* OtherActor,
+	const FHitResult& Hit)
+{
+	AActor* OwnerActor = GetOwner();
+	AActor* InstigatorActor = ThrowInstigator.Get();
+	UAbilitySystemComponent* SourceASC = ThrowSourceAbilitySystem.Get();
+	const FNPRelicThrowSettings& Settings = GetThrowSettings();
+	if (!Settings.bCanKnockbackCharacters
+		|| !IsValid(OwnerActor)
+		|| !OwnerActor->HasAuthority()
+		|| !IsValid(HitComponent)
+		|| !IsValid(OtherActor)
+		|| OtherActor == OwnerActor
+		|| OtherActor == InstigatorActor
+		|| !IsValid(SourceASC)
+		|| !Settings.KnockbackEffectClass)
+	{
+		return;
+	}
+
+	FVector KnockbackDirection =
+		HitComponent->GetPhysicsLinearVelocityAtPoint(Hit.ImpactPoint);
+	KnockbackDirection.Z = 0.0f;
+	const float HorizontalSpeed = KnockbackDirection.Size();
+	if (HorizontalSpeed < FMath::Max(0.0f, Settings.MinimumKnockbackSpeed))
+	{
+		return;
+	}
+	KnockbackDirection /= HorizontalSpeed;
+
+	UAbilitySystemComponent* TargetASC =
+		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(OtherActor);
+	if (!IsValid(TargetASC))
+	{
+		return;
+	}
+
+	FHitResult KnockbackHit = Hit;
+	KnockbackHit.TraceStart = Hit.ImpactPoint;
+	KnockbackHit.TraceEnd = Hit.ImpactPoint + KnockbackDirection;
+	FGameplayEffectContextHandle EffectContext = SourceASC->MakeEffectContext();
+	EffectContext.AddSourceObject(OwnerActor);
+	EffectContext.AddHitResult(KnockbackHit, true);
+
+	FGameplayEffectSpecHandle EffectSpec = SourceASC->MakeOutgoingSpec(
+		Settings.KnockbackEffectClass,
+		1.0f,
+		EffectContext);
+	if (!EffectSpec.IsValid())
+	{
+		return;
+	}
+
+	EffectSpec.Data->AddDynamicAssetTag(NPGameplayTags::Effect_Knockback);
+	EffectSpec.Data->SetSetByCallerMagnitude(
+		NPGameplayTags::Data_Knockback_Magnitude,
+		FMath::Max(0.0f, Settings.KnockbackStrength));
+	SourceASC->ApplyGameplayEffectSpecToTarget(*EffectSpec.Data.Get(), TargetASC);
+
+	if (Settings.ImpactCueTag.IsValid())
+	{
+		FGameplayCueParameters CueParameters(EffectContext);
+		CueParameters.Location = Hit.ImpactPoint;
+		CueParameters.Normal = Hit.ImpactNormal;
+		TargetASC->ExecuteGameplayCue(Settings.ImpactCueTag, CueParameters);
+	}
+}
+
+void UNPThrowableRelicComponent::HandleRelicGrabStarted(
+	UPrimitiveComponent*)
+{
+	EndFlight(false);
+}
+
+void UNPThrowableRelicComponent::HandleFlightTimeout()
+{
+	EndFlight(false);
+}
+
+void UNPThrowableRelicComponent::MulticastBeginFlyingAudio_Implementation()
+{
+	if (GetNetMode() == NM_DedicatedServer || !FlyingLoopSound)
+	{
+		return;
+	}
+
+	StopFlyingAudio(false);
+	if (UPrimitiveComponent* RelicMesh = ResolveRelicMesh())
+	{
+		ActiveFlyingAudio = UGameplayStatics::SpawnSoundAttached(
+			FlyingLoopSound,
+			RelicMesh,
+			NAME_None,
+			FVector::ZeroVector,
+			FRotator::ZeroRotator,
+			EAttachLocation::KeepRelativeOffset,
+			true,
+			1.0f,
+			1.0f,
+			0.0f,
+			ThrowSoundAttenuation,
+			nullptr,
+			true);
+	}
+}
+
+void UNPThrowableRelicComponent::MulticastEndFlyingAudio_Implementation(
+	const bool bPlayImpactSound,
+	const FVector_NetQuantize10 ImpactLocation)
+{
+	if (GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+
+	StopFlyingAudio(true);
+	if (bPlayImpactSound && ImpactSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(
+			this,
+			ImpactSound,
+			FVector(ImpactLocation),
+			1.0f,
+			1.0f,
+			0.0f,
+			ThrowSoundAttenuation);
+	}
+}
+
+void UNPThrowableRelicComponent::StopFlyingAudio(const bool bFadeOut)
+{
+	if (!IsValid(ActiveFlyingAudio))
+	{
+		ActiveFlyingAudio = nullptr;
+		return;
+	}
+
+	const float FadeDuration = FMath::IsFinite(FlyingSoundFadeOutDuration)
+		? FMath::Max(0.0f, FlyingSoundFadeOutDuration)
+		: 0.0f;
+	if (bFadeOut && FadeDuration > UE_SMALL_NUMBER
+		&& ActiveFlyingAudio->IsPlaying())
+	{
+		ActiveFlyingAudio->FadeOut(FadeDuration, 0.0f);
+	}
+	else
+	{
+		ActiveFlyingAudio->Stop();
+	}
+	ActiveFlyingAudio = nullptr;
 }
 
 FVector UNPThrowableRelicComponent::CalculateThrowVelocity(
@@ -168,8 +437,25 @@ void UNPThrowableRelicComponent::MulticastBeginPawnCollisionGrace_Implementation
 	}
 	RestorePawnCollision();
 	CollisionGraceMesh = Mesh;
-	PreviousPawnCollisionResponse = Mesh->GetCollisionResponseToChannel(ECC_Pawn);
-	Mesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	const FNPRelicThrowSettings& Settings = GetThrowSettings();
+	if (Settings.bIgnorePawnDuringCollisionGrace)
+	{
+		PreviousPawnCollisionResponse = Mesh->GetCollisionResponseToChannel(ECC_Pawn);
+		Mesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+		bPawnCollisionGraceApplied = true;
+	}
+	if (Settings.bIgnorePhysicsBodyDuringCollisionGrace)
+	{
+		PreviousPhysicsBodyCollisionResponse =
+			Mesh->GetCollisionResponseToChannel(ECC_PhysicsBody);
+		Mesh->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Ignore);
+		bPhysicsBodyCollisionGraceApplied = true;
+	}
+	if (!bPawnCollisionGraceApplied && !bPhysicsBodyCollisionGraceApplied)
+	{
+		CollisionGraceMesh.Reset();
+		return;
+	}
 	World->GetTimerManager().SetTimer(
 		CollisionGraceTimer,
 		this,
@@ -186,14 +472,48 @@ void UNPThrowableRelicComponent::RestorePawnCollision()
 	}
 	if (UPrimitiveComponent* Mesh = CollisionGraceMesh.Get())
 	{
-		Mesh->SetCollisionResponseToChannel(ECC_Pawn, PreviousPawnCollisionResponse);
+		if (bPawnCollisionGraceApplied)
+		{
+			Mesh->SetCollisionResponseToChannel(ECC_Pawn, PreviousPawnCollisionResponse);
+		}
+		if (bPhysicsBodyCollisionGraceApplied)
+		{
+			Mesh->SetCollisionResponseToChannel(
+				ECC_PhysicsBody,
+				PreviousPhysicsBodyCollisionResponse);
+		}
 	}
 	CollisionGraceMesh.Reset();
+	bPawnCollisionGraceApplied = false;
+	bPhysicsBodyCollisionGraceApplied = false;
 }
 
 void UNPThrowableRelicComponent::EndPlay(
 	const EEndPlayReason::Type EndPlayReason)
 {
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(FlightTimeoutTimer);
+	}
+	if (UPrimitiveComponent* HitMesh = FlightHitMesh.Get())
+	{
+		HitMesh->OnComponentHit.RemoveDynamic(
+			this,
+			&ThisClass::HandleThrownRelicHit);
+		HitMesh->SetNotifyRigidBodyCollision(
+			bPreviousFlightNotifyRigidBodyCollision);
+	}
+	FlightHitMesh.Reset();
+	bFlightActive = false;
+	ThrowInstigator.Reset();
+	ThrowSourceAbilitySystem.Reset();
+	StopFlyingAudio(false);
+	if (UGrabbableComponent* Grabbable = GetOwner()
+		? GetOwner()->FindComponentByClass<UGrabbableComponent>()
+		: nullptr)
+	{
+		Grabbable->OnGrabStarted.RemoveAll(this);
+	}
 	RestorePawnCollision();
 	Super::EndPlay(EndPlayReason);
 }

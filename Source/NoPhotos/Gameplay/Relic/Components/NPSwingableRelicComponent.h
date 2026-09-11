@@ -7,6 +7,7 @@
 class UAbilitySystemComponent;
 class UGameplayEffect;
 class UPrimitiveComponent;
+class USoundBase;
 
 USTRUCT(BlueprintType)
 struct NOPHOTOS_API FNPRelicSwingSettings
@@ -19,6 +20,18 @@ struct NOPHOTOS_API FNPRelicSwingSettings
 	/** 한 번 휘두르기가 끝난 뒤 다음 사용 입력을 받을 때까지의 대기시간입니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Swing", meta=(ClampMin="0.0", Units="s"))
 	float CooldownAfterSwing = 0.25f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Swing|Sound")
+	TObjectPtr<USoundBase> SwingSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Swing|Sound", meta=(ClampMin="0.01", Units="s"))
+	float SoundInterval = 0.2f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Swing|Sound", meta=(ClampMin="0.01"))
+	float MinimumPitch = 0.9f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Swing|Sound", meta=(ClampMin="0.01"))
+	float MaximumPitch = 1.1f;
 
 	/** 부호에 따라 회전 방향이 결정됩니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Swing")
@@ -85,6 +98,8 @@ public:
 	}
 	bool CanStartSwing() const;
 	void StartSwingCooldown();
+	void StartSwingSound();
+	void StopSwingSound();
 
 	void StartHitDetection(
 		AActor* InAttackInstigator,
@@ -96,6 +111,13 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
+	void PlaySwingSound();
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlaySwingSound(FVector Location, float Pitch);
+
+	FTimerHandle SwingSoundTimer;
+
 	UFUNCTION()
 	void HandleRelicHit(
 		UPrimitiveComponent* HitComponent,
