@@ -252,6 +252,11 @@ void ANPReplicatedStablePhysicsPawn::ClientSetExternalVerticalVelocity_Implement
 
 void ANPReplicatedStablePhysicsPawn::StartTemporaryRagdoll()
 {
+	if (IsCrowdControlImmune())
+	{
+		return;
+	}
+
 	if (HasAuthority())
 	{
 		CancelGrab();
@@ -645,6 +650,13 @@ bool ANPReplicatedStablePhysicsPawn::IsPhotoStunned() const
 			NPGameplayTags::State_CrowdControl_Stunned);
 }
 
+bool ANPReplicatedStablePhysicsPawn::IsCrowdControlImmune() const
+{
+	return IsValid(AbilitySystem)
+		&& AbilitySystem->HasMatchingGameplayTag(
+			NPGameplayTags::State_CrowdControl_Immune);
+}
+
 void ANPReplicatedStablePhysicsPawn::CancelGrabForPhotoStun()
 {
 	CancelGrab();
@@ -894,6 +906,10 @@ void ANPReplicatedStablePhysicsPawn::HandleGrabbedComponentChanged(
 	else
 	{
 		ReplicatedGrabState = FReplicatedStableGrabState();
+	}
+	if (HasAuthority() && IsValid(NewGrabbedPawn))
+	{
+		OnPlayerPawnGrabbed.Broadcast(NewGrabbedPawn);
 	}
 	UpdateBlueprintGrabState(NewGrabbedComponent);
 	ForceNetUpdate();
