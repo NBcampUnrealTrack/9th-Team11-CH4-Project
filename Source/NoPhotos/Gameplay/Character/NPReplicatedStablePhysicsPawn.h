@@ -20,6 +20,12 @@ class UNPStablePhysicsNetworkPredictionComponent;
 class UNPPhotoCapturePenaltyComponent;
 class UNPScoreFeedbackWidgetComponent;
 class ANPBaseRelic;
+class ANPReplicatedStablePhysicsPawn;
+
+/** 서버에서 이 캐릭터가 다른 플레이어 잡기에 성공했을 때 전달합니다. */
+DECLARE_MULTICAST_DELEGATE_OneParam(
+	FNPPlayerPawnGrabbedSignature,
+	ANPReplicatedStablePhysicsPawn*);
 
 USTRUCT()
 struct FReplicatedStableGrabState
@@ -59,6 +65,10 @@ public:
 	UFUNCTION(BlueprintPure, Category="Photo|Penalty")
 	bool IsPhotoStunned() const;
 
+	/** 폭탄 돌리기 등 외부 규칙으로 현재 상태이상에 면역인지 반환합니다. */
+	UFUNCTION(BlueprintPure, Category="Crowd Control")
+	bool IsCrowdControlImmune() const;
+
 	/** 스턴 진입 시 누르고 있던 Grab 요청과 로컬 예측 상태를 즉시 해제합니다. */
 	void CancelGrabForPhotoStun();
 
@@ -83,6 +93,9 @@ public:
 
 	/** 서버 사진 검증 등에서 소유 클라이언트가 복제한 최신 시점 회전을 조회합니다. */
 	FRotator GetServerViewRotation() const { return GetTargetViewRotation(); }
+
+	/** 서버에서 다른 플레이어 잡기가 확정될 때만 호출되는 네이티브 알림입니다. */
+	FNPPlayerPawnGrabbedSignature OnPlayerPawnGrabbed;
 
 	virtual AActor* GetHeldRelic_Implementation() const override;
 

@@ -27,6 +27,9 @@ namespace NPGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(
 		State_CrowdControl_Stunned,
 		"State.CrowdControl.Stunned");
+	UE_DEFINE_GAMEPLAY_TAG(
+		State_CrowdControl_Immune,
+		"State.CrowdControl.Immune");
 	UE_DEFINE_GAMEPLAY_TAG(Effect_Knockback, "Effect.Knockback");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Impact, "GameplayCue.Impact");
 	UE_DEFINE_GAMEPLAY_TAG(

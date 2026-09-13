@@ -29,6 +29,8 @@ namespace NPGameplayTags
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Photo_Shot);
 	/** 이동과 조준을 포함한 플레이 조작이 스턴으로 차단된 상태입니다. */
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_CrowdControl_Stunned);
+	/** 맵 이벤트 등 외부 규칙에 의해 스턴과 넉백 래그돌을 받지 않는 상태입니다. */
+	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_CrowdControl_Immune);
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Effect_Knockback);
 	/** 투명화 상태. 서버 판정과 클라이언트 표현이 함께 조회합니다. */
 	NOPHOTOS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Invisible);

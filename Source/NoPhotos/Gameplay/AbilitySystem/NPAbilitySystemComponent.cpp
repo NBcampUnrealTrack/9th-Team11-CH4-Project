@@ -240,6 +240,11 @@ void UNPAbilitySystemComponent::HandleGameplayEffectApplied(
 void UNPAbilitySystemComponent::HandleKnockbackEffect(
 	const FGameplayEffectSpec& EffectSpec)
 {
+	if (HasMatchingGameplayTag(NPGameplayTags::State_CrowdControl_Immune))
+	{
+		return;
+	}
+
 	const FHitResult* Hit = EffectSpec.GetContext().GetHitResult();
 	if (!Hit)
 	{

@@ -120,6 +120,14 @@ bool UNPPhotoCapturePenaltyComponent::ApplyCapturedWithRelicPenalty(
 			*GetNameSafe(Pawn));
 		return false;
 	}
+	if (AbilitySystem->HasMatchingGameplayTag(
+		NPGameplayTags::State_CrowdControl_Immune))
+	{
+		UE_LOG(LogNPPhoto, Log,
+			TEXT("[PhotoStun][Apply] Ignored by crowd-control immunity. Pawn=%s"),
+			*GetNameSafe(Pawn));
+		return false;
+	}
 
 	const float SafeStunDuration = FMath::Max(0.01f, StunDuration);
 	FGameplayEffectContextHandle EffectContext = AbilitySystem->MakeEffectContext();
