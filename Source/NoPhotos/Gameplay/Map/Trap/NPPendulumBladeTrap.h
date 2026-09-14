@@ -67,6 +67,12 @@ protected:
 		meta=(ClampMin="0.01", Units="s"))
 	float ReturnToRestDuration = 0.5f;
 
+	/** 진자가 중앙을 통과할 때 각 클라이언트에서 한 번씩 호출됩니다. */
+	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic,
+		Category="Pendulum Blade Trap|Presentation",
+		meta=(DisplayName="On Blade Center Passed"))
+	void BP_OnBladeCenterPassed();
+
 private:
 	void UpdateBladePose();
 	void QueryBladeSweep(
@@ -77,4 +83,6 @@ private:
 
 	FRotator RestRelativeRotation = FRotator::ZeroRotator;
 	FRotator ReturnStartRelativeRotation = FRotator::ZeroRotator;
+	float PreviousSwingValue = 0.0f;
+	bool bHasPreviousSwingValue = false;
 };
