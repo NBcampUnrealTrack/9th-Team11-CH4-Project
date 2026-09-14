@@ -143,7 +143,7 @@ void UNPSoundSubsystem::PlayBGM(USoundBase* Sound, const float FadeDuration, con
 		PreviousBGMComponent->FadeOut(SafeFadeDuration, 0.0f);
 	}
 
-	CurrentBGMComponent->FadeIn(SafeFadeDuration, 1.0f);
+	CurrentBGMComponent->FadeIn(SafeFadeDuration, BGMDuckMultiplier);
 }
 
 void UNPSoundSubsystem::StopBGM(const float FadeOutDuration)
@@ -251,4 +251,22 @@ void UNPSoundSubsystem::SetBGMVolume(const float InVolume)
 		CurrentAmbientComponent->SetVolumeMultiplier(
 			CurrentAmbientBaseVolume * BGMVolume * MasterVolume);
 	}
+}
+
+void UNPSoundSubsystem::SetBGMDuckMultiplier(
+	const float InMultiplier,
+	const float FadeDuration)
+{
+	BGMDuckMultiplier = FMath::IsFinite(InMultiplier)
+		? FMath::Clamp(InMultiplier, 0.0f, 1.0f)
+		: 1.0f;
+	if (!IsValid(CurrentBGMComponent))
+	{
+		return;
+	}
+
+	const float SafeFadeDuration = FMath::IsFinite(FadeDuration)
+		? FMath::Max(0.0f, FadeDuration)
+		: 0.25f;
+	CurrentBGMComponent->AdjustVolume(SafeFadeDuration, BGMDuckMultiplier);
 }

@@ -50,14 +50,28 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="CCTV Event|Sound")
 	TArray<FNPCCTVEventSoundSegment> EventSounds;
 
+	/** 이벤트 음원이 재생되는 동안 적용할 BGM 음량 배율입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="CCTV Event|Sound",
+		meta=(ClampMin="0.0", ClampMax="1.0"))
+	float EventSoundBGMDuckMultiplier = 0.3f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="CCTV Event|Sound",
+		meta=(ClampMin="0.0", Units="s"))
+	float BGMDuckFadeDuration = 0.25f;
+
 private:
 	void SetRectLightsDisabled(bool bDisabled);
 	void StartEventSounds();
 	void PlayEventSound(int32 SoundIndex);
 	void StopEventSounds();
+	void SetBGMDucked(bool bDucked);
+
+	UFUNCTION()
+	void HandleEventSoundFinished();
 
 	TMap<TWeakObjectPtr<URectLightComponent>, float> SavedRectLightIntensities;
 	TMap<TWeakObjectPtr<ANPStablePhysicsPawn>, float> TargetReservationEndTimes;
 	TArray<FTimerHandle> EventSoundTimerHandles;
 	TArray<TWeakObjectPtr<UAudioComponent>> ActiveEventSounds;
+	bool bBGMDucked = false;
 };
