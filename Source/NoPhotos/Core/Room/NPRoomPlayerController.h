@@ -2,9 +2,14 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "GameplayTagContainer.h"
 #include "NPRoomPlayerController.generated.h"
 
 class UNPRoomPlayerComponent;
+class UNPAbilitySystemComponent;
+class UNPAimCrosshairWidget;
+class UNPPhotoCaptureComponent;
+class UNPPhotoFlashWidget;
 class UNPUserWidget;
 class UUserWidget;
 class UInputMappingContext;
@@ -26,6 +31,15 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Chat")
 	UNPChatComponent* GetChatComponent() const { return ChatComponent; }
+
+	UFUNCTION(BlueprintPure, Category="Photo")
+	UNPPhotoCaptureComponent* GetPhotoCaptureComponent() const
+	{
+		return PhotoCaptureComponent;
+	}
+
+	void PlayPhotoFlash();
+	void PlayPresentationOnlyShutterCue();
 
 	UFUNCTION(BlueprintCallable, Category = "Room")
 	void RequestStartGame();
@@ -60,6 +74,9 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void OnPossess(APawn* InPawn) override;
+	virtual void OnRep_Pawn() override;
 	virtual void SetupInputComponent() override;
 	virtual bool InputKey(const FInputKeyEventArgs& Params) override;
 
@@ -68,6 +85,21 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UNPChatComponent> ChatComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	TObjectPtr<UNPPhotoCaptureComponent> PhotoCaptureComponent;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input|Photo")
+	TObjectPtr<UInputAction> AimAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input|Photo")
+	TObjectPtr<UInputAction> FireAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Photo")
+	TSubclassOf<UNPAimCrosshairWidget> PhotoAimWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Photo")
+	TSubclassOf<UNPPhotoFlashWidget> PhotoFlashWidgetClass;
 
 	UPROPERTY(EditAnywhere, Category = "Input|Input Mappings")
 	TArray<TObjectPtr<UInputMappingContext>> DefaultMappingContexts;
@@ -93,10 +125,40 @@ protected:
 	bool bIsMouseInput = false;
 
 private:
+	void HandlePhotoAimStarted();
+	void HandlePhotoFireStarted();
+	void BindPhotoUIToAbilitySystem();
+	void UnbindPhotoUIFromAbilitySystem();
+	void HandlePhotoAimingTagChanged(const FGameplayTag Tag, int32 NewCount);
+	void HandlePhotoCooldownTagChanged(const FGameplayTag Tag, int32 NewCount);
+	void SetPhotoAimWidgetActive(bool bActive);
+	void BeginPhotoCooldownDisplayUpdates();
+	void StopPhotoCooldownDisplayUpdates(bool bShowFullyCharged);
+	void UpdatePhotoCooldownDisplay();
+	UNPAbilitySystemComponent* ResolveAbilitySystem() const;
 	bool ShouldUseTouchControls() const;
 	void SetCharacterInputMappingEnabled(bool bEnabled);
 	void SetLobbyInputMappingEnabled(bool bEnabled);
 	void ApplyLobbyInputMode();
 	void ToggleOptionPanel();
 	void ShowSingleScreen(TSubclassOf<UNPUserWidget> WidgetClass);
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNPAimCrosshairWidget> PhotoAimWidget;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNPPhotoFlashWidget> PhotoFlashWidget;
+
+	TWeakObjectPtr<UNPAbilitySystemComponent> PhotoUIAbilitySystem;
+	FDelegateHandle PhotoAimingTagChangedHandle;
+	FDelegateHandle PhotoCooldownTagChangedHandle;
+	FTimerHandle PhotoCooldownDisplayTimer;
+
+	UPROPERTY(EditDefaultsOnly, Category="UI|Photo",
+		meta=(ClampMin="1", UIMin="1"))
+	int32 PhotoCooldownCellCount = 5;
+
+	UPROPERTY(EditDefaultsOnly, Category="UI|Photo",
+		meta=(ClampMin="0.02", UIMin="0.02", Units="s"))
+	float PhotoCooldownDisplayUpdateInterval = 0.1f;
 };

@@ -3,6 +3,7 @@
 #include "AbilitySystemComponent.h"
 #include "Core/GameplayTag/NPGameplayTags.h"
 #include "Core/Main/NPMainPlayerController.h"
+#include "Core/Room/NPRoomPlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Gameplay/Photo/NPPhotoCaptureComponent.h"
@@ -83,24 +84,22 @@ void UNPPhotoAimAbility::ActivateAbility(
 		ActivePhotoCaptureComponent = PhotoCapture;
 	}
 
-	// LocalPredicted Ability는 촬영 클라이언트와 서버에서 모두 실행될 수 있으므로,
-	// 네트워크 Cue는 권한 있는 실행에서만 요청해 중복 재생을 막습니다.
-	if (ActorInfo->IsNetAuthority())
+	// LocalPredicted Ability의 Prediction Key가 촬영자 클라이언트에서
+	// 서버 Multicast Cue의 중복 재생을 제거합니다. 로컬에서도 즉시 실행해야
+	// 촬영자 클라이언트가 준비음을 들을 수 있습니다.
+	APawn* Pawn = Cast<APawn>(ActorInfo->AvatarActor.Get());
+	UAbilitySystemComponent* AbilitySystem =
+		ActorInfo->AbilitySystemComponent.Get();
+	if (Pawn && AbilitySystem)
 	{
-		APawn* Pawn = Cast<APawn>(ActorInfo->AvatarActor.Get());
-		UAbilitySystemComponent* AbilitySystem =
-			ActorInfo->AbilitySystemComponent.Get();
-		if (Pawn && AbilitySystem)
-		{
-			FGameplayCueParameters CueParameters;
-			CueParameters.Location = Pawn->GetActorLocation();
-			CueParameters.Normal = Pawn->GetActorForwardVector();
-			CueParameters.Instigator = Pawn;
-			CueParameters.EffectCauser = Pawn;
-			AbilitySystem->ExecuteGameplayCue(
-				NPGameplayTags::GameplayCue_Photo_AimStart,
-				CueParameters);
-		}
+		FGameplayCueParameters CueParameters;
+		CueParameters.Location = Pawn->GetActorLocation();
+		CueParameters.Normal = Pawn->GetActorForwardVector();
+		CueParameters.Instigator = Pawn;
+		CueParameters.EffectCauser = Pawn;
+		AbilitySystem->ExecuteGameplayCue(
+			NPGameplayTags::GameplayCue_Photo_AimStart,
+			CueParameters);
 	}
 }
 
@@ -134,7 +133,15 @@ UNPPhotoCaptureComponent* UNPPhotoAimAbility::ResolvePhotoCaptureComponent(
 	const ANPMainPlayerController* PlayerController = Pawn
 		? Cast<ANPMainPlayerController>(Pawn->GetController())
 		: nullptr;
-	return PlayerController
-		? PlayerController->GetPhotoCaptureComponent()
+	if (PlayerController)
+	{
+		return PlayerController->GetPhotoCaptureComponent();
+	}
+
+	const ANPRoomPlayerController* RoomPlayerController = Pawn
+		? Cast<ANPRoomPlayerController>(Pawn->GetController())
+		: nullptr;
+	return RoomPlayerController
+		? RoomPlayerController->GetPhotoCaptureComponent()
 		: nullptr;
 }
