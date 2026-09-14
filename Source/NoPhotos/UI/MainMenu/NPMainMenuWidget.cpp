@@ -1,9 +1,11 @@
 #include "UI/MainMenu/NPMainMenuWidget.h"
+#include "Animation/WidgetAnimation.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Core/Room/NPRoomSubsystem.h"
 #include "Core/Title/NPTitlePlayerController.h"
@@ -55,6 +57,9 @@ void UNPMainMenuWidget::NativeConstruct()
 	{
 		TitlePlayerController->FindRooms();
 	}
+
+	CurrentCarouselImageIndex = 0;
+	PlayNextCarouselImage();
 }
 
 void UNPMainMenuWidget::NativeDestruct()
@@ -80,6 +85,16 @@ void UNPMainMenuWidget::NativeDestruct()
 	}
 
 	Super::NativeDestruct();
+}
+
+void UNPMainMenuWidget::OnAnimationFinished_Implementation(const UWidgetAnimation* Animation)
+{
+	Super::OnAnimationFinished_Implementation(Animation);
+
+	if (Animation == ImageAnim)
+	{
+		PlayNextCarouselImage();
+	}
 }
 
 void UNPMainMenuWidget::OnHostGameClicked()
@@ -108,6 +123,23 @@ void UNPMainMenuWidget::OnExitClicked()
 {
 	APlayerController* PC = GetOwningPlayer();
 	UKismetSystemLibrary::QuitGame(GetWorld(), PC, EQuitPreference::Quit, false);
+}
+
+void UNPMainMenuWidget::PlayNextCarouselImage()
+{
+	if (!IsValid(Image) || CarouselImages.IsEmpty())
+	{
+		return;
+	}
+
+	CurrentCarouselImageIndex %= CarouselImages.Num();
+	Image->SetBrushFromTexture(CarouselImages[CurrentCarouselImageIndex], true);
+	CurrentCarouselImageIndex = (CurrentCarouselImageIndex + 1) % CarouselImages.Num();
+
+	if (IsValid(ImageAnim))
+	{
+		PlayAnimation(ImageAnim);
+	}
 }
 
 void UNPMainMenuWidget::ShowConnectionFailureMessage(const FText& Message)
