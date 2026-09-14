@@ -39,6 +39,7 @@ ANPCCTVSensor::ANPCCTVSensor()
 	StatusIndicatorMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("StatusIndicatorMesh"));
 	StatusIndicatorMesh->SetupAttachment(SensorYawPivot);
 	StatusIndicatorMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	StatusIndicatorMesh->SetHiddenInGame(true);
 
 	SensorLight = CreateDefaultSubobject<USpotLightComponent>(TEXT("SensorLight"));
 	SensorLight->SetupAttachment(SensorYawPivot);
@@ -48,6 +49,7 @@ ANPCCTVSensor::ANPCCTVSensor()
 	SensorLight->SetOuterConeAngle(22.0f);
 	SensorLight->SetIntensity(100000.0f);
 	SensorLight->SetVolumetricScatteringIntensity(0.0f);
+	SensorLight->SetHiddenInGame(true);
 
 	BeamMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BeamMesh"));
 	BeamMesh->SetupAttachment(SensorLight);
@@ -55,6 +57,7 @@ ANPCCTVSensor::ANPCCTVSensor()
 	BeamMesh->SetGenerateOverlapEvents(false);
 	BeamMesh->SetCanEverAffectNavigation(false);
 	BeamMesh->SetCastShadow(false);
+	BeamMesh->SetHiddenInGame(true);
 
 	BeamFillMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BeamFillMesh"));
 	BeamFillMesh->SetupAttachment(SensorLight);
@@ -62,6 +65,7 @@ ANPCCTVSensor::ANPCCTVSensor()
 	BeamFillMesh->SetGenerateOverlapEvents(false);
 	BeamFillMesh->SetCanEverAffectNavigation(false);
 	BeamFillMesh->SetCastShadow(false);
+	BeamFillMesh->SetHiddenInGame(true);
 
 	GunAimPivot = CreateDefaultSubobject<USceneComponent>(TEXT("GunAimPivot"));
 	GunAimPivot->SetupAttachment(SensorYawPivot);
@@ -167,6 +171,10 @@ void ANPCCTVSensor::ApplyCCTVActiveState()
 {
 	SetActorTickEnabled(bCCTVActive);
 	GunMesh->SetHiddenInGame(!bCCTVActive);
+	SensorLight->SetHiddenInGame(!bCCTVActive);
+	BeamMesh->SetHiddenInGame(!bCCTVActive);
+	BeamFillMesh->SetHiddenInGame(!bCCTVActive);
+	StatusIndicatorMesh->SetHiddenInGame(!bCCTVActive);
 
 	if (!bCCTVActive)
 	{
@@ -442,7 +450,7 @@ void ANPCCTVSensor::UpdatePresentation(const float ServerTime)
 			? 1.0f
 			: 0.1f;
 	}
-	const float VisualAlpha = FadeAlpha * PulseAlpha;
+	const float VisualAlpha = bCCTVActive ? FadeAlpha * PulseAlpha : 0.0f;
 
 	SensorLight->SetLightColor(StateColor);
 	SensorLight->SetIntensity(InitialLightIntensity * VisualAlpha);
