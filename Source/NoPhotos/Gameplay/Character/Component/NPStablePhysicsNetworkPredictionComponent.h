@@ -51,6 +51,8 @@ public:
 	void SendJumpRequest();
 	void SetExternalGrabActive(bool bActive) { bExternalGrabActive = bActive; }
 	void SetServerAuthoritativeInteraction(bool bActive);
+	/** 서버에서 소유 클라이언트가 가장 최근 보고한 물리 Root 위치를 반환합니다. */
+	bool GetLatestClientRootLocation(FVector& OutLocation) const;
 
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;

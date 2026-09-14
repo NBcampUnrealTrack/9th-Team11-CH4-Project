@@ -8,6 +8,8 @@ class ANPReplicatedStablePhysicsPawn;
 class ANPAimableRelicVisualProjectile;
 class UAbilitySystemComponent;
 class UGameplayEffect;
+class UPrimitiveComponent;
+class USceneComponent;
 class UWorld;
 
 USTRUCT(BlueprintType)
@@ -61,6 +63,8 @@ public:
 	UNPAimableRelicComponent();
 
 	const FNPRelicAimSettings& GetAimSettings() const { return AimSettings; }
+	FTransform GetMuzzleWorldTransform() const { return GetMuzzleTransform(); }
+	void SetMuzzleSourceComponent(USceneComponent* InMuzzleSourceComponent);
 
 	/** 서버에서 발사 간격을 검증하고 Line Trace 및 넉백 Effect를 적용합니다. */
 	virtual bool TryFire(
@@ -68,6 +72,20 @@ public:
 		UAbilitySystemComponent* SourceAbilitySystem,
 		const FVector& CameraLocation,
 		const FVector& CameraForward);
+
+	/** 플레이어 입력 없이 총구의 월드 방향으로 발사합니다. 서버 권한 액터가 호출해야 합니다. */
+	bool TryFireFromWorldDirection(
+		AActor* SourceActor,
+		UAbilitySystemComponent* SourceAbilitySystem,
+		const FVector& FireDirection);
+
+	/** 이동 중인 명시적 대상의 현재 위치를 향해 발사합니다. 중간 장애물은 그대로 피격됩니다. */
+	bool TryFireAtTarget(
+		AActor* SourceActor,
+		UAbilitySystemComponent* SourceAbilitySystem,
+		AActor* TargetActor,
+		UPrimitiveComponent* TargetComponent,
+		const FVector& TargetLocation);
 
 protected:
 	bool TryConsumeFireCooldown();
@@ -84,6 +102,17 @@ protected:
 		FVector_NetQuantize10 EndLocation);
 
 private:
+	bool TryFireInternal(
+		AActor* SourceActor,
+		ANPReplicatedStablePhysicsPawn* AimAssistSourcePawn,
+		UAbilitySystemComponent* SourceAbilitySystem,
+		const FVector& TraceStart,
+		const FVector& FireDirection,
+		bool bAllowAimAssist,
+		AActor* ExplicitTargetActor,
+		UPrimitiveComponent* ExplicitTargetComponent,
+		const FVector& ExplicitTargetLocation);
+
 	bool TryFindAssistedPlayer(
 		UWorld* World,
 		const FVector& TraceStart,
@@ -102,6 +131,8 @@ private:
 	/** BP 조준 유물에서 Niagara Trail을 설정한 로컬 장식 투사체 클래스를 지정합니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Aimable Relic|Effects", meta=(AllowPrivateAccess="true"))
 	TSubclassOf<ANPAimableRelicVisualProjectile> VisualProjectileClass;
+
+	TWeakObjectPtr<USceneComponent> MuzzleSourceComponent;
 
 	double LastServerFireTime = -TNumericLimits<double>::Max();
 };

@@ -257,6 +257,29 @@ void UNPStablePhysicsNetworkPredictionComponent::ServerSetClientRootState_Implem
 	ClientRootState = NewRootState;
 }
 
+bool UNPStablePhysicsNetworkPredictionComponent::GetLatestClientRootLocation(
+	FVector& OutLocation) const
+{
+	const AActor* Owner = GetOwner();
+	if (!Owner
+		|| !Owner->HasAuthority()
+		|| bServerAuthoritativeInteraction
+		|| !bHasReceivedClientRootState)
+	{
+		return false;
+	}
+
+	const float StateAge = GetEstimatedServerWorldTime()
+		- ClientRootState.ServerWorldTime;
+	if (!FMath::IsFinite(StateAge) || StateAge > MaximumServerStateAge)
+	{
+		return false;
+	}
+
+	OutLocation = FVector(ClientRootState.Position);
+	return true;
+}
+
 void UNPStablePhysicsNetworkPredictionComponent::OnRep_ServerRootState()
 {
 	bHasServerRootState = true;
