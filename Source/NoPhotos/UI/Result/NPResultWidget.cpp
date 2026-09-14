@@ -1,9 +1,13 @@
 #include "UI/Result/NPResultWidget.h"
 
+#include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
+#include "Components/Widget.h"
+#include "Core/Audio/NPSoundSubsystem.h"
 #include "Core/Main/NPMainGameState.h"
 #include "Core/Main/NPMainPlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "UI/Result/NPResultListWidget.h"
 
 UNPResultWidget::UNPResultWidget(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -33,6 +37,8 @@ void UNPResultWidget::NativeConstruct()
 		ExitButton->OnClicked.AddDynamic(this, &UNPResultWidget::OnExitClicked);
 	}
 
+	BindResultListWidget();
+
 	ObservedGameState = GetWorld() ? GetWorld()->GetGameState<ANPMainGameState>() : nullptr;
 	if (IsValid(ObservedGameState))
 	{
@@ -56,6 +62,11 @@ void UNPResultWidget::NativeDestruct()
 	{
 		ObservedGameState->OnPhotoFullyLiked.RemoveDynamic(
 			this, &ThisClass::HandlePhotoFullyLiked);
+	}
+	if (IsValid(ResultListWidget))
+	{
+		ResultListWidget->OnResultEntryRevealed.RemoveDynamic(
+			this, &ThisClass::HandleResultEntryRevealed);
 	}
 
 	Super::NativeDestruct();
@@ -87,5 +98,38 @@ void UNPResultWidget::HandlePhotoFullyLiked(
 	if (IsValid(FullyLikedSound))
 	{
 		UGameplayStatics::PlaySound2D(this, FullyLikedSound);
+	}
+}
+
+void UNPResultWidget::HandleResultEntryRevealed(const int32 Rank)
+{
+	const int32 SoundIndex = Rank == 1 ? 0 : 1;
+	if (RankingRevealSounds.IsValidIndex(SoundIndex)
+		&& IsValid(RankingRevealSounds[SoundIndex]))
+	{
+		if (UNPSoundSubsystem* SoundSubsystem = UNPSoundSubsystem::Get(this))
+		{
+			SoundSubsystem->PlaySFX(RankingRevealSounds[SoundIndex]);
+		}
+	}
+}
+
+void UNPResultWidget::BindResultListWidget()
+{
+	if (!IsValid(ResultListWidget) && IsValid(WidgetTree))
+	{
+		WidgetTree->ForEachWidget([this](UWidget* Widget)
+		{
+			if (!IsValid(ResultListWidget))
+			{
+				ResultListWidget = Cast<UNPResultListWidget>(Widget);
+			}
+		});
+	}
+
+	if (IsValid(ResultListWidget))
+	{
+		ResultListWidget->OnResultEntryRevealed.AddUniqueDynamic(
+			this, &ThisClass::HandleResultEntryRevealed);
 	}
 }

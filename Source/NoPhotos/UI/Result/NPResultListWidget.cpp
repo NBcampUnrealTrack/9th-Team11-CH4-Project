@@ -63,8 +63,6 @@ void UNPResultListWidget::RefreshResultList()
 	ResultEntryWidgets.Reset();
 	ResultEntryWidgets.Reserve(PendingPlayerRankings.Num());
 
-	// 최종 순서(1위 -> 최하위)를 먼저 만들고 모두 숨긴다.
-	// Hidden은 레이아웃 공간을 유지하므로 최하위가 처음부터 제 자리에 나타난다.
 	for (int32 RankingIndex = 0;
 		RankingIndex < PendingPlayerRankings.Num();
 		++RankingIndex)
@@ -143,6 +141,7 @@ void UNPResultListWidget::AddNextResultEntry()
 		ResultEntryWidgets[NextRankingIndex])
 	{
 		PersonalResultWidget->SetVisibility(ESlateVisibility::Visible);
+		OnResultEntryRevealed.Broadcast(NextRankingIndex + 1);
 	}
 
 	--NextRankingIndex;
