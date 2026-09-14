@@ -49,6 +49,14 @@ void UNPShowPicture::SetSelected(const bool InSelected)
 	}
 }
 
+void UNPShowPicture::SetSelectionEnabled(const bool bEnabled)
+{
+	if (IsValid(SelectButton))
+	{
+		SelectButton->SetIsEnabled(bEnabled);
+	}
+}
+
 void UNPShowPicture::OnSelectButtonClicked()
 {
 	if (CurrentPictureIndex == INDEX_NONE)

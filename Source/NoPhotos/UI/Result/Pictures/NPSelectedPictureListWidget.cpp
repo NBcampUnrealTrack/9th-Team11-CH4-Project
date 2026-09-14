@@ -29,6 +29,7 @@ void UNPSelectedPictureListWidget::AddSelectedPicture(
 	}
 
 	SelectedPictureWidget->SetPicture(InTexture);
+	SelectedPictureWidget->SetRemovalEnabled(bRemovalEnabled);
 	SelectedPictureWidget->OnPictureClicked.AddUniqueDynamic(
 		this,
 		&ThisClass::HandlePictureWidgetClicked);
@@ -68,6 +69,19 @@ void UNPSelectedPictureListWidget::ClearSelectedPictures()
 
 	SelectedPictureWidgets.Empty();
 	PictureIndices.Empty();
+}
+
+void UNPSelectedPictureListWidget::SetRemovalEnabled(const bool bEnabled)
+{
+	bRemovalEnabled = bEnabled;
+
+	for (UNPSelectedPictureWidget* SelectedPictureWidget : SelectedPictureWidgets)
+	{
+		if (IsValid(SelectedPictureWidget))
+		{
+			SelectedPictureWidget->SetRemovalEnabled(bRemovalEnabled);
+		}
+	}
 }
 
 void UNPSelectedPictureListWidget::HandlePictureWidgetClicked(UNPSelectedPictureWidget* PictureWidget)

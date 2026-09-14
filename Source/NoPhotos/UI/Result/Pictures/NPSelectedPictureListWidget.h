@@ -22,6 +22,7 @@ public:
 	void AddSelectedPicture(UTexture2D* InTexture, int32 PictureIndex);
 	void RemoveSelectedPicture(int32 PictureIndex);
 	void ClearSelectedPictures();
+	void SetRemovalEnabled(bool bEnabled);
 
 	UPROPERTY(BlueprintAssignable, Category = "Picture")
 	FNPSelectedPictureListItemClicked OnPictureClicked;
@@ -42,6 +43,7 @@ private:
 	TArray<TObjectPtr<UNPSelectedPictureWidget>> SelectedPictureWidgets;
 	UPROPERTY(Transient)
 	TArray<int32> PictureIndices;
+	bool bRemovalEnabled = true;
 
 	UFUNCTION()
 	void HandlePictureWidgetClicked(UNPSelectedPictureWidget* PictureWidget);

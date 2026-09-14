@@ -25,7 +25,10 @@ FReply UNPSelectedPictureWidget::NativeOnPreviewMouseButtonDown(const FGeometry&
 
 	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
 	{
-		OnPictureRemoveRequested.Broadcast(this);
+		if (bRemovalEnabled)
+		{
+			OnPictureRemoveRequested.Broadcast(this);
+		}
 		return FReply::Handled();
 	}
 
@@ -38,6 +41,11 @@ void UNPSelectedPictureWidget::SetPicture(UTexture2D* InTexture)
 	{
 		SelectedImage->SetBrushFromTexture(InTexture);
 	}
+}
+
+void UNPSelectedPictureWidget::SetRemovalEnabled(const bool bEnabled)
+{
+	bRemovalEnabled = bEnabled;
 }
 
 void UNPSelectedPictureWidget::HandleImageButtonClicked()

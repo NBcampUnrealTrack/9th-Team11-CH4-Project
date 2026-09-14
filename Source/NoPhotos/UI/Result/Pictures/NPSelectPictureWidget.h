@@ -54,6 +54,7 @@ private:
 
 	void RequestOwnedPictures();
 	void ShowPicture(int32 PictureIndex);
+	void SetPictureSelectionEnabled(bool bEnabled);
 	void UpdateSelectedPictureCountText();
 	void UpdateNextPlayerText();
 	TArray<int32> GetSelectedPictureIndices() const;

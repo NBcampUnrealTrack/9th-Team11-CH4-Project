@@ -21,6 +21,7 @@ class NOPHOTOS_API UNPSelectedPictureWidget : public UNPUserWidget
 
 public:
 	void SetPicture(UTexture2D* InTexture);
+	void SetRemovalEnabled(bool bEnabled);
 
 	UPROPERTY(BlueprintAssignable, Category="Picture")
 	FNPSelectedPictureClicked OnPictureClicked;
@@ -40,4 +41,6 @@ private:
 	TObjectPtr<UButton> ImageButton;
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UImage> SelectedImage;
+
+	bool bRemovalEnabled = true;
 };

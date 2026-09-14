@@ -23,6 +23,7 @@ public:
 	
 	void SetPicture(UTexture2D* InTexture, int32 InPictureIndex);
 	void SetSelected(bool InSelected);
+	void SetSelectionEnabled(bool bEnabled);
 
 protected:
 	virtual void NativeConstruct() override;

@@ -80,6 +80,7 @@ void UNPSelectPictureWidget::NativeConstruct()
 
 	UpdateSelectedPictureCountText();
 	UpdateNextPlayerText();
+	SetPictureSelectionEnabled(!bWaitingForOtherPlayers);
 	RequestOwnedPictures();
 }
 
@@ -166,7 +167,8 @@ void UNPSelectPictureWidget::HandlePictureClicked(
 void UNPSelectPictureWidget::HandleSelectRequested(
 	const int32 PictureIndex)
 {
-	if (!IsValid(PictureListWidget)
+	if (bWaitingForOtherPlayers
+		|| !IsValid(PictureListWidget)
 		|| !PictureTextures.IsValidIndex(PictureIndex))
 	{
 		return;
@@ -213,7 +215,8 @@ void UNPSelectPictureWidget::HandleSelectedPictureClicked(
 void UNPSelectPictureWidget::HandleSelectedPictureRemoveRequested(
 	const int32 PictureIndex)
 {
-	if (!IsValid(PictureListWidget)
+	if (bWaitingForOtherPlayers
+		|| !IsValid(PictureListWidget)
 		|| !PictureTextures.IsValidIndex(PictureIndex)
 		|| !PictureListWidget->IsPictureSelected(PictureIndex))
 	{
@@ -251,6 +254,7 @@ void UNPSelectPictureWidget::HandleNextButtonClicked()
 	}
 
 	bWaitingForOtherPlayers = true;
+	SetPictureSelectionEnabled(false);
 	
 	if (IsValid(NextButton))
 	{
@@ -335,6 +339,19 @@ void UNPSelectPictureWidget::ShowPicture(
 	if (IsValid(PictureListWidget))
 	{
 		ShowPictureWidget->SetSelected(PictureListWidget->IsPictureSelected(PictureIndex));
+	}
+}
+
+void UNPSelectPictureWidget::SetPictureSelectionEnabled(const bool bEnabled)
+{
+	if (IsValid(ShowPictureWidget))
+	{
+		ShowPictureWidget->SetSelectionEnabled(bEnabled);
+	}
+
+	if (IsValid(SelectedPictureListWidget))
+	{
+		SelectedPictureListWidget->SetRemovalEnabled(bEnabled);
 	}
 }
 
