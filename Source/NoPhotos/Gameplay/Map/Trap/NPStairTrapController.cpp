@@ -12,9 +12,16 @@ ANPStairTrapController::ANPStairTrapController()
 	bReplicates = false;
 }
 
+void ANPStairTrapController::PostLoad()
+{
+	Super::PostLoad();
+	MigrateLegacyTrapEntries();
+}
+
 void ANPStairTrapController::BeginPlay()
 {
 	Super::BeginPlay();
+	MigrateLegacyTrapEntries();
 
 	if (!HasAuthority())
 	{
@@ -92,15 +99,19 @@ void ANPStairTrapController::BeginWarningPhase()
 
 	float MaximumStartDelay = 0.0f;
 	bool bHasCyclicTrap = false;
-	for (int32 TrapIndex = 0; TrapIndex < ControlledTraps.Num(); ++TrapIndex)
+	for (int32 TrapIndex = 0;
+		TrapIndex < ControlledTrapEntries.Num();
+		++TrapIndex)
 	{
-		ANPStairTrapBase* Trap = ControlledTraps[TrapIndex];
+		const FNPStairTrapControlEntry& Entry =
+			ControlledTrapEntries[TrapIndex];
+		ANPStairTrapBase* Trap = Entry.Trap;
 		if (!IsValid(Trap))
 		{
 			continue;
 		}
 
-		const float StartDelay = GetTrapStartDelay(TrapIndex);
+		const float StartDelay = FMath::Max(0.0f, Entry.StartDelay);
 		if (Trap->GetTrapOperationMode()
 			== ENPStairTrapOperationMode::Continuous)
 		{
@@ -189,12 +200,12 @@ void ANPStairTrapController::ApplyTrapState(
 	const int32 RunGeneration)
 {
 	if (!bSequenceRunning || RunGeneration != CurrentRunGeneration
-		|| !ControlledTraps.IsValidIndex(TrapIndex))
+		|| !ControlledTrapEntries.IsValidIndex(TrapIndex))
 	{
 		return;
 	}
 
-	ANPStairTrapBase* Trap = ControlledTraps[TrapIndex];
+	ANPStairTrapBase* Trap = ControlledTrapEntries[TrapIndex].Trap;
 	if (!IsValid(Trap))
 	{
 		return;
@@ -243,8 +254,9 @@ void ANPStairTrapController::SetAllTrapStates(
 	const ENPStairTrapState NewState)
 {
 	const float PhaseStartServerTime = GetServerTimeSeconds();
-	for (ANPStairTrapBase* Trap : ControlledTraps)
+	for (const FNPStairTrapControlEntry& Entry : ControlledTrapEntries)
 	{
+		ANPStairTrapBase* Trap = Entry.Trap;
 		if (!IsValid(Trap))
 		{
 			continue;
@@ -284,12 +296,23 @@ void ANPStairTrapController::ClearScheduledTransitions()
 	TrapTransitionTimers.Reset();
 }
 
-float ANPStairTrapController::GetTrapStartDelay(
-	const int32 TrapIndex) const
+void ANPStairTrapController::MigrateLegacyTrapEntries()
 {
-	return TrapStartDelays.IsValidIndex(TrapIndex)
-		? FMath::Max(0.0f, TrapStartDelays[TrapIndex])
-		: 0.0f;
+	if (!ControlledTrapEntries.IsEmpty() || ControlledTraps.IsEmpty())
+	{
+		return;
+	}
+
+	ControlledTrapEntries.Reserve(ControlledTraps.Num());
+	for (int32 TrapIndex = 0; TrapIndex < ControlledTraps.Num(); ++TrapIndex)
+	{
+		FNPStairTrapControlEntry& Entry =
+			ControlledTrapEntries.AddDefaulted_GetRef();
+		Entry.Trap = ControlledTraps[TrapIndex];
+		Entry.StartDelay = TrapStartDelays.IsValidIndex(TrapIndex)
+			? FMath::Max(0.0f, TrapStartDelays[TrapIndex])
+			: 0.0f;
+	}
 }
 
 float ANPStairTrapController::GetServerTimeSeconds() const

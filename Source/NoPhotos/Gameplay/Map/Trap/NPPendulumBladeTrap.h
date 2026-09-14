@@ -68,17 +68,10 @@ protected:
 	float ReturnToRestDuration = 0.5f;
 
 private:
-	UFUNCTION()
-	void HandleBladeBeginOverlap(
-		UPrimitiveComponent* OverlappedComponent,
-		AActor* OtherActor,
-		UPrimitiveComponent* OtherComponent,
-		int32 OtherBodyIndex,
-		bool bFromSweep,
-		const FHitResult& SweepResult);
-
 	void UpdateBladePose();
-	void EvaluateOverlappingPawns();
+	void QueryBladeSweep(
+		const FVector& StartWorldLocation,
+		const FVector& EndWorldLocation);
 	void TryKnockbackActor(AActor* OtherActor, const FHitResult& Hit);
 	void SetDamageCollisionEnabled(bool bEnabled);
 

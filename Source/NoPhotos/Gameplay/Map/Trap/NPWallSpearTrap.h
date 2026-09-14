@@ -17,6 +17,7 @@ class NOPHOTOS_API ANPWallSpearTrap : public ANPStairTrapBase
 public:
 	ANPWallSpearTrap();
 
+	virtual void PostInitializeComponents() override;
 	virtual void Tick(float DeltaSeconds) override;
 
 protected:
@@ -36,7 +37,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Wall Spear Trap")
 	TObjectPtr<UNPTrapKnockbackComponent> KnockbackComponent;
 
-	/** 접힌 위치에서 Actor Local Forward 방향으로 이동할 거리입니다. */
+	/** 밑동에서 Actor Local Forward 방향으로 완전히 뻗었을 때의 길이입니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Wall Spear Trap|Movement",
 		meta=(ClampMin="0.0", Units="cm"))
 	float ExtensionDistance = 300.0f;
@@ -49,6 +50,16 @@ protected:
 		meta=(ClampMin="0.01", Units="s"))
 	float RetractionDuration = 0.4f;
 
+	/** 찌르기 초반을 빠르게 만드는 EaseOut 지수입니다. 1이면 선형입니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Wall Spear Trap|Movement",
+		meta=(ClampMin="1.0"))
+	float ExtensionEaseExponent = 3.0f;
+
+	/** 회수 초반을 빠르게 만드는 EaseOut 지수입니다. 1이면 선형입니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Wall Spear Trap|Movement",
+		meta=(ClampMin="1.0"))
+	float RetractionEaseExponent = 3.0f;
+
 private:
 	UFUNCTION()
 	void HandleSpearHit(
@@ -59,9 +70,18 @@ private:
 		const FHitResult& Hit);
 
 	void UpdateSpearPose();
+	void CacheInitialSpearConfiguration();
+	void ApplySpearLengthAlpha(float LengthAlpha);
 	void MoveSpearTo(const FVector& NewRelativeLocation, bool bSweepForPlayers);
+	void QuerySpearSweep(
+		const FVector& StartWorldLocation,
+		const FVector& EndWorldLocation);
 	void SetDamageCollisionEnabled(bool bEnabled);
 
-	FVector RetractedRelativeLocation = FVector::ZeroVector;
-	FVector ExtendedRelativeLocation = FVector::ZeroVector;
+	/** 설정된 Collision 위치를 창이 시작되는 고정 밑동 위치로 사용합니다. */
+	FVector SpearBaseRelativeLocation = FVector::ZeroVector;
+	FVector OriginalSpearMeshRelativeLocation = FVector::ZeroVector;
+	FVector OriginalSpearMeshScale = FVector::OneVector;
+	FVector OriginalSpearCollisionExtent = FVector::ZeroVector;
+	bool bInitialSpearConfigurationCached = false;
 };

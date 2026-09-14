@@ -7,6 +7,20 @@
 class ANPStairTrapBase;
 enum class ENPStairTrapState : uint8;
 
+/** 컨트롤러가 제어할 함정과 해당 함정의 시작 지연을 한 항목으로 묶습니다. */
+USTRUCT(BlueprintType)
+struct NOPHOTOS_API FNPStairTrapControlEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Stair Trap")
+	TObjectPtr<ANPStairTrapBase> Trap = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stair Trap",
+		meta=(ClampMin="0.0", Units="s"))
+	float StartDelay = 0.0f;
+};
+
 /** 한 층에 배치된 계단 함정들의 공통 작동 주기를 서버에서 제어합니다. */
 UCLASS(Blueprintable)
 class NOPHOTOS_API ANPStairTrapController : public AActor
@@ -28,19 +42,22 @@ public:
 	bool IsTrapSequenceRunning() const { return bSequenceRunning; }
 
 protected:
+	virtual void PostLoad() override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	/** 이 컨트롤러가 함께 제어할 같은 층의 함정들입니다. */
+	/** 이 컨트롤러가 제어할 함정과 각 함정의 시작 지연입니다. */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Stair Trap")
+	TArray<FNPStairTrapControlEntry> ControlledTrapEntries;
+
+	/** 기존 배치 데이터의 자동 이전에만 사용합니다. */
+	UPROPERTY(meta=(DeprecatedProperty,
+		DeprecationMessage="Use ControlledTrapEntries instead."))
 	TArray<TObjectPtr<ANPStairTrapBase>> ControlledTraps;
 
-	/**
-	 * ControlledTraps와 같은 인덱스를 사용하는 함정별 시작 지연입니다.
-	 * 값이 없는 인덱스는 0초로 처리합니다.
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stair Trap|Timing",
-		meta=(ClampMin="0.0"))
+	/** 기존 배치 데이터의 자동 이전에만 사용합니다. */
+	UPROPERTY(meta=(DeprecatedProperty,
+		DeprecationMessage="Use ControlledTrapEntries instead."))
 	TArray<float> TrapStartDelays;
 
 	/** 테스트 맵 등에서만 사용합니다. 방 스트리밍 맵에서는 false가 안전합니다. */
@@ -79,6 +96,7 @@ protected:
 	void BP_OnTrapSequenceStopped();
 
 private:
+	void MigrateLegacyTrapEntries();
 	void BeginWarningPhase();
 	void FinishCycle();
 	void ApplyTrapState(
@@ -95,7 +113,6 @@ private:
 	void SetAllTrapStates(ENPStairTrapState NewState);
 	void ScheduleTransition(FTimerDelegate Transition, float Delay);
 	void ClearScheduledTransitions();
-	float GetTrapStartDelay(int32 TrapIndex) const;
 	float GetServerTimeSeconds() const;
 
 	FTimerHandle PhaseTimer;

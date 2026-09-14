@@ -3,7 +3,7 @@
 #include "Components/ArrowComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "GameFramework/Pawn.h"
+#include "Engine/World.h"
 #include "Gameplay/Map/Trap/NPTrapKnockbackComponent.h"
 
 ANPPendulumBladeTrap::ANPPendulumBladeTrap()
@@ -26,11 +26,9 @@ ANPPendulumBladeTrap::ANPPendulumBladeTrap()
 	BladeCollisionComponent->SetCollisionResponseToChannel(
 		ECC_PhysicsBody,
 		ECR_Overlap);
-	BladeCollisionComponent->SetGenerateOverlapEvents(true);
+	// 실제 피격은 서버의 명시적인 Box Query가 담당합니다.
+	BladeCollisionComponent->SetGenerateOverlapEvents(false);
 	BladeCollisionComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	BladeCollisionComponent->OnComponentBeginOverlap.AddDynamic(
-		this,
-		&ThisClass::HandleBladeBeginOverlap);
 
 	BladeMeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(
 		TEXT("BladeMeshComponent"));
@@ -60,11 +58,6 @@ void ANPPendulumBladeTrap::Tick(const float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	UpdateBladePose();
-
-	if (HasAuthority() && GetTrapState() == ENPStairTrapState::Active)
-	{
-		EvaluateOverlappingPawns();
-	}
 }
 
 void ANPPendulumBladeTrap::HandleTrapStateChanged(
@@ -97,17 +90,6 @@ void ANPPendulumBladeTrap::HandleTrapStateChanged(
 		NewState == ENPStairTrapState::Active
 		|| NewState == ENPStairTrapState::Returning);
 	UpdateBladePose();
-}
-
-void ANPPendulumBladeTrap::HandleBladeBeginOverlap(
-	UPrimitiveComponent*,
-	AActor* OtherActor,
-	UPrimitiveComponent*,
-	int32,
-	bool,
-	const FHitResult& SweepResult)
-{
-	TryKnockbackActor(OtherActor, SweepResult);
 }
 
 void ANPPendulumBladeTrap::UpdateBladePose()
@@ -159,24 +141,72 @@ void ANPPendulumBladeTrap::UpdateBladePose()
 		break;
 	}
 
-	PendulumPivotComponent->SetRelativeRotation(TargetRotation);
+	const FVector SweepStart = IsValid(BladeCollisionComponent)
+		? BladeCollisionComponent->GetComponentLocation()
+		: FVector::ZeroVector;
+
+	// 회전 컴포넌트 자체의 Collision Sweep/Block은 사용하지 않습니다.
+	// 칼날의 피격 판정은 회전 적용 후 별도 서버 Query Sweep으로 처리합니다.
+	PendulumPivotComponent->SetRelativeRotation(
+		TargetRotation,
+		false,
+		nullptr,
+		ETeleportType::TeleportPhysics);
+
+	if (HasAuthority()
+		&& GetTrapState() == ENPStairTrapState::Active
+		&& IsValid(BladeCollisionComponent))
+	{
+		QueryBladeSweep(
+			SweepStart,
+			BladeCollisionComponent->GetComponentLocation());
+	}
 }
 
-void ANPPendulumBladeTrap::EvaluateOverlappingPawns()
+void ANPPendulumBladeTrap::QueryBladeSweep(
+	const FVector& StartWorldLocation,
+	const FVector& EndWorldLocation)
 {
-	TArray<AActor*> OverlappingActors;
-	BladeCollisionComponent->GetOverlappingActors(
-		OverlappingActors,
-		APawn::StaticClass());
-
-	for (AActor* OverlappingActor : OverlappingActors)
+	UWorld* World = GetWorld();
+	if (!HasAuthority()
+		|| !World
+		|| !IsValid(BladeCollisionComponent)
+		|| !IsValid(KnockbackComponent)
+		|| GetTrapState() != ENPStairTrapState::Active)
 	{
-		FHitResult OverlapHit;
-		OverlapHit.Location = OverlappingActor
-			? OverlappingActor->GetActorLocation()
-			: BladeCollisionComponent->GetComponentLocation();
-		OverlapHit.ImpactPoint = OverlapHit.Location;
-		TryKnockbackActor(OverlappingActor, OverlapHit);
+		return;
+	}
+
+	const FVector BoxHalfExtent =
+		BladeCollisionComponent->GetScaledBoxExtent();
+	if (BoxHalfExtent.IsNearlyZero())
+	{
+		return;
+	}
+
+	FCollisionObjectQueryParams ObjectQueryParams;
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_PhysicsBody);
+
+	FCollisionQueryParams QueryParams(
+		SCENE_QUERY_STAT(PendulumBladePlayerSweep),
+		false,
+		this);
+	QueryParams.AddIgnoredActor(this);
+
+	TArray<FHitResult> SweepHits;
+	World->SweepMultiByObjectType(
+		SweepHits,
+		StartWorldLocation,
+		EndWorldLocation,
+		BladeCollisionComponent->GetComponentQuat(),
+		ObjectQueryParams,
+		FCollisionShape::MakeBox(BoxHalfExtent),
+		QueryParams);
+
+	for (const FHitResult& SweepHit : SweepHits)
+	{
+		TryKnockbackActor(SweepHit.GetActor(), SweepHit);
 	}
 }
 
