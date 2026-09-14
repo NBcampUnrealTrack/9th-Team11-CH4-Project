@@ -97,33 +97,39 @@ void ANPStairBombTrap::HandleTrapStateChanged(
 		BeginThrow();
 		break;
 	case ENPStairTrapState::Active:
-		UpdateBombPose();
-		ExplodeOnce();
-		break;
 	case ENPStairTrapState::Returning:
-		SetActorTickEnabled(false);
-		SetBombVisible(false);
-		HideExplosionTelegraph();
-		BP_OnThrowerReset();
-		break;
 	case ENPStairTrapState::Cooldown:
 	case ENPStairTrapState::Idle:
 	case ENPStairTrapState::Disabled:
 	default:
-		SetActorTickEnabled(false);
-		SetBombVisible(false);
-		HideExplosionTelegraph();
+		// 비행, 착탄 및 폭발 시점은 폭탄 자체의 수명 주기가 관리합니다.
+		// Controller의 후속 상태 전환으로 진행 중인 폭탄을 제거하지 않습니다.
 		break;
 	}
 }
 
 void ANPStairBombTrap::BeginThrow()
 {
+	if (BombLifecycle != ENPStairBombLifecycle::Inactive)
+	{
+		UE_LOG(
+			LogNPStairBombTrap,
+			Warning,
+			TEXT("Throw skipped because previous bomb is still active. Trap=%s Cycle=%d"),
+			*GetNameSafe(this),
+			GetTrapCycleSequence());
+		return;
+	}
+
 	ThrowStartLocation = ResolveThrowStartLocation();
 	ThrowTargetLocation = ResolveThrowTargetLocation();
 	ThrowStartRotation = IsValid(BombMeshComponent)
 		? BombMeshComponent->GetComponentRotation()
 		: FRotator::ZeroRotator;
+	ThrowStartWorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	LandedWorldTime = 0.0;
+	ActiveBombCycleSequence = GetTrapCycleSequence();
+	BombLifecycle = ENPStairBombLifecycle::Flying;
 
 	if (IsValid(BombMeshComponent))
 	{
@@ -138,14 +144,31 @@ void ANPStairBombTrap::BeginThrow()
 
 void ANPStairBombTrap::UpdateBombPose()
 {
-	if (GetTrapState() != ENPStairTrapState::Warning
+	if (BombLifecycle == ENPStairBombLifecycle::Inactive
 		|| !IsValid(BombMeshComponent))
 	{
 		return;
 	}
 
+	const double CurrentWorldTime = GetWorld()
+		? GetWorld()->GetTimeSeconds()
+		: ThrowStartWorldTime;
+
+	if (BombLifecycle == ENPStairBombLifecycle::Landed)
+	{
+		BombMeshComponent->SetWorldLocation(ThrowTargetLocation);
+		if (HasAuthority()
+			&& CurrentWorldTime - LandedWorldTime
+				>= FMath::Max(0.0f, FuseDuration))
+		{
+			ExplodeOnce();
+		}
+		return;
+	}
+
 	const float SafeDuration = FMath::Max(ThrowDuration, UE_SMALL_NUMBER);
-	const float ElapsedTime = GetTrapPhaseElapsedTime();
+	const float ElapsedTime = static_cast<float>(
+		FMath::Max(0.0, CurrentWorldTime - ThrowStartWorldTime));
 	const float Alpha = FMath::Clamp(ElapsedTime / SafeDuration, 0.0f, 1.0f);
 	const FVector LinearPosition = FMath::Lerp(
 		ThrowStartLocation,
@@ -163,12 +186,24 @@ void ANPStairBombTrap::UpdateBombPose()
 	}
 
 	UpdateExplosionTelegraph(ElapsedTime);
+
+	if (Alpha >= 1.0f)
+	{
+		BombMeshComponent->SetWorldLocation(ThrowTargetLocation);
+		BombLifecycle = ENPStairBombLifecycle::Landed;
+		LandedWorldTime = CurrentWorldTime;
+		if (HasAuthority() && FuseDuration <= UE_SMALL_NUMBER)
+		{
+			ExplodeOnce();
+		}
+	}
 }
 
 void ANPStairBombTrap::ExplodeOnce()
 {
-	const int32 CycleSequence = GetTrapCycleSequence();
+	const int32 CycleSequence = ActiveBombCycleSequence;
 	if (!HasAuthority()
+		|| BombLifecycle == ENPStairBombLifecycle::Inactive
 		|| LastExplodedCycleSequence == CycleSequence)
 	{
 		return;
@@ -318,7 +353,7 @@ void ANPStairBombTrap::ApplyBlastKnockback(
 		Log,
 		TEXT("Explosion applied. Trap=%s Cycle=%d Location=%s Radius=%.1f Pawns=%d"),
 		*GetNameSafe(this),
-		GetTrapCycleSequence(),
+		ActiveBombCycleSequence,
 		*ExplosionLocation.ToCompactString(),
 		ExplosionRadius,
 		AffectedPawnCount);
@@ -481,6 +516,10 @@ void ANPStairBombTrap::MulticastPlayExplosion_Implementation(
 	SetActorTickEnabled(false);
 	SetBombVisible(false);
 	HideExplosionTelegraph();
+	BombLifecycle = ENPStairBombLifecycle::Inactive;
+	ActiveBombCycleSequence = INDEX_NONE;
+	ThrowStartWorldTime = 0.0;
+	LandedWorldTime = 0.0;
 	if (GetNetMode() == NM_DedicatedServer
 		|| LastPresentedExplosionCycle == CycleSequence)
 	{
@@ -503,4 +542,5 @@ void ANPStairBombTrap::MulticastPlayExplosion_Implementation(
 			ExplosionLocation);
 	}
 	BP_OnBombExploded(ExplosionLocation);
+	BP_OnThrowerReset();
 }

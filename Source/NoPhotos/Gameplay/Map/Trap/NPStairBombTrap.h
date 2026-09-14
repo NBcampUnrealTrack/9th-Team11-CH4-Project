@@ -15,6 +15,13 @@ class USceneComponent;
 class USoundBase;
 class UStaticMeshComponent;
 
+enum class ENPStairBombLifecycle : uint8
+{
+	Inactive,
+	Flying,
+	Landed
+};
+
 /**
  * 지정된 투척 위치에서 목표 지점까지 폭탄을 포물선으로 날린 뒤,
  * Active 단계 진입 순간 서버에서 방사형 GAS 넉백을 적용하는 반복 계단 함정입니다.
@@ -88,6 +95,11 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stair Bomb Trap|Throw",
 		meta=(ClampMin="0.01", Units="s"))
 	float ThrowDuration = 1.0f;
+
+	/** 착탄한 뒤 폭발하기까지 폭탄 자체가 기다리는 시간입니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stair Bomb Trap|Throw",
+		meta=(ClampMin="0.0", Units="s"))
+	float FuseDuration = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stair Bomb Trap|Throw",
 		meta=(ClampMin="0.0", Units="cm"))
@@ -183,6 +195,10 @@ private:
 	FVector ThrowStartLocation = FVector::ZeroVector;
 	FVector ThrowTargetLocation = FVector::ZeroVector;
 	FRotator ThrowStartRotation = FRotator::ZeroRotator;
+	double ThrowStartWorldTime = 0.0;
+	double LandedWorldTime = 0.0;
+	int32 ActiveBombCycleSequence = INDEX_NONE;
+	ENPStairBombLifecycle BombLifecycle = ENPStairBombLifecycle::Inactive;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> ExplosionTelegraphMaterial;

@@ -7,6 +7,11 @@
 class APawn;
 class UGameplayEffect;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+	FNPTrapKnockbackHitSignature,
+	APawn*, TargetPawn,
+	FVector, HitLocation);
+
 /** 서버 권한으로 함정 충돌 대상을 검증하고 기존 GAS 넉백 Effect를 적용합니다. */
 UCLASS(ClassGroup=(Trap), meta=(BlueprintSpawnableComponent))
 class NOPHOTOS_API UNPTrapKnockbackComponent : public UActorComponent
@@ -15,6 +20,10 @@ class NOPHOTOS_API UNPTrapKnockbackComponent : public UActorComponent
 
 public:
 	UNPTrapKnockbackComponent();
+
+	/** 서버에서 넉백이 실제 적용된 뒤 모든 클라이언트에서 발생합니다. */
+	UPROPERTY(BlueprintAssignable, Category="Trap|Knockback|Presentation")
+	FNPTrapKnockbackHitSignature OnKnockbackHit;
 
 	/** 새 함정 활성 주기를 시작하고 주기별 피격 기록을 초기화합니다. */
 	void BeginActivationCycle(int32 CycleSequence);
@@ -61,6 +70,11 @@ protected:
 	float PerTargetRehitCooldown = 0.5f;
 
 private:
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastNotifyKnockbackHit(
+		APawn* TargetPawn,
+		FVector_NetQuantize HitLocation);
+
 	void RemoveInvalidTargetRecords();
 
 	TSet<TWeakObjectPtr<APawn>> HitPawnsThisCycle;

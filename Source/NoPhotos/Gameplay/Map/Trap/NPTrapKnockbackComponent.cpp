@@ -11,6 +11,7 @@
 UNPTrapKnockbackComponent::UNPTrapKnockbackComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+	SetIsReplicatedByDefault(true);
 	KnockbackEffectClass = UNPKnockbackGameplayEffect::StaticClass();
 }
 
@@ -139,14 +140,31 @@ bool UNPTrapKnockbackComponent::TryApplyKnockback(
 
 	const FActiveGameplayEffectHandle AppliedHandle =
 		TargetAbilitySystem->ApplyGameplayEffectSpecToSelf(EffectSpec);
-	if (!AppliedHandle.IsValid())
+	const bool bIsInstantEffect =
+		EffectDefinition->DurationPolicy
+		== EGameplayEffectDurationType::Instant;
+	if (!bIsInstantEffect && !AppliedHandle.IsValid())
 	{
 		return false;
 	}
 
 	HitPawnsThisCycle.Add(TargetKey);
 	LastHitTimes.FindOrAdd(TargetKey) = CurrentTime;
+	MulticastNotifyKnockbackHit(TargetPawn, ImpactLocation);
 	return true;
+}
+
+void UNPTrapKnockbackComponent::MulticastNotifyKnockbackHit_Implementation(
+	APawn* TargetPawn,
+	const FVector_NetQuantize HitLocation)
+{
+	const AActor* OwnerActor = GetOwner();
+	if (!OwnerActor || OwnerActor->GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+
+	OnKnockbackHit.Broadcast(TargetPawn, FVector(HitLocation));
 }
 
 void UNPTrapKnockbackComponent::RemoveInvalidTargetRecords()

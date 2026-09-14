@@ -4,6 +4,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/World.h"
+#include "GameFramework/Pawn.h"
 #include "Gameplay/Map/Trap/NPTrapKnockbackComponent.h"
 
 ANPPendulumBladeTrap::ANPPendulumBladeTrap()
@@ -65,6 +66,7 @@ void ANPPendulumBladeTrap::HandleTrapStateChanged(
 	const ENPStairTrapState NewState)
 {
 	Super::HandleTrapStateChanged(PreviousState, NewState);
+	bHasPreviousSwingValue = false;
 
 	if (NewState == ENPStairTrapState::Returning)
 	{
@@ -100,6 +102,7 @@ void ANPPendulumBladeTrap::UpdateBladePose()
 	}
 
 	FQuat TargetRotation = RestRelativeRotation.Quaternion();
+	bool bPassedSwingCenter = false;
 	switch (GetTrapState())
 	{
 	case ENPStairTrapState::Active:
@@ -114,10 +117,20 @@ void ANPPendulumBladeTrap::UpdateBladePose()
 		const float PhaseRadians =
 			GetTrapPhaseElapsedTime() / Period * 2.0f * UE_PI
 			+ FMath::DegreesToRadians(PhaseOffsetDegrees);
+		const float SwingValue = FMath::Sin(PhaseRadians);
 		const float AngleRadians = FMath::DegreesToRadians(
-			FMath::Sin(PhaseRadians) * MaximumSwingAngle);
+			SwingValue * MaximumSwingAngle);
 		TargetRotation = RestRelativeRotation.Quaternion()
 			* FQuat(SafeSwingAxis, AngleRadians);
+
+		if (bHasPreviousSwingValue)
+		{
+			bPassedSwingCenter =
+				(PreviousSwingValue < 0.0f && SwingValue >= 0.0f)
+				|| (PreviousSwingValue > 0.0f && SwingValue <= 0.0f);
+		}
+		PreviousSwingValue = SwingValue;
+		bHasPreviousSwingValue = true;
 		break;
 	}
 	case ENPStairTrapState::Returning:
@@ -152,6 +165,11 @@ void ANPPendulumBladeTrap::UpdateBladePose()
 		false,
 		nullptr,
 		ETeleportType::TeleportPhysics);
+
+	if (bPassedSwingCenter && GetNetMode() != NM_DedicatedServer)
+	{
+		BP_OnBladeCenterPassed();
+	}
 
 	if (HasAuthority()
 		&& GetTrapState() == ENPStairTrapState::Active
@@ -214,7 +232,9 @@ void ANPPendulumBladeTrap::TryKnockbackActor(
 	AActor* OtherActor,
 	const FHitResult& Hit)
 {
+	APawn* TargetPawn = Cast<APawn>(OtherActor);
 	if (!HasAuthority()
+		|| !IsValid(TargetPawn)
 		|| GetTrapState() != ENPStairTrapState::Active
 		|| !IsValid(KnockbackComponent)
 		|| !IsValid(KnockbackDirectionArrow))
@@ -223,7 +243,7 @@ void ANPPendulumBladeTrap::TryKnockbackActor(
 	}
 
 	KnockbackComponent->TryApplyKnockback(
-		OtherActor,
+		TargetPawn,
 		Hit,
 		KnockbackDirectionArrow->GetForwardVector());
 }
