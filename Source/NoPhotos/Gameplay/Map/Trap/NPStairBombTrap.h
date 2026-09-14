@@ -71,13 +71,18 @@ protected:
 	TObjectPtr<AActor> ThrowTargetActor;
 
 	/**
-	 * 사이클 순서대로 사용할 착탄 지점 Scene Component들입니다.
+	 * 무작위 순서로 사용할 착탄 지점 Scene Component들입니다.
+	 * 한 순회 안에서는 모든 지점을 한 번씩 사용한 뒤 다음 순서를 다시 섞습니다.
 	 * 비어 있거나 선택된 참조가 유효하지 않으면 기존 ThrowTargetActor 또는
 	 * ThrowTargetComponent를 예비 착탄 지점으로 사용합니다.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stair Bomb Trap|Throw",
 		meta=(UseComponentPicker, AllowedClasses="/Script/Engine.SceneComponent"))
 	TArray<FComponentReference> ThrowTargetComponents;
+
+	/** 서버와 클라이언트가 같은 무작위 착탄 순서를 계산하기 위한 기준값입니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stair Bomb Trap|Throw")
+	int32 ThrowTargetRandomSeed = 173;
 
 	/** Warning 진입부터 목표 위치 도착까지 걸리는 시간입니다. Controller WarningDuration과 맞추는 것을 권장합니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stair Bomb Trap|Throw",

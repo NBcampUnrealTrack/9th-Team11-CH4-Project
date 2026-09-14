@@ -428,8 +428,33 @@ FVector ANPStairBombTrap::ResolveThrowTargetLocation()
 	if (!ThrowTargetComponents.IsEmpty())
 	{
 		const int32 SafeCycleSequence = FMath::Max(1, GetTrapCycleSequence());
-		const int32 TargetIndex =
-			(SafeCycleSequence - 1) % ThrowTargetComponents.Num();
+		const int32 TargetCount = ThrowTargetComponents.Num();
+		const int32 ZeroBasedCycle = SafeCycleSequence - 1;
+		const int32 ShuffleRound = ZeroBasedCycle / TargetCount;
+		const int32 IndexInRound = ZeroBasedCycle % TargetCount;
+
+		TArray<int32> ShuffledIndices;
+		ShuffledIndices.Reserve(TargetCount);
+		for (int32 TargetIndex = 0; TargetIndex < TargetCount; ++TargetIndex)
+		{
+			ShuffledIndices.Add(TargetIndex);
+		}
+
+		// ResolveThrowTargetLocation은 서버와 각 클라이언트에서 호출되므로
+		// 전역 난수가 아니라 설정 Seed와 순회 번호 기반의 결정적 난수를
+		// 사용해 모두 같은 착탄 순서를 계산합니다.
+		const int32 RoundSeed = ThrowTargetRandomSeed
+			^ (ShuffleRound * 196613);
+		FRandomStream RandomStream(RoundSeed);
+		for (int32 ShuffleIndex = TargetCount - 1;
+			ShuffleIndex > 0;
+			--ShuffleIndex)
+		{
+			const int32 SwapIndex = RandomStream.RandRange(0, ShuffleIndex);
+			ShuffledIndices.Swap(ShuffleIndex, SwapIndex);
+		}
+
+		const int32 TargetIndex = ShuffledIndices[IndexInRound];
 		const FComponentReference& TargetReference =
 			ThrowTargetComponents[TargetIndex];
 		if (const USceneComponent* TargetComponent =
