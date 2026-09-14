@@ -10,6 +10,7 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/GameStateBase.h"
 #include "Gameplay/AbilitySystem/Effects/NPCrowdControlImmunityGameplayEffect.h"
+#include "Gameplay/Character/Component/NPStablePhysicsMovementComponent.h"
 #include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 #include "Gameplay/MapEvents/HotPotato/NPHotPotatoBomb.h"
 #include "Kismet/GameplayStatics.h"
@@ -90,6 +91,7 @@ void ANPHotPotatoMapEvent::ApplyEventState_Implementation(const bool bNewActive)
 
 void ANPHotPotatoMapEvent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	RemoveCarrierMoveSpeed();
 	if (HasAuthority())
 	{
 		ClearRoundTimers();
@@ -238,8 +240,9 @@ void ANPHotPotatoMapEvent::HandleBombFuseExpired()
 	GetWorldTimerManager().ClearTimer(BombFuseTimer);
 	GetWorldTimerManager().ClearTimer(ScorePenaltyTimer);
 	BombExplosionServerWorldTime = 0.0f;
+	ANPPlayerState* ExplodedHolder = CurrentBombHolder;
 	ApplyPercentagePenalty(
-		CurrentBombHolder,
+		ExplodedHolder,
 		ExplosionScorePenaltyPercent,
 		true);
 
@@ -254,6 +257,7 @@ void ANPHotPotatoMapEvent::HandleBombFuseExpired()
 		SpawnedBombActor = nullptr;
 	}
 	SetCurrentBombHolderInternal(nullptr);
+	LaunchExplodedCarrier(ExplodedHolder);
 	ForceNetUpdate();
 	ScheduleNextRound();
 }
@@ -332,8 +336,10 @@ bool ANPHotPotatoMapEvent::SetCurrentBombHolderInternal(
 
 	UnbindFromCurrentCarrierGrab();
 	RemoveCarrierImmunity();
+	RemoveCarrierMoveSpeed();
 	CurrentBombHolder = NewHolder;
 	ApplyCarrierImmunity();
+	ApplyCarrierMoveSpeed();
 	BindToCurrentCarrierGrab();
 	AttachBombToCurrentHolder();
 	OnBombHolderChanged.Broadcast(CurrentBombHolder);
@@ -465,6 +471,63 @@ void ANPHotPotatoMapEvent::RemoveCarrierImmunity()
 	CarrierImmunityEffectHandle.Invalidate();
 }
 
+void ANPHotPotatoMapEvent::ApplyCarrierMoveSpeed()
+{
+	static const FName SpeedSource(TEXT("HotPotatoCarrier"));
+	ANPReplicatedStablePhysicsPawn* CarrierPawn = CurrentBombHolder
+		? Cast<ANPReplicatedStablePhysicsPawn>(CurrentBombHolder->GetPawn())
+		: nullptr;
+	UNPStablePhysicsMovementComponent* MovementComponent = IsValid(CarrierPawn)
+		? CarrierPawn->GetStablePhysicsMovementComponent()
+		: nullptr;
+	if (!IsValid(MovementComponent))
+	{
+		return;
+	}
+
+	MovementComponent->SetMoveSpeedMultiplier(
+		SpeedSource,
+		FMath::Max(0.0f, CarrierMoveSpeedMultiplier));
+	CarrierMovementComponent = MovementComponent;
+}
+
+void ANPHotPotatoMapEvent::RemoveCarrierMoveSpeed()
+{
+	static const FName SpeedSource(TEXT("HotPotatoCarrier"));
+	if (UNPStablePhysicsMovementComponent* MovementComponent =
+		CarrierMovementComponent.Get())
+	{
+		MovementComponent->ClearMoveSpeedMultiplier(SpeedSource);
+	}
+	CarrierMovementComponent.Reset();
+}
+
+void ANPHotPotatoMapEvent::LaunchExplodedCarrier(
+	ANPPlayerState* ExplodedHolder)
+{
+	if (!HasAuthority() || !IsValid(ExplodedHolder))
+	{
+		return;
+	}
+
+	ANPReplicatedStablePhysicsPawn* ExplodedPawn =
+		Cast<ANPReplicatedStablePhysicsPawn>(ExplodedHolder->GetPawn());
+	if (!IsValid(ExplodedPawn))
+	{
+		return;
+	}
+
+	FVector BackwardDirection = -ExplodedPawn->GetActorForwardVector();
+	BackwardDirection.Z = 0.0f;
+	BackwardDirection = BackwardDirection.GetSafeNormal();
+	const FVector LaunchVelocity =
+		BackwardDirection * FMath::Max(0.0f, ExplosionHorizontalLaunchSpeed)
+		+ FVector::UpVector * FMath::Max(0.0f, ExplosionVerticalLaunchSpeed);
+
+	ExplodedPawn->StartTemporaryRagdoll();
+	ExplodedPawn->AddExternalVelocityChange(LaunchVelocity);
+}
+
 void ANPHotPotatoMapEvent::BindToCurrentCarrierGrab()
 {
 	if (!HasAuthority() || !IsValid(CurrentBombHolder))
@@ -522,5 +585,7 @@ void ANPHotPotatoMapEvent::HandleCarrierGrabbedPlayer(
 
 void ANPHotPotatoMapEvent::OnRep_CurrentBombHolder()
 {
+	RemoveCarrierMoveSpeed();
+	ApplyCarrierMoveSpeed();
 	OnBombHolderChanged.Broadcast(CurrentBombHolder);
 }
