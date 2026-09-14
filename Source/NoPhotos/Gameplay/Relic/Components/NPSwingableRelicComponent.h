@@ -97,6 +97,7 @@ public:
 		return SwingSettings;
 	}
 	bool CanStartSwing() const;
+	void StartSwingCooldownDisplay();
 	void StartSwingCooldown();
 	void StartSwingSound();
 	void StopSwingSound();

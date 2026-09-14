@@ -28,12 +28,14 @@
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 #include "Gameplay/Relic/Components/NPAimableRelicComponent.h"
+#include "Gameplay/Relic/Components/NPUsableRelicComponent.h"
 #include "Gameplay/Map/Room/NPRoomGenerationHelper.h"
 #include "NoPhotos.h"
 #include "SubSystem/NPUIManagerSubsystem.h"
 #include "SubSystem/Room/NPRoomGenerateSubsystem.h"
 #include "UI/GameScreen/Event/NPNoticeEventWidget.h"
 #include "UI/GameScreen/NPAimCrosshairWidget.h"
+#include "UI/GameScreen/Relic/NPRelicUsePromptWidget.h"
 #include "UI/Loading/NPMainWorldLoadingWidget.h"
 #include "UI/NPUserWidget.h"
 #include "UObject/ConstructorHelpers.h"
@@ -219,6 +221,29 @@ void ANPMainPlayerController::BeginPlay()
 		}
 		BindAimCrosshairToAbilitySystem();
 
+		if (RelicUsePromptWidgetClass)
+		{
+			RelicUsePromptWidget = CreateWidget<UNPRelicUsePromptWidget>(
+				this,
+				RelicUsePromptWidgetClass);
+			if (IsValid(RelicUsePromptWidget))
+			{
+				RelicUsePromptWidget->AddToPlayerScreen(45);
+				RelicUsePromptWidget->SetRelicUseDisplay(
+					false,
+					1.0f,
+					0.0f,
+					0.0f);
+				UpdateRelicUsePrompt();
+				GetWorldTimerManager().SetTimer(
+					RelicUsePromptUpdateTimer,
+					this,
+					&ThisClass::UpdateRelicUsePrompt,
+					FMath::Max(0.02f, RelicUsePromptUpdateInterval),
+					true);
+			}
+		}
+
 		if (PhotoFlashWidgetClass)
 		{
 			PhotoFlashWidget = CreateWidget<UNPPhotoFlashWidget>(this, PhotoFlashWidgetClass);
@@ -251,6 +276,7 @@ void ANPMainPlayerController::BeginPlay()
 
 void ANPMainPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	GetWorldTimerManager().ClearTimer(RelicUsePromptUpdateTimer);
 	UnbindAimCrosshairFromAbilitySystem();
 	Super::EndPlay(EndPlayReason);
 }
@@ -954,6 +980,45 @@ void ANPMainPlayerController::UpdatePhotoCooldownDisplay()
 	PhotoAimWidget->SetCooldownDisplay(
 		ChargedCellCount,
 		PhotoCooldownCellCount,
+		RemainingTime,
+		Duration);
+}
+
+void ANPMainPlayerController::UpdateRelicUsePrompt()
+{
+	if (!IsLocalController() || !IsValid(RelicUsePromptWidget))
+	{
+		return;
+	}
+
+	const ANPReplicatedStablePhysicsPawn* StablePawn =
+		GetPawn<ANPReplicatedStablePhysicsPawn>();
+	AActor* HeldRelic = StablePawn
+		? StablePawn->GetHeldRelic_Implementation()
+		: nullptr;
+	const UNPUsableRelicComponent* UsableRelic = HeldRelic
+		? HeldRelic->FindComponentByClass<UNPUsableRelicComponent>()
+		: nullptr;
+	if (!IsValid(UsableRelic))
+	{
+		RelicUsePromptWidget->SetRelicUseDisplay(
+			false,
+			1.0f,
+			0.0f,
+			0.0f);
+		return;
+	}
+
+	float CooldownProgress = 1.0f;
+	float RemainingTime = 0.0f;
+	float Duration = 0.0f;
+	UsableRelic->GetCooldownDisplay(
+		CooldownProgress,
+		RemainingTime,
+		Duration);
+	RelicUsePromptWidget->SetRelicUseDisplay(
+		true,
+		CooldownProgress,
 		RemainingTime,
 		Duration);
 }

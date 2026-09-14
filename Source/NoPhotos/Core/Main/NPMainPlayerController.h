@@ -14,6 +14,7 @@ class UNPPhotoTransferComponent;
 class UNPNoticeEventWidget;
 class UNPMainWorldLoadingWidget;
 class UNPAimCrosshairWidget;
+class UNPRelicUsePromptWidget;
 class UNPUserWidget;
 class UUserWidget;
 class UNPChatComponent;
@@ -214,6 +215,7 @@ private:
 	void BeginPhotoCooldownDisplayUpdates();
 	void StopPhotoCooldownDisplayUpdates(bool bShowFullyCharged);
 	void UpdatePhotoCooldownDisplay();
+	void UpdateRelicUsePrompt();
 	bool IsHoldingAimableRelic() const;
 	UNPAbilitySystemComponent* ResolveAbilitySystem() const;
 	bool ShouldUseTouchControls() const;
@@ -242,11 +244,24 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UNPAimCrosshairWidget> PhotoAimWidget;
 
+	/** 사용 가능한 유물을 오른손에 들었을 때 표시할 F키 및 원형 쿨타임 위젯입니다. */
+	UPROPERTY(EditDefaultsOnly, Category="UI|Relic Use")
+	TSubclassOf<UNPRelicUsePromptWidget> RelicUsePromptWidgetClass;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNPRelicUsePromptWidget> RelicUsePromptWidget;
+
+	/** 보유 유물 및 쿨타임 UI의 로컬 갱신 간격입니다. */
+	UPROPERTY(EditDefaultsOnly, Category="UI|Relic Use",
+		meta=(ClampMin="0.02", UIMin="0.02", Units="s"))
+	float RelicUsePromptUpdateInterval = 0.05f;
+
 	TWeakObjectPtr<UNPAbilitySystemComponent> AimCrosshairAbilitySystem;
 	FDelegateHandle RelicAimingTagChangedHandle;
 	FDelegateHandle PhotoAimingTagChangedHandle;
 	FDelegateHandle PhotoCooldownTagChangedHandle;
 	FTimerHandle PhotoCooldownDisplayTimer;
+	FTimerHandle RelicUsePromptUpdateTimer;
 
 	/** WBP_NPPhotoAim의 배터리를 구성하는 충전 칸 수입니다. */
 	UPROPERTY(EditDefaultsOnly, Category = "UI|Aim", meta = (ClampMin = "1", UIMin = "1"))

@@ -94,6 +94,7 @@ void UNPRelicUseAbility::ActivateAbility(
 		}
 		LockedGrabbableComponent = GrabbableRelic;
 	}
+	SwingableRelic->StartSwingCooldownDisplay();
 	SwingableRelicComponent = SwingableRelic;
 	SwingableRelicComponent->StartSwingSound();
 	if (SwingableRelicComponent.IsValid() && ActorInfo)
