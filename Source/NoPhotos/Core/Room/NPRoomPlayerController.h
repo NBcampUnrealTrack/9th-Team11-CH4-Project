@@ -15,6 +15,7 @@ class UUserWidget;
 class UInputMappingContext;
 class UInputAction;
 class UNPChatComponent;
+class UNPRelicUsePromptUIComponent;
 struct FInputKeyEventArgs;
 
 /** 대기방의 방 기능, UI와 입력을 담당하는 PlayerController입니다. */
@@ -100,6 +101,9 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Photo")
 	TSubclassOf<UNPPhotoFlashWidget> PhotoFlashWidgetClass;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	TObjectPtr<UNPRelicUsePromptUIComponent> RelicUsePromptUIComponent;
 
 	UPROPERTY(EditAnywhere, Category = "Input|Input Mappings")
 	TArray<TObjectPtr<UInputMappingContext>> DefaultMappingContexts;

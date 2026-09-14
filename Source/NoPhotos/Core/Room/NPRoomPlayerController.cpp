@@ -24,6 +24,7 @@
 #include "UI/GameScreen/NPAimCrosshairWidget.h"
 #include "UI/NPUserWidget.h"
 #include "UObject/ConstructorHelpers.h"
+#include "UI/GameScreen/Relic/NPRelicUsePromptUIComponent.h"
 #include "Widgets/Input/SVirtualJoystick.h"
 
 ANPRoomPlayerController::ANPRoomPlayerController()
@@ -34,6 +35,8 @@ ANPRoomPlayerController::ANPRoomPlayerController()
 	PhotoCaptureComponent = CreateDefaultSubobject<UNPPhotoCaptureComponent>(
 		TEXT("PhotoCaptureComponent"));
 	PhotoCaptureComponent->SetPresentationOnly(true);
+	RelicUsePromptUIComponent = CreateDefaultSubobject<UNPRelicUsePromptUIComponent>(
+		TEXT("RelicUsePromptUIComponent"));
 	CheatClass = UNPRoomCheatManager::StaticClass();
 
 	static ConstructorHelpers::FObjectFinder<UInputAction> AimInputAction(
