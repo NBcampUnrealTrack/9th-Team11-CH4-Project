@@ -1,4 +1,5 @@
 #include "UI/GameScreen/NPGameScreenWidget.h"
+#include "Components/TextBlock.h"
 #include "Engine/World.h"
 #include "GameFramework/GameStateBase.h"
 #include "Gameplay/MapEvents/NPMapEventManager.h"
@@ -93,6 +94,11 @@ void UNPGameScreenWidget::RefreshEventTimer()
 	UNPMapEventManagerComponent* EventManager = BoundEventManager.Get();
 	if (!IsValid(EventManager) || !IsValid(EventTimerBar))
 	{
+		if (IsValid(EventInfo))
+		{
+			EventInfo->SetText(FText::GetEmpty());
+		}
+
 		SetEventTimerVisible(false);
 		return;
 	}
@@ -101,20 +107,37 @@ void UNPGameScreenWidget::RefreshEventTimer()
 	if (!EventManager->GetPrimaryActiveEventPresentation(Presentation))
 	{
 		EventTimerBar->StopEventTimer();
+		if (IsValid(EventInfo))
+		{
+			EventInfo->SetText(FText::GetEmpty());
+		}
+
 		SetEventTimerVisible(false);
 		return;
 	}
 
 	EventTimerBar->StartEventTimer(Presentation.EndServerWorldTime, Presentation.DurationSeconds);
+	if (IsValid(EventInfo))
+	{
+		EventInfo->SetText(Presentation.Description);
+	}
+
 	SetEventTimerVisible(true);
 }
 
 void UNPGameScreenWidget::SetEventTimerVisible(const bool bVisible)
 {
-	if (!IsValid(EventTimerBar))
+	const ESlateVisibility TargetVisibility = bVisible
+		? ESlateVisibility::HitTestInvisible
+		: ESlateVisibility::Collapsed;
+
+	if (IsValid(EventTimerBar))
 	{
-		return;
+		EventTimerBar->SetVisibility(TargetVisibility);
 	}
 
-	EventTimerBar->SetVisibility(bVisible ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	if (IsValid(EventInfo))
+	{
+		EventInfo->SetVisibility(TargetVisibility);
+	}
 }

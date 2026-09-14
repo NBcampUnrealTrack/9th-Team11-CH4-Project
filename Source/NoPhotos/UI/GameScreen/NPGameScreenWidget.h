@@ -4,6 +4,7 @@
 #include "UI/NPUserWidget.h"
 #include "NPGameScreenWidget.generated.h"
 
+class UTextBlock;
 class UNPEventTimerBarWidget;
 class UNPMapEventManagerComponent;
 
@@ -17,6 +18,8 @@ protected:
 	virtual void NativeDestruct() override;
 
 private:
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UTextBlock> EventInfo; 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UNPEventTimerBarWidget> EventTimerBar;
 
