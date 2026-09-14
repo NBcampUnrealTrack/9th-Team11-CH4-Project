@@ -121,6 +121,9 @@ bool UNPThrowableRelicComponent::TryThrow(ANPStablePhysicsPawn* ThrowerPawn)
 		+ (FMath::IsFinite(ThrowSettings.Cooldown)
 			? FMath::Max(0.0f, ThrowSettings.Cooldown)
 			: 0.0f);
+	StartUseCooldown(FMath::IsFinite(ThrowSettings.Cooldown)
+		? FMath::Max(0.0f, ThrowSettings.Cooldown)
+		: 0.0f);
 
 	const float GraceTime = FMath::IsFinite(ThrowSettings.PawnCollisionGraceTime)
 		? FMath::Max(0.0f, ThrowSettings.PawnCollisionGraceTime)

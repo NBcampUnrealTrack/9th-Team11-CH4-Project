@@ -31,6 +31,13 @@ bool UNPSwingableRelicComponent::CanStartSwing() const
 	return World && World->GetTimeSeconds() >= NextSwingAllowedTime;
 }
 
+void UNPSwingableRelicComponent::StartSwingCooldownDisplay()
+{
+	StartUseCooldown(
+		FMath::Max(0.01f, SwingSettings.Duration)
+		+ FMath::Max(0.0f, SwingSettings.CooldownAfterSwing));
+}
+
 void UNPSwingableRelicComponent::StartSwingCooldown()
 {
 	if (const UWorld* World = GetWorld())

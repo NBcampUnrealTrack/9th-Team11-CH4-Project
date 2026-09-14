@@ -384,6 +384,7 @@ bool UNPAimableRelicComponent::TryConsumeFireCooldown()
 	}
 
 	LastServerFireTime = CurrentTime;
+	StartUseCooldown(FMath::Max(AimSettings.FireInterval, 0.0f));
 	return true;
 }
 
