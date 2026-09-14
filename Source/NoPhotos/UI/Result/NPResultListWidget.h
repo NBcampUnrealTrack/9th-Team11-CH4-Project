@@ -10,10 +10,16 @@ class UVerticalBox;
 class ANPMainGameState;
 class UNPPersonalResultWidget;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FNPResultEntryRevealed, int32, Rank);
+
 UCLASS()
 class NOPHOTOS_API UNPResultListWidget : public UNPUserWidget
 {
 	GENERATED_BODY()
+
+public:
+	UPROPERTY(BlueprintAssignable, Category = "Result")
+	FNPResultEntryRevealed OnResultEntryRevealed;
 
 protected:
 	virtual void NativeConstruct() override;
