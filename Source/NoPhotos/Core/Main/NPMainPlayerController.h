@@ -216,7 +216,7 @@ private:
 	void StopPhotoCooldownDisplayUpdates(bool bShowFullyCharged);
 	void UpdatePhotoCooldownDisplay();
 	void UpdateRelicUsePrompt();
-	bool IsHoldingAimableRelic() const;
+	bool IsHoldingRelicWithAimView() const;
 	UNPAbilitySystemComponent* ResolveAbilitySystem() const;
 	bool ShouldUseTouchControls() const;
 

@@ -15,9 +15,9 @@ bool FNPThrowableRelicVelocityTest::RunTest(const FString& Parameters)
 	Settings.UpwardSpeed = 250.0f;
 	Settings.bInheritThrowerVelocity = false;
 	const FVector Velocity = UNPThrowableRelicComponent::CalculateThrowVelocity(
-		FVector(0.0f, 2.0f, 4.0f), FVector(100.0f, 100.0f, 100.0f), Settings);
-	TestTrue(TEXT("Camera pitch is flattened and horizontal direction is normalized"),
-		Velocity.Equals(FVector(0.0f, 1200.0f, 250.0f), 0.001f));
+		FVector(0.0f, 0.6f, 0.8f), FVector(100.0f, 100.0f, 100.0f), Settings);
+	TestTrue(TEXT("Camera pitch is preserved and view direction is normalized"),
+		Velocity.Equals(FVector(0.0f, 720.0f, 1210.0f), 0.001f));
 
 	Settings.bInheritThrowerVelocity = true;
 	const FVector Inherited = UNPThrowableRelicComponent::CalculateThrowVelocity(
