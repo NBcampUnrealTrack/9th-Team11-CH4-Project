@@ -619,6 +619,11 @@ FVector ANPStablePhysicsPawn::GetViewForwardDirection() const
 	return FRotator(0.0f, GetTargetViewRotation().Yaw, 0.0f).Vector();
 }
 
+FVector ANPStablePhysicsPawn::GetViewDirection() const
+{
+	return GetTargetViewRotation().Vector();
+}
+
 FRotator ANPStablePhysicsPawn::GetTargetViewRotation() const
 {
 	return Controller

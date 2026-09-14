@@ -5,6 +5,7 @@
 #include "Gameplay/Character/NPStablePhysicsPawn.h"
 #include "Gameplay/Interaction/Components/GrabbableComponent.h"
 #include "Gameplay/Relic/Components/NPAimableRelicComponent.h"
+#include "Gameplay/Relic/Components/NPThrowableRelicComponent.h"
 
 UNPRelicAimAbility::UNPRelicAimAbility()
 {
@@ -43,8 +44,10 @@ bool UNPRelicAimAbility::CanActivateAbility(
 	const UGrabbableComponent* Grabbable = Relic
 		? Relic->FindComponentByClass<UGrabbableComponent>()
 		: nullptr;
-	return Relic
-		&& Relic->FindComponentByClass<UNPAimableRelicComponent>()
+	const bool bSupportsAimView = Relic
+		&& (Relic->FindComponentByClass<UNPAimableRelicComponent>()
+			|| Relic->FindComponentByClass<UNPThrowableRelicComponent>());
+	return bSupportsAimView
 		&& Grabbable
 		&& Grabbable->GetActiveGrabCount() == 1
 		&& Cast<ANPStablePhysicsPawn>(ActorInfo->AvatarActor.Get());

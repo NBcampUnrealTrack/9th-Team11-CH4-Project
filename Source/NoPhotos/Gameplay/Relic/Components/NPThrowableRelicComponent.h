@@ -17,7 +17,7 @@ struct NOPHOTOS_API FNPRelicThrowSettings
 {
 	GENERATED_BODY()
 
-	/** 카메라의 수평 정면 방향으로 적용할 속도입니다. */
+	/** 카메라가 바라보는 3차원 방향으로 적용할 속도입니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throw", meta=(ClampMin="0.0", Units="cm/s"))
 	float ForwardSpeed = 1800.0f;
 

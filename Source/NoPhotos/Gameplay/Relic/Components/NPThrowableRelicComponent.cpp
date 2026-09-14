@@ -11,6 +11,7 @@
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Gameplay/Character/NPStablePhysicsPawn.h"
 #include "Gameplay/Interaction/Components/GrabbableComponent.h"
+#include "Gameplay/Relic/Abilities/NPRelicAimAbility.h"
 #include "Gameplay/Relic/Abilities/NPThrowableRelicUseAbility.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Kismet/GameplayStatics.h"
@@ -23,7 +24,10 @@ UNPThrowableRelicComponent::UNPThrowableRelicComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 	SetIsReplicatedByDefault(true);
-	SetUseAbilityClass(UNPThrowableRelicUseAbility::StaticClass());
+	TArray<TSubclassOf<UGameplayAbility>> AbilityClasses;
+	AbilityClasses.Add(UNPThrowableRelicUseAbility::StaticClass());
+	AbilityClasses.Add(UNPRelicAimAbility::StaticClass());
+	SetUseAbilityClasses(AbilityClasses);
 	ThrowSettings.KnockbackEffectClass =
 		UNPKnockbackGameplayEffect::StaticClass();
 }
@@ -85,7 +89,7 @@ bool UNPThrowableRelicComponent::TryThrow(ANPStablePhysicsPawn* ThrowerPawn)
 	}
 
 	const FVector ThrowVelocity = CalculateThrowVelocity(
-		ThrowerPawn->GetViewForwardDirection(),
+		ThrowerPawn->GetViewDirection(),
 		ThrowerPawn->GetVelocity(),
 		ThrowSettings);
 	const FVector AngularVelocity = CalculateAngularVelocityDegrees(
@@ -388,8 +392,7 @@ FVector UNPThrowableRelicComponent::CalculateThrowVelocity(
 	const FVector& ThrowerVelocity,
 	const FNPRelicThrowSettings& Settings)
 {
-	FVector Direction(ForwardDirection.X, ForwardDirection.Y, 0.0f);
-	Direction.Normalize();
+	FVector Direction = ForwardDirection.GetSafeNormal();
 	if (Direction.IsNearlyZero())
 	{
 		Direction = FVector::ForwardVector;

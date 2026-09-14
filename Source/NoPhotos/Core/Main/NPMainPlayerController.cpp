@@ -28,6 +28,7 @@
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 #include "Gameplay/Relic/Components/NPAimableRelicComponent.h"
+#include "Gameplay/Relic/Components/NPThrowableRelicComponent.h"
 #include "Gameplay/Relic/Components/NPUsableRelicComponent.h"
 #include "Gameplay/Map/Room/NPRoomGenerationHelper.h"
 #include "NoPhotos.h"
@@ -710,7 +711,7 @@ void ANPMainPlayerController::HandleAimStarted()
 		return;
 	}
 
-	if (IsHoldingAimableRelic())
+	if (IsHoldingRelicWithAimView())
 	{
 		AbilitySystem->CancelPhotoAimAbility();
 		AbilitySystem->ActivateRelicAimAbility();
@@ -1023,7 +1024,7 @@ void ANPMainPlayerController::UpdateRelicUsePrompt()
 		Duration);
 }
 
-bool ANPMainPlayerController::IsHoldingAimableRelic() const
+bool ANPMainPlayerController::IsHoldingRelicWithAimView() const
 {
 	const APawn* ControlledPawn = GetPawn();
 	const UNPStablePhysicsGrabComponent* GrabComponent = ControlledPawn
@@ -1036,7 +1037,8 @@ bool ANPMainPlayerController::IsHoldingAimableRelic() const
 		? GrabbedComponent->GetOwner()
 		: nullptr;
 	return GrabbedActor
-		&& GrabbedActor->FindComponentByClass<UNPAimableRelicComponent>();
+		&& (GrabbedActor->FindComponentByClass<UNPAimableRelicComponent>()
+			|| GrabbedActor->FindComponentByClass<UNPThrowableRelicComponent>());
 }
 
 UNPAbilitySystemComponent*
