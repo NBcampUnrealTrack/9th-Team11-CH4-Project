@@ -19,6 +19,7 @@
 #include "Gameplay/Photo/NPPhotoImageCodec.h"
 #include "Core/Main/NPMainGameMode.h"
 #include "Core/Main/NPMainPlayerController.h"
+#include "Core/Room/NPRoomPlayerController.h"
 
 UNPPhotoCaptureComponent::UNPPhotoCaptureComponent()
 {
@@ -30,6 +31,11 @@ UNPPhotoCaptureComponent::UNPPhotoCaptureComponent()
 void UNPPhotoCaptureComponent::BeginPlay()
 {
 	Super::BeginPlay();
+	if (bPresentationOnly)
+	{
+		return;
+	}
+
 	ImageCodec = NewObject<UNPPhotoImageCodec>(this, TEXT("PhotoCaptureImageCodec"));
 
 	const APlayerController* PlayerController = Cast<APlayerController>(GetOwner());
@@ -185,6 +191,22 @@ bool UNPPhotoCaptureComponent::TakePhoto()
 		UE_LOG(LogNPPhoto, Warning, TEXT("[Capture] Rejected locally: photographer is grabbing an object."));
 		return false;
 	}
+
+	if (bPresentationOnly)
+	{
+		if (!Pawn->PlayPhotoShotMontage())
+		{
+			return false;
+		}
+
+		if (ANPRoomPlayerController* RoomPlayerController =
+			Cast<ANPRoomPlayerController>(PlayerController))
+		{
+			RoomPlayerController->PlayPhotoFlash();
+		}
+		return true;
+	}
+
 	if (!SceneCapture || !PhotoRenderTarget)
 	{
 		UE_LOG(LogNPPhoto, Log, TEXT("[Capture] Initializing SceneCapture and RenderTarget."));

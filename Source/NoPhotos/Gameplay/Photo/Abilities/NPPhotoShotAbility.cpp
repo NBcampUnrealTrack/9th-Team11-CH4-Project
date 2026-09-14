@@ -2,6 +2,7 @@
 
 #include "Core/GameplayTag/NPGameplayTags.h"
 #include "Core/Main/NPMainPlayerController.h"
+#include "Core/Room/NPRoomPlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "Gameplay/AbilitySystem/Effects/NPPhotoCooldownGameplayEffect.h"
 #include "Gameplay/Photo/NPPhotoCaptureComponent.h"
@@ -47,9 +48,18 @@ bool UNPPhotoShotAbility::CanActivateAbility(
 	const ANPMainPlayerController* PlayerController = Pawn
 		? Cast<ANPMainPlayerController>(Pawn->GetController())
 		: nullptr;
-	const UNPPhotoCaptureComponent* PhotoCapture = PlayerController
-		? PlayerController->GetPhotoCaptureComponent()
+	const ANPRoomPlayerController* RoomPlayerController = Pawn
+		? Cast<ANPRoomPlayerController>(Pawn->GetController())
 		: nullptr;
+	const UNPPhotoCaptureComponent* PhotoCapture = nullptr;
+	if (PlayerController)
+	{
+		PhotoCapture = PlayerController->GetPhotoCaptureComponent();
+	}
+	else if (RoomPlayerController)
+	{
+		PhotoCapture = RoomPlayerController->GetPhotoCaptureComponent();
+	}
 	if (!PhotoCapture)
 	{
 		return false;
@@ -84,9 +94,18 @@ void UNPPhotoShotAbility::ActivateAbility(
 		ANPMainPlayerController* PlayerController = Pawn
 			? Cast<ANPMainPlayerController>(Pawn->GetController())
 			: nullptr;
-		UNPPhotoCaptureComponent* PhotoCapture = PlayerController
-			? PlayerController->GetPhotoCaptureComponent()
+		ANPRoomPlayerController* RoomPlayerController = Pawn
+			? Cast<ANPRoomPlayerController>(Pawn->GetController())
 			: nullptr;
+		UNPPhotoCaptureComponent* PhotoCapture = nullptr;
+		if (PlayerController)
+		{
+			PhotoCapture = PlayerController->GetPhotoCaptureComponent();
+		}
+		else if (RoomPlayerController)
+		{
+			PhotoCapture = RoomPlayerController->GetPhotoCaptureComponent();
+		}
 		bPhotoStarted = PhotoCapture && PhotoCapture->TakePhoto();
 		UE_LOG(
 			LogNPPhoto,
@@ -94,6 +113,17 @@ void UNPPhotoShotAbility::ActivateAbility(
 			TEXT("[PhotoAbility] Photo shot result=%s Controller=%s"),
 			bPhotoStarted ? TEXT("success") : TEXT("failed"),
 			*GetNameSafe(PlayerController));
+	}
+
+	if (ActorInfo->IsNetAuthority())
+	{
+		const APawn* Pawn = Cast<APawn>(ActorInfo->AvatarActor.Get());
+		if (ANPRoomPlayerController* RoomPlayerController = Pawn
+			? Cast<ANPRoomPlayerController>(Pawn->GetController())
+			: nullptr)
+		{
+			RoomPlayerController->PlayPresentationOnlyShutterCue();
+		}
 	}
 
 	EndAbility(

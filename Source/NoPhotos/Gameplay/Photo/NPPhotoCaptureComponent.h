@@ -33,6 +33,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Photo")
 	bool TakePhoto();
 
+	/** 대기방처럼 이미지 생성 없이 줌·플래시·셔터 연출만 사용할지 설정합니다. */
+	void SetPresentationOnly(const bool bEnabled)
+	{
+		bPresentationOnly = bEnabled;
+	}
+
 	/** Ability가 쿨다운을 소비하기 전에 로컬 카메라 상태를 검사합니다. */
 	bool CanTakePhotoLocally() const;
 
@@ -149,5 +155,6 @@ private:
 	uint16 NextCaptureSequence = 0;
 	bool bPhotoAttemptInProgress = false;
 	bool bPhotoModeActive = false;
+	bool bPresentationOnly = false;
 	TWeakObjectPtr<ANPStablePhysicsPawn> PhotoModePawn;
 };
