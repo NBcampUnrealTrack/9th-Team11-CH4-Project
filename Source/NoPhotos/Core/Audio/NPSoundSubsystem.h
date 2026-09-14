@@ -70,6 +70,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Sound|Volume")
 	void SetBGMVolume(float InVolume);
 
+	/** 사용자 BGM 설정은 유지한 채 현재 BGM 재생 음량만 일시적으로 조절합니다. */
+	UFUNCTION(BlueprintCallable, Category = "Sound|BGM")
+	void SetBGMDuckMultiplier(float InMultiplier, float FadeDuration = 0.25f);
+
 private:
 	UPROPERTY(Transient)
 	TObjectPtr<UAudioComponent> CurrentBGMComponent;
@@ -80,6 +84,7 @@ private:
 	float MasterVolume = 1.0f;
 	float SFXVolume = 1.0f;
 	float BGMVolume = 1.0f;
+	float BGMDuckMultiplier = 1.0f;
 	float CurrentBGMBaseVolume = 1.0f;
 	float CurrentAmbientBaseVolume = 1.0f;
 };

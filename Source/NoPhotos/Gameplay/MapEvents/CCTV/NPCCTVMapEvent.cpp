@@ -2,6 +2,7 @@
 
 #include "Components/AudioComponent.h"
 #include "Components/RectLightComponent.h"
+#include "Core/Audio/NPSoundSubsystem.h"
 #include "Engine/RectLight.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -153,6 +154,10 @@ void ANPCCTVMapEvent::PlayEventSound(const int32 SoundIndex)
 	{
 		AudioComponent->StopDelayed(PlaybackEndTime - PlaybackStartTime);
 	}
+	AudioComponent->OnAudioFinished.AddDynamic(
+		this,
+		&ThisClass::HandleEventSoundFinished);
+	SetBGMDucked(true);
 	ActiveEventSounds.Add(AudioComponent);
 }
 
@@ -168,10 +173,40 @@ void ANPCCTVMapEvent::StopEventSounds()
 	{
 		if (AudioComponent.IsValid())
 		{
+			AudioComponent->OnAudioFinished.RemoveAll(this);
 			AudioComponent->Stop();
 		}
 	}
 	ActiveEventSounds.Reset();
+	SetBGMDucked(false);
+}
+
+void ANPCCTVMapEvent::SetBGMDucked(const bool bDucked)
+{
+	if (bBGMDucked == bDucked)
+	{
+		return;
+	}
+
+	bBGMDucked = bDucked;
+	if (UNPSoundSubsystem* SoundSubsystem = UNPSoundSubsystem::Get(this))
+	{
+		SoundSubsystem->SetBGMDuckMultiplier(
+			bDucked ? EventSoundBGMDuckMultiplier : 1.0f,
+			BGMDuckFadeDuration);
+	}
+}
+
+void ANPCCTVMapEvent::HandleEventSoundFinished()
+{
+	ActiveEventSounds.RemoveAll([](const TWeakObjectPtr<UAudioComponent>& AudioComponent)
+	{
+		return !AudioComponent.IsValid() || !AudioComponent->IsPlaying();
+	});
+	if (ActiveEventSounds.IsEmpty())
+	{
+		SetBGMDucked(false);
+	}
 }
 
 void ANPCCTVMapEvent::SetRectLightsDisabled(const bool bDisabled)
