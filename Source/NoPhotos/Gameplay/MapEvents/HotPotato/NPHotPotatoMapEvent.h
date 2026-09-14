@@ -10,6 +10,7 @@ class ANPHotPotatoBomb;
 class ANPReplicatedStablePhysicsPawn;
 class UAbilitySystemComponent;
 class UGameplayEffect;
+class UNPStablePhysicsMovementComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FNPHotPotatoHolderChanged,
@@ -71,6 +72,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hot Potato Event|Carrier")
 	TSubclassOf<UGameplayEffect> CarrierImmunityEffectClass;
 
+	/** 폭탄 소유자의 기본 이동속도에 곱할 배율입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hot Potato Event|Carrier",
+		meta=(ClampMin="0.0", UIMin="0.0"))
+	float CarrierMoveSpeedMultiplier = 1.25f;
+
 	/** 캐릭터의 Skeletal Mesh에 폭탄을 부착할 소켓 또는 본 이름입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hot Potato Event|Bomb")
 	FName BombAttachSocketName = TEXT("hand_r");
@@ -108,6 +114,16 @@ protected:
 		meta=(ClampMin="0.0", ClampMax="100.0", UIMin="0.0", UIMax="100.0", Units="Percent"))
 	float ExplosionScorePenaltyPercent = 20.0f;
 
+	/** 폭발한 소유자를 뒤로 날리는 수평 속도입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hot Potato Event|Explosion",
+		meta=(ClampMin="0.0", Units="cm/s"))
+	float ExplosionHorizontalLaunchSpeed = 900.0f;
+
+	/** 폭발한 소유자를 위로 날리는 수직 속도입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hot Potato Event|Explosion",
+		meta=(ClampMin="0.0", Units="cm/s"))
+	float ExplosionVerticalLaunchSpeed = 700.0f;
+
 private:
 	void BuildParticipantOrder();
 	void StartNextRound();
@@ -127,6 +143,9 @@ private:
 	void ClearRoundTimers();
 	void ApplyCarrierImmunity();
 	void RemoveCarrierImmunity();
+	void ApplyCarrierMoveSpeed();
+	void RemoveCarrierMoveSpeed();
+	void LaunchExplodedCarrier(ANPPlayerState* ExplodedHolder);
 	void BindToCurrentCarrierGrab();
 	void UnbindFromCurrentCarrierGrab();
 	void HandleCarrierGrabbedPlayer(ANPReplicatedStablePhysicsPawn* GrabbedPawn);
@@ -149,6 +168,7 @@ private:
 
 	int32 NextRoundStarterIndex = 0;
 	TWeakObjectPtr<UAbilitySystemComponent> CarrierAbilitySystem;
+	TWeakObjectPtr<UNPStablePhysicsMovementComponent> CarrierMovementComponent;
 	TWeakObjectPtr<ANPReplicatedStablePhysicsPawn> BoundCarrierPawn;
 	FActiveGameplayEffectHandle CarrierImmunityEffectHandle;
 	FTimerHandle BombFuseTimer;
