@@ -363,6 +363,12 @@ void UNPSelectPictureWidget::UpdateSelectedPictureCountText()
 		return;
 	}
 
+	if (bWaitingForOtherPlayers)
+	{
+		SelectedPictureCountText->SetText(FText::FromString(TEXT("대기 중...")));
+		return;
+	}
+
 	const int32 SelectedCount =	PictureListWidget->GetSelectedPictureCount();
 
 	SelectedPictureCountText->SetText(
