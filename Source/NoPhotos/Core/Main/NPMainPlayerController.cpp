@@ -256,6 +256,7 @@ void ANPMainPlayerController::BeginPlay()
 
 void ANPMainPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	GetWorldTimerManager().ClearTimer(MinimumMainWorldLoadingTimer);
 	UnbindAimCrosshairFromAbilitySystem();
 	Super::EndPlay(EndPlayReason);
 }
@@ -289,9 +290,10 @@ void ANPMainPlayerController::ClientBeginMainWorldPreparation_Implementation()
 
 void ANPMainPlayerController::BeginLocalMainWorldPreparation()
 {
+	bMainWorldPreparationFailed = false;
+	GetWorldTimerManager().ClearTimer(MinimumMainWorldLoadingTimer);
 	if (ShouldBypassRoomPreparationForEditorTest())
 	{
-		GetWorldTimerManager().ClearTimer(MinimumMainWorldLoadingTimer);
 		SetMainWorldInputLocked(false);
 		HideMainWorldLoadingOverlay();
 		CompleteLocalMainWorldReadiness();
@@ -360,7 +362,7 @@ void ANPMainPlayerController::BindRoomGenerationState()
 
 void ANPMainPlayerController::HandleLocalRoomGenerationCompleted()
 {
-	if (!IsLocalController() || bReportedMainWorldReady)
+	if (!IsLocalController() || bReportedMainWorldReady || bMainWorldPreparationFailed)
 	{
 		return;
 	}
@@ -390,7 +392,7 @@ void ANPMainPlayerController::HandleLocalRoomGenerationCompleted()
 
 void ANPMainPlayerController::CompleteLocalMainWorldReadiness()
 {
-	if (!IsLocalController() || bReportedMainWorldReady)
+	if (!IsLocalController() || bReportedMainWorldReady || bMainWorldPreparationFailed)
 	{
 		return;
 	}
@@ -403,6 +405,7 @@ void ANPMainPlayerController::HandleLocalRoomGenerationFailed()
 {
 	if (IsLocalController())
 	{
+		bMainWorldPreparationFailed = true;
 		GetWorldTimerManager().ClearTimer(MinimumMainWorldLoadingTimer);
 		UE_LOG(LogNoPhotos, Error,
 			TEXT("[MainWorldLoading] Local room generation failed. Controller=%s"),
@@ -430,6 +433,8 @@ void ANPMainPlayerController::ClientFinishMainWorldPreparation_Implementation()
 
 void ANPMainPlayerController::ClientNotifyMainWorldLoadFailed_Implementation()
 {
+	bMainWorldPreparationFailed = true;
+	GetWorldTimerManager().ClearTimer(MinimumMainWorldLoadingTimer);
 	SetMainWorldInputLocked(true);
 	ShowMainWorldLoadingFailure();
 	UE_LOG(LogNoPhotos, Error,
