@@ -158,9 +158,6 @@ bool UNPPhotoCapturePenaltyComponent::ApplyCapturedWithRelicPenalty(
 		return false;
 	}
 
-	// 유물 자체를 떨어뜨리는 규칙이므로 함께 잡은 다른 플레이어의 Grab도 해제합니다.
-	Grabbable->ForceReleaseAllGrabs();
-
 	UE_LOG(
 		LogNPPhoto,
 		Warning,

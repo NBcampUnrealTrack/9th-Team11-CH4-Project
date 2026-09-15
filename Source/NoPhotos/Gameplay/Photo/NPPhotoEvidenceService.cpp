@@ -7,6 +7,7 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 #include "Gameplay/Character/Component/NPStablePhysicsGrabComponent.h"
 #include "Data/Interface/NPPhotoReactiveTarget.h"
@@ -16,9 +17,33 @@
 #include "Gameplay/Relic/NPBreakableRelic.h"
 #include "Core/Main/NPMainGameMode.h"
 
+UNPPhotoEvidenceService::UNPPhotoEvidenceService()
+{
+	HeadVisibilitySampleNames = {
+		TEXT("PhotoHeadUDBL"), TEXT("PhotoHeadUDBR"),
+		TEXT("PhotoHeadUFR"), TEXT("PhotoHeadUFL"),
+		TEXT("PhotoHeadBR"), TEXT("PhotoHeadBL"),
+		TEXT("PhotoHeadFR"), TEXT("PhotoHeadFL"),
+		TEXT("PhotoHeadUL"), TEXT("PhotoHeadUR"),
+		TEXT("PhotoHeadUB"), TEXT("PhotoHeadUF"),
+		TEXT("PhotoHeadU"), TEXT("PhotoHeadF"),
+		TEXT("PhotoHeadB"), TEXT("PhotoHeadR"),
+		TEXT("PhotoHeadL"), TEXT("PhotoHeadC"),
+		TEXT("head_end")
+	};
+}
+
 void UNPPhotoEvidenceService::Initialize(ANPMainGameMode* InOwningGameMode)
 {
 	OwningGameMode = InOwningGameMode;
+}
+
+void UNPPhotoEvidenceService::SetMinimumVisibleHeadSampleCount(const int32 InSampleCount)
+{
+	MinimumVisibleHeadSampleCount = FMath::Clamp(
+		InSampleCount,
+		1,
+		FMath::Max(1, HeadVisibilitySampleNames.Num()));
 }
 
 UWorld* UNPPhotoEvidenceService::GetWorld() const
@@ -48,132 +73,48 @@ FNPPhotoEvidenceResult UNPPhotoEvidenceService::EvaluatePhoto(
 	APawn* PhotographerPawn = Request.Photographer->GetPawn();
 	const float MaximumDistanceSquared = FMath::Square(MaximumCaptureDistance);
 
-	// 유물 증거 판정과 독립적으로 사진에 들어온 플레이어를 먼저 찾습니다.
-	float BestPlayerVisibility = -1.0f;
 	for (TActorIterator<ANPReplicatedStablePhysicsPawn> Iterator(GetWorld()); Iterator; ++Iterator)
 	{
-		ANPReplicatedStablePhysicsPawn* CandidatePlayer = *Iterator;
-		if (!IsValid(CandidatePlayer)
-			|| CandidatePlayer == PhotographerPawn
-			|| !IsValid(CandidatePlayer->GetPlayerState())
-			|| FVector::DistSquared(
-				Request.CameraLocation,
-				CandidatePlayer->GetActorLocation()) > MaximumDistanceSquared)
-		{
-			continue;
-		}
-
-		const float PlayerVisibility = CalculateActorVisibility(
-			Request,
-			CandidatePlayer,
-			PhotographerPawn);
-		if (PlayerVisibility < MinimumPlayerCaptureVisibility
-			|| PlayerVisibility <= BestPlayerVisibility)
-		{
-			continue;
-		}
-
-		BestPlayerVisibility = PlayerVisibility;
-		Result.bPlayerCaptured = true;
-		Result.CapturedPlayer = CandidatePlayer->GetPlayerState();
-		Result.CapturedPlayerVisibility = PlayerVisibility;
-		Result.ServerCaptureTime = GetWorld()->GetTimeSeconds();
-	}
-
-	if (Result.bPlayerCaptured)
-	{
-		UE_LOG(
-			LogNPPhoto,
-			Log,
-			TEXT("[Evidence] Player captured independently. Player=%s Visibility=%.2f"),
-			*GetNameSafe(Result.CapturedPlayer.Get()),
-			Result.CapturedPlayerVisibility);
-	}
-
-	float BestEvidenceQuality = -1.0f;
-	for (TActorIterator<APawn> Iterator(GetWorld()); Iterator; ++Iterator)
-	{
-		APawn* CandidateThief = *Iterator;
+		ANPReplicatedStablePhysicsPawn* CandidateThief = *Iterator;
 		if (!IsValid(CandidateThief)
 			|| CandidateThief == PhotographerPawn
-			|| !CandidateThief->GetClass()->ImplementsInterface(UNPRelicHolderInterface::StaticClass()))
+			|| !IsValid(CandidateThief->GetPlayerState()))
 		{
 			continue;
 		}
 
-		AActor* HeldRelic = INPRelicHolderInterface::Execute_GetHeldRelic(CandidateThief);
-		UE_LOG(
-			LogNPPhoto,
-			Verbose,
-			TEXT("[Evidence] Holder candidate. Thief=%s Relic=%s"),
-			*GetNameSafe(CandidateThief),
-			*GetNameSafe(HeldRelic));
-		const ANPBaseRelic* Relic = Cast<ANPBaseRelic>(HeldRelic);
-		if (!IsValid(Relic))
+		AActor* HeldRelic = nullptr;
+		if (!IsRelicHolderCapturable(
+			Request,
+			CandidateThief,
+			PhotographerPawn,
+			HeldRelic))
 		{
 			continue;
 		}
 
-		if (const ANPBreakableRelic* BreakableRelic = Cast<ANPBreakableRelic>(Relic);
-			BreakableRelic && BreakableRelic->IsBroken())
+		FNPPhotoRelicEvidenceGroup* EvidenceGroup = Result.RelicEvidenceGroups.FindByPredicate(
+			[HeldRelic](const FNPPhotoRelicEvidenceGroup& Group)
+			{
+				return Group.Relic == HeldRelic;
+			});
+		if (!EvidenceGroup)
 		{
-			UE_LOG(
-				LogNPPhoto,
-				Verbose,
-				TEXT("[Evidence] Broken relic rejected. Thief=%s Relic=%s"),
-				*GetNameSafe(CandidateThief),
-				*GetNameSafe(HeldRelic));
-			continue;
+			EvidenceGroup = &Result.RelicEvidenceGroups.AddDefaulted_GetRef();
+			EvidenceGroup->Relic = HeldRelic;
 		}
-
-		if (FVector::DistSquared(Request.CameraLocation, CandidateThief->GetActorLocation())
-			> MaximumDistanceSquared
-			|| FVector::DistSquared(Request.CameraLocation, Relic->GetActorLocation())
-			> MaximumDistanceSquared)
-		{
-			continue;
-		}
-
-		const float ThiefVisibility = CalculateActorVisibility(
-			Request, CandidateThief, PhotographerPawn);
-		const float RelicVisibility = CalculateActorVisibility(
-			Request, HeldRelic, PhotographerPawn);
-		if (ThiefVisibility < MinimumThiefVisibility
-			|| RelicVisibility < MinimumRelicVisibility)
-		{
-			UE_LOG(
-				LogNPPhoto,
-				Verbose,
-				TEXT("[Evidence] Visibility rejected. Thief=%s Relic=%s ThiefVisibility=%.2f RelicVisibility=%.2f"),
-				*GetNameSafe(CandidateThief),
-				*GetNameSafe(HeldRelic),
-				ThiefVisibility,
-				RelicVisibility);
-			continue;
-		}
-
-		const float EvidenceQuality = (ThiefVisibility + RelicVisibility) * 0.5f;
-		if (EvidenceQuality <= BestEvidenceQuality)
-		{
-			continue;
-		}
-
-		BestEvidenceQuality = EvidenceQuality;
-		Result.bSuccess = true;
-		Result.FailureReason = ENPPhotoEvidenceFailureReason::None;
-		Result.Thief = CandidateThief->GetPlayerState();
-		Result.Relic = HeldRelic;
-		Result.ThiefVisibility = ThiefVisibility;
-		Result.RelicVisibility = RelicVisibility;
-		Result.ServerCaptureTime = GetWorld()->GetTimeSeconds();
+		EvidenceGroup->Thieves.AddUnique(CandidateThief->GetPlayerState());
 		UE_LOG(
 			LogNPPhoto,
 			Log,
-			TEXT("[Evidence] Valid candidate. Thief=%s Relic=%s ThiefVisibility=%.2f RelicVisibility=%.2f"),
+			TEXT("[Evidence] Valid relic holder. Thief=%s Relic=%s"),
 			*GetNameSafe(CandidateThief),
-			*GetNameSafe(HeldRelic),
-			ThiefVisibility,
-			RelicVisibility);
+			*GetNameSafe(HeldRelic));
+	}
+	Result.bSuccess = !Result.RelicEvidenceGroups.IsEmpty();
+	if (Result.bSuccess)
+	{
+		Result.ServerCaptureTime = GetWorld()->GetTimeSeconds();
 	}
 
 	AActor* BestReactiveTarget = nullptr;
@@ -253,13 +194,53 @@ FNPPhotoEvidenceResult UNPPhotoEvidenceService::EvaluatePhoto(
 		UE_LOG(
 			LogNPPhoto,
 			Log,
-			TEXT("[Evidence] Success. RelicEvidence=%s Thief=%s Relic=%s ReactiveTarget=%s"),
+			TEXT("[Evidence] Success. RelicEvidence=%s RelicCount=%d ReactiveTarget=%s"),
 			Result.bSuccess ? TEXT("true") : TEXT("false"),
-			*GetNameSafe(Result.Thief.Get()),
-			*GetNameSafe(Result.Relic.Get()),
+			Result.RelicEvidenceGroups.Num(),
 			*GetNameSafe(Result.ReactiveTarget.Get()));
 	}
 	return Result;
+}
+
+bool UNPPhotoEvidenceService::IsRelicHolderCapturable(
+	const FNPPhotoCaptureRequest& Request,
+	ANPReplicatedStablePhysicsPawn* TargetPawn,
+	APawn* PhotographerPawn,
+	AActor*& OutHeldRelic,
+	const int32 RequiredVisibleHeadSampleCount) const
+{
+	OutHeldRelic = nullptr;
+	if (!IsValid(TargetPawn) || TargetPawn == PhotographerPawn
+		|| !TargetPawn->GetClass()->ImplementsInterface(UNPRelicHolderInterface::StaticClass())
+		|| FVector::DistSquared(Request.CameraLocation, TargetPawn->GetActorLocation())
+			> FMath::Square(MaximumCaptureDistance))
+	{
+		return false;
+	}
+
+	ANPBaseRelic* HeldRelic = Cast<ANPBaseRelic>(
+		INPRelicHolderInterface::Execute_GetHeldRelic(TargetPawn));
+	if (!IsValid(HeldRelic) || HeldRelic->IsReturned())
+	{
+		return false;
+	}
+	if (const ANPBreakableRelic* BreakableRelic = Cast<ANPBreakableRelic>(HeldRelic);
+		BreakableRelic && BreakableRelic->IsBroken())
+	{
+		return false;
+	}
+
+	const int32 VisibleHeadSampleRequirement = RequiredVisibleHeadSampleCount > 0
+		? RequiredVisibleHeadSampleCount
+		: MinimumVisibleHeadSampleCount;
+	if (CountVisibleHeadSamples(Request, TargetPawn, PhotographerPawn)
+		< VisibleHeadSampleRequirement)
+	{
+		return false;
+	}
+
+	OutHeldRelic = HeldRelic;
+	return true;
 }
 
 bool UNPPhotoEvidenceService::ValidateRequest(
@@ -394,6 +375,55 @@ float UNPPhotoEvidenceService::CalculateActorVisibility(
 	}
 
 	return static_cast<float>(VisiblePointCount) / SamplePoints.Num();
+}
+
+int32 UNPPhotoEvidenceService::CountVisibleHeadSamples(
+	const FNPPhotoCaptureRequest& Request,
+	ANPReplicatedStablePhysicsPawn* TargetPawn,
+	APawn* PhotographerPawn) const
+{
+	if (!IsValid(TargetPawn))
+	{
+		return 0;
+	}
+
+	UWorld* World = TargetPawn->GetWorld();
+	USkeletalMeshComponent* Mesh = TargetPawn->FindComponentByClass<USkeletalMeshComponent>();
+	if (!World || !IsValid(Mesh))
+	{
+		return 0;
+	}
+
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(PhotoHeadVisibility), true);
+	QueryParams.AddIgnoredActor(PhotographerPawn);
+	int32 VisiblePointCount = 0;
+	for (const FName SampleName : HeadVisibilitySampleNames)
+	{
+		if (!Mesh->DoesSocketExist(SampleName))
+		{
+			continue;
+		}
+
+		const FVector SampleLocation = Mesh->GetSocketLocation(SampleName);
+		if (!IsInsideCameraFOV(Request, SampleLocation))
+		{
+			continue;
+		}
+
+		FHitResult Hit;
+		const bool bBlocked = World->LineTraceSingleByChannel(
+			Hit,
+			Request.CameraLocation,
+			SampleLocation,
+			ECC_Visibility,
+			QueryParams);
+		if (!bBlocked || Hit.GetActor() == TargetPawn)
+		{
+			++VisiblePointCount;
+		}
+	}
+
+	return VisiblePointCount;
 }
 
 void UNPPhotoEvidenceService::BuildActorSamplePoints(

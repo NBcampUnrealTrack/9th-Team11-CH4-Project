@@ -37,6 +37,19 @@ struct NOPHOTOS_API FNPPhotoCaptureRequest
 	uint16 CaptureSequence = 0;
 };
 
+/** 한 장의 사진에서 동일한 유물을 들고 있다가 적발된 플레이어 묶음입니다. */
+USTRUCT(BlueprintType)
+struct NOPHOTOS_API FNPPhotoRelicEvidenceGroup
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category="Photo")
+	TObjectPtr<AActor> Relic = nullptr;
+
+	UPROPERTY(BlueprintReadOnly, Category="Photo")
+	TArray<TObjectPtr<APlayerState>> Thieves;
+};
+
 /** 사진 한 장에 대한 서버의 상세 판정 결과입니다. */
 USTRUCT(BlueprintType)
 struct NOPHOTOS_API FNPPhotoEvidenceResult
@@ -59,27 +72,7 @@ struct NOPHOTOS_API FNPPhotoEvidenceResult
 	TObjectPtr<APlayerState> Photographer = nullptr;
 
 	UPROPERTY(BlueprintReadOnly, Category="Photo")
-	TObjectPtr<APlayerState> Thief = nullptr;
-
-	UPROPERTY(BlueprintReadOnly, Category="Photo")
-	TObjectPtr<AActor> Relic = nullptr;
-
-	/** 유물 보유 여부와 무관하게 상대 플레이어가 사진에 포착되었는지 나타냅니다. */
-	UPROPERTY(BlueprintReadOnly, Category="Photo")
-	bool bPlayerCaptured = false;
-
-	/** 독립 플레이어 촬영 판정에서 가시율이 가장 높았던 플레이어입니다. */
-	UPROPERTY(BlueprintReadOnly, Category="Photo")
-	TObjectPtr<APlayerState> CapturedPlayer = nullptr;
-
-	UPROPERTY(BlueprintReadOnly, Category="Photo")
-	float CapturedPlayerVisibility = 0.0f;
-
-	UPROPERTY(BlueprintReadOnly, Category="Photo")
-	float ThiefVisibility = 0.0f;
-
-	UPROPERTY(BlueprintReadOnly, Category="Photo")
-	float RelicVisibility = 0.0f;
+	TArray<FNPPhotoRelicEvidenceGroup> RelicEvidenceGroups;
 
 	/** 유물 증거와 독립적으로 사진 반응 대상이 촬영되었는지 나타냅니다. */
 	UPROPERTY(BlueprintReadOnly, Category="Photo")
@@ -111,10 +104,10 @@ struct NOPHOTOS_API FNPReplicatedPhotoEvidence
 	TObjectPtr<APlayerState> Photographer = nullptr;
 
 	UPROPERTY(BlueprintReadOnly, Category="Photo")
-	TObjectPtr<APlayerState> Thief = nullptr;
+	TArray<TObjectPtr<APlayerState>> Thieves;
 
 	UPROPERTY(BlueprintReadOnly, Category="Photo")
-	TObjectPtr<AActor> Relic = nullptr;
+	TArray<TObjectPtr<AActor>> Relics;
 
 	UPROPERTY(BlueprintReadOnly, Category="Photo")
 	int32 AwardedScore = 0;

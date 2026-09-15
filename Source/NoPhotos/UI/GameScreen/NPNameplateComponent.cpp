@@ -3,6 +3,10 @@
 #include "GameFramework/Pawn.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Gameplay/Character/Component/NPInvisibilityComponent.h"
+#include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
+#include "Gameplay/Photo/NPPhotoEvidenceService.h"
+#include "Core/Main/NPMainGameState.h"
+#include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
@@ -30,7 +34,58 @@ void UNPNameplateComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
 	RefreshNameplate();
+	UpdatePhotoTargetIndicator(DeltaTime);
 	UpdateFacingCamera();
+}
+
+void UNPNameplateComponent::UpdatePhotoTargetIndicator(const float DeltaTime)
+{
+	if (GetNetMode() == NM_DedicatedServer || !IsValid(NameplateWidget))
+	{
+		return;
+	}
+
+	PhotoTargetRefreshElapsed += DeltaTime;
+	if (PhotoTargetRefreshElapsed < PhotoTargetRefreshInterval)
+	{
+		return;
+	}
+	PhotoTargetRefreshElapsed = 0.0f;
+
+	ANPReplicatedStablePhysicsPawn* TargetPawn =
+		Cast<ANPReplicatedStablePhysicsPawn>(GetOwner());
+	APlayerController* LocalPlayerController = UGameplayStatics::GetPlayerController(this, 0);
+	APlayerCameraManager* CameraManager = LocalPlayerController
+		? LocalPlayerController->PlayerCameraManager
+		: nullptr;
+	APawn* PhotographerPawn = LocalPlayerController
+		? LocalPlayerController->GetPawn()
+		: nullptr;
+	if (!IsVisible() || !IsValid(TargetPawn) || !IsValid(CameraManager)
+		|| !IsValid(PhotographerPawn))
+	{
+		NameplateWidget->SetPhotoTargetIndicatorVisible(false);
+		return;
+	}
+
+	FNPPhotoCaptureRequest Request;
+	Request.Photographer = LocalPlayerController;
+	Request.CameraLocation = CameraManager->GetCameraLocation();
+	Request.CameraForward = CameraManager->GetCameraRotation().Vector();
+	const ANPMainGameState* MainGameState = GetWorld()
+		? GetWorld()->GetGameState<ANPMainGameState>()
+		: nullptr;
+	const int32 RequiredVisibleHeadSampleCount = MainGameState
+		? MainGameState->GetMinimumVisibleHeadSampleCount()
+		: 2;
+	AActor* HeldRelic = nullptr;
+	const bool bCapturable = GetDefault<UNPPhotoEvidenceService>()->IsRelicHolderCapturable(
+		Request,
+		TargetPawn,
+		PhotographerPawn,
+		HeldRelic,
+		RequiredVisibleHeadSampleCount);
+	NameplateWidget->SetPhotoTargetIndicatorVisible(bCapturable);
 }
 
 void UNPNameplateComponent::SetNameplateVisible(bool bShouldBeVisible)

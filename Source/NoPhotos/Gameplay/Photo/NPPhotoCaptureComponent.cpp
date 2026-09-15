@@ -541,28 +541,30 @@ void UNPPhotoCaptureComponent::ClientReceivePhotoResult_Implementation(
 	UE_LOG(
 		LogNPPhoto,
 		Log,
-		TEXT("[Result] PlayerCaptured=%s CapturedPlayer=%s RelicSuccess=%s ReactiveSuccess=%s Reason=%d Thief=%s Relic=%s ReactiveTarget=%s"),
-		Result.bPlayerCaptured ? TEXT("true") : TEXT("false"),
-		*GetNameSafe(Result.CapturedPlayer.Get()),
+		TEXT("[Result] RelicSuccess=%s RelicCount=%d ReactiveSuccess=%s Reason=%d ReactiveTarget=%s"),
 		Result.bSuccess ? TEXT("true") : TEXT("false"),
+		Result.RelicEvidenceGroups.Num(),
 		Result.bReactiveTargetSuccess ? TEXT("true") : TEXT("false"),
 		static_cast<int32>(Result.FailureReason),
-		*GetNameSafe(Result.Thief.Get()),
-		*GetNameSafe(Result.Relic.Get()),
 		*GetNameSafe(Result.ReactiveTarget.Get()));
 
 #if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
 	if (Result.bSuccess && GEngine)
 	{
+		int32 ThiefCount = 0;
+		for (const FNPPhotoRelicEvidenceGroup& EvidenceGroup : Result.RelicEvidenceGroups)
+		{
+			ThiefCount += EvidenceGroup.Thieves.Num();
+		}
 		GEngine->AddOnScreenDebugMessage(
 			-1,
 			5.0f,
 			FColor::Green,
 			FString::Printf(
-				TEXT("[사진 판정 성공]\n촬영자: %s\n도둑: %s\n유물: %s"),
+				TEXT("[사진 판정 성공]\n촬영자: %s\n도둑: %d명\n유물: %d개"),
 				*GetNameSafe(Result.Photographer.Get()),
-				*GetNameSafe(Result.Thief.Get()),
-				*GetNameSafe(Result.Relic.Get())));
+				ThiefCount,
+				Result.RelicEvidenceGroups.Num()));
 	}
 	if (Result.bReactiveTargetSuccess && GEngine)
 	{

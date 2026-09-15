@@ -27,6 +27,7 @@ void ANPMainGameState::GetLifetimeReplicatedProps(
 		ANPMainGameState,
 		PictureSelectionCompletedPlayers);
 	DOREPLIFETIME(ANPMainGameState, PhotoEvidence);
+	DOREPLIFETIME(ANPMainGameState, MinimumVisibleHeadSampleCount);
 	DOREPLIFETIME(ANPMainGameState, TransferredPhotoIds);
 	DOREPLIFETIME(ANPMainGameState, SelectedPhotos);
 	DOREPLIFETIME(ANPMainGameState, ResultParticipants);
@@ -226,8 +227,14 @@ void ANPMainGameState::AddPhotoEvidence(const FNPPhotoEvidenceResult& Result, co
 	NewEvidence.PhotoId = Result.PhotoId;
 	NewEvidence.CaptureSequence = Result.CaptureSequence;
 	NewEvidence.Photographer = Result.Photographer;
-	NewEvidence.Thief = Result.Thief;
-	NewEvidence.Relic = Result.Relic;
+	for (const FNPPhotoRelicEvidenceGroup& EvidenceGroup : Result.RelicEvidenceGroups)
+	{
+		NewEvidence.Relics.AddUnique(EvidenceGroup.Relic);
+		for (APlayerState* Thief : EvidenceGroup.Thieves)
+		{
+			NewEvidence.Thieves.AddUnique(Thief);
+		}
+	}
 	NewEvidence.AwardedScore = AwardedScore;
 	NewEvidence.ServerCaptureTime = Result.ServerCaptureTime;
 	int32 PhotographerPhotoCount = 0;
@@ -245,6 +252,17 @@ void ANPMainGameState::AddPhotoEvidence(const FNPPhotoEvidenceResult& Result, co
 	}
 	ForceNetUpdate();
 	OnPhotoEvidenceChanged.Broadcast();
+}
+
+void ANPMainGameState::SetMinimumVisibleHeadSampleCount(const int32 InSampleCount)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	MinimumVisibleHeadSampleCount = FMath::Clamp(InSampleCount, 1, 19);
+	ForceNetUpdate();
 }
 
 void ANPMainGameState::RegisterTransferredPhoto(const FGuid& PhotoId)

@@ -158,7 +158,7 @@ void UNPResultPicturePreviewPopup::OpenForPhoto(
 	if (IsValid(CapturedPlayerText))
 	{
 		const FString DisplayName = InCapturedPlayerName.IsEmpty() ? TEXT("익명") : InCapturedPlayerName;
-		CapturedPlayerText->SetText(FText::FromString(FString::Printf(TEXT("%s 님이 찍힌 사진"), *DisplayName)));
+		CapturedPlayerText->SetText(FText::FromString(FString::Printf(TEXT("들킨 여우 : %s"), *DisplayName)));
 	}
 
 	if (IsValid(TransferComponent))

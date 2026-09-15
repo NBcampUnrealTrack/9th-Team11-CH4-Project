@@ -10,9 +10,5 @@ int32 UNPMatchScorePolicy::CalculateEvidenceScore_Implementation(
 		return 0;
 	}
 
-	const float AverageVisibility = FMath::Clamp(
-		(Evidence.ThiefVisibility + Evidence.RelicVisibility) * 0.5f,
-		0.0f,
-		1.0f);
-	return BaseEvidenceScore + FMath::RoundToInt(MaximumVisibilityBonus * AverageVisibility);
+	return 10 * Evidence.RelicEvidenceGroups.Num();
 }

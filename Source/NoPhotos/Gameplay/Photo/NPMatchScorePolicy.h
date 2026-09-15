@@ -13,11 +13,4 @@ class NOPHOTOS_API UNPMatchScorePolicy : public UObject
 public:
 	UFUNCTION(BlueprintNativeEvent, Category="Photo|Score")
 	int32 CalculateEvidenceScore(const FNPPhotoEvidenceResult& Evidence) const;
-
-protected:
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Photo|Score", meta=(ClampMin="0"))
-	int32 BaseEvidenceScore = 100;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Photo|Score", meta=(ClampMin="0"))
-	int32 MaximumVisibilityBonus = 50;
 };
