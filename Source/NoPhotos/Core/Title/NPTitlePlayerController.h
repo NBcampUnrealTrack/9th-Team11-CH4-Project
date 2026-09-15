@@ -8,6 +8,8 @@
 
 class UNPRoomPlayerComponent;
 class UNPUserWidget;
+class UNPPSOPrecacheComponent;
+class UNPMainWorldLoadingWidget;
 
 UCLASS()
 class NOPHOTOS_API ANPTitlePlayerController : public APlayerController
@@ -36,9 +38,23 @@ public:
 	void ClientShowMainMenuUI();
 
 protected:
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UNPRoomPlayerComponent> RoomComponent;
 
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UNPUserWidget> MainMenuWidgetClass;
+
+private:
+	void FinishStartupPreparation();
+
+	UPROPERTY(VisibleAnywhere, Category = "Loading")
+	TObjectPtr<UNPPSOPrecacheComponent> PSOPrecacheComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNPMainWorldLoadingWidget> StartupLoadingWidget;
+
+	bool bWaitingForStartupPSO = false;
+	bool bStartupPSOReady = false;
 };

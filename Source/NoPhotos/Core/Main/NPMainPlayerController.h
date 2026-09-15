@@ -277,6 +277,7 @@ private:
 
 	bool bMainWorldInputLocked = false;
 	bool bReportedMainWorldReady = false;
+	bool bMainWorldPreparationFailed = false;
 	double MainWorldLoadingShownAtRealTime = -1.0;
 	FTimerHandle MinimumMainWorldLoadingTimer;
 	FTimerHandle GameStartCountdownUpdateTimer;

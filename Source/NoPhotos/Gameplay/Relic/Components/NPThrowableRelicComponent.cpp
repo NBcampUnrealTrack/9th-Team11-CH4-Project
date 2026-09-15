@@ -2,6 +2,7 @@
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
+#include "CollisionQueryParams.h"
 #include "Components/AudioComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Core/GameplayTag/NPGameplayTags.h"
@@ -68,7 +69,10 @@ bool UNPThrowableRelicComponent::CanThrow(
 		&& World->GetTimeSeconds() >= NextThrowAllowedTime;
 }
 
-bool UNPThrowableRelicComponent::TryThrow(ANPStablePhysicsPawn* ThrowerPawn)
+bool UNPThrowableRelicComponent::TryThrow(
+	ANPStablePhysicsPawn* ThrowerPawn,
+	const FVector& CameraLocation,
+	const FVector& CameraForward)
 {
 	ANPBaseRelic* Relic = Cast<ANPBaseRelic>(GetOwner());
 	UWorld* World = GetWorld();
@@ -88,10 +92,15 @@ bool UNPThrowableRelicComponent::TryThrow(ANPStablePhysicsPawn* ThrowerPawn)
 		return false;
 	}
 
-	const FVector ThrowVelocity = CalculateThrowVelocity(
-		ThrowerPawn->GetViewDirection(),
-		ThrowerPawn->GetVelocity(),
-		ThrowSettings);
+	const FVector AimTarget = ResolveAimTarget(
+		ThrowerPawn,
+		CameraLocation,
+		CameraForward);
+	const FVector ThrowVelocity = CalculateAimedThrowVelocity(
+		RelicMesh->GetComponentLocation(),
+		AimTarget,
+		CameraForward,
+		ThrowerPawn->GetVelocity());
 	const FVector AngularVelocity = CalculateAngularVelocityDegrees(
 		RelicMesh->GetComponentTransform(),
 		ThrowSettings);
@@ -114,13 +123,13 @@ bool UNPThrowableRelicComponent::TryThrow(ANPStablePhysicsPawn* ThrowerPawn)
 	}
 
 	Relic->SetInstigator(ThrowerPawn);
+	ThrowInstigator = ThrowerPawn;
+	ThrowSourceAbilitySystem =
+		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(ThrowerPawn);
 	RelicMesh->WakeAllRigidBodies();
 	RelicMesh->SetPhysicsLinearVelocity(ThrowVelocity, false);
 	RelicMesh->SetPhysicsAngularVelocityInDegrees(AngularVelocity, false);
 	BeginFlight(RelicMesh);
-	ThrowInstigator = ThrowerPawn;
-	ThrowSourceAbilitySystem =
-		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(ThrowerPawn);
 	NextThrowAllowedTime = World->GetTimeSeconds()
 		+ (FMath::IsFinite(ThrowSettings.Cooldown)
 			? FMath::Max(0.0f, ThrowSettings.Cooldown)
@@ -171,6 +180,7 @@ void UNPThrowableRelicComponent::BeginFlight(UPrimitiveComponent* RelicMesh)
 		this,
 		&ThisClass::HandleThrownRelicHit);
 	bFlightActive = true;
+	bFirstImpactPresented = false;
 
 	const float SafeMaximumDuration = FMath::IsFinite(MaximumFlyingSoundDuration)
 		? FMath::Max(0.1f, MaximumFlyingSoundDuration)
@@ -208,7 +218,9 @@ void UNPThrowableRelicComponent::EndFlight(
 			bPreviousFlightNotifyRigidBodyCollision);
 	}
 	FlightHitMesh.Reset();
-	MulticastEndFlyingAudio(bPlayImpactSound, ImpactLocation);
+	const bool bPresentImpact = bPlayImpactSound && !bFirstImpactPresented;
+	bFirstImpactPresented |= bPlayImpactSound;
+	MulticastEndFlyingAudio(bPresentImpact, ImpactLocation);
 	ThrowInstigator.Reset();
 	ThrowSourceAbilitySystem.Reset();
 }
@@ -226,14 +238,24 @@ void UNPThrowableRelicComponent::HandleThrownRelicHit(
 		return;
 	}
 
-	TryApplyKnockback(HitComponent, OtherActor, Hit);
 	const FVector ImpactLocation = Hit.ImpactPoint.IsNearlyZero()
 		? HitComponent->GetComponentLocation()
 		: FVector(Hit.ImpactPoint);
-	EndFlight(true, ImpactLocation);
+	if (TryApplyKnockback(HitComponent, OtherActor, Hit))
+	{
+		EndFlight(true, ImpactLocation);
+		return;
+	}
+
+	// 바닥이나 벽에 먼저 맞아도 캐릭터 공격 판정은 재잡기/시간 초과까지 유지합니다.
+	if (!bFirstImpactPresented)
+	{
+		bFirstImpactPresented = true;
+		MulticastEndFlyingAudio(true, ImpactLocation);
+	}
 }
 
-void UNPThrowableRelicComponent::TryApplyKnockback(
+bool UNPThrowableRelicComponent::TryApplyKnockback(
 	UPrimitiveComponent* HitComponent,
 	AActor* OtherActor,
 	const FHitResult& Hit)
@@ -252,16 +274,17 @@ void UNPThrowableRelicComponent::TryApplyKnockback(
 		|| !IsValid(SourceASC)
 		|| !Settings.KnockbackEffectClass)
 	{
-		return;
+		return false;
 	}
 
 	FVector KnockbackDirection =
 		HitComponent->GetPhysicsLinearVelocityAtPoint(Hit.ImpactPoint);
 	KnockbackDirection.Z = 0.0f;
 	const float HorizontalSpeed = KnockbackDirection.Size();
-	if (HorizontalSpeed < FMath::Max(0.0f, Settings.MinimumKnockbackSpeed))
+	if (HorizontalSpeed <= UE_SMALL_NUMBER
+		|| HorizontalSpeed < FMath::Max(0.0f, Settings.MinimumKnockbackSpeed))
 	{
-		return;
+		return false;
 	}
 	KnockbackDirection /= HorizontalSpeed;
 
@@ -269,7 +292,12 @@ void UNPThrowableRelicComponent::TryApplyKnockback(
 		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(OtherActor);
 	if (!IsValid(TargetASC))
 	{
-		return;
+		return false;
+	}
+	if (TargetASC->HasMatchingGameplayTag(
+		NPGameplayTags::State_CrowdControl_Immune))
+	{
+		return false;
 	}
 
 	FHitResult KnockbackHit = Hit;
@@ -285,7 +313,7 @@ void UNPThrowableRelicComponent::TryApplyKnockback(
 		EffectContext);
 	if (!EffectSpec.IsValid())
 	{
-		return;
+		return false;
 	}
 
 	EffectSpec.Data->AddDynamicAssetTag(NPGameplayTags::Effect_Knockback);
@@ -301,6 +329,107 @@ void UNPThrowableRelicComponent::TryApplyKnockback(
 		CueParameters.Normal = Hit.ImpactNormal;
 		TargetASC->ExecuteGameplayCue(Settings.ImpactCueTag, CueParameters);
 	}
+	return true;
+}
+
+FVector UNPThrowableRelicComponent::ResolveAimTarget(
+	const ANPStablePhysicsPawn* ThrowerPawn,
+	const FVector& CameraLocation,
+	const FVector& CameraForward) const
+{
+	UWorld* World = GetWorld();
+	const FVector AimDirection = CameraForward.GetSafeNormal();
+	const float TraceDistance = FMath::IsFinite(ThrowSettings.AimTraceDistance)
+		? FMath::Max(1.0f, ThrowSettings.AimTraceDistance)
+		: 3000.0f;
+	const FVector TraceEnd = CameraLocation + AimDirection * TraceDistance;
+	if (!IsValid(World) || CameraLocation.ContainsNaN()
+		|| AimDirection.IsNearlyZero())
+	{
+		return TraceEnd;
+	}
+
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(ThrowableRelicAim), true);
+	QueryParams.AddIgnoredActor(ThrowerPawn);
+	QueryParams.AddIgnoredActor(GetOwner());
+	FHitResult AimHit;
+	return World->LineTraceSingleByChannel(
+		AimHit,
+		CameraLocation,
+		TraceEnd,
+		ThrowSettings.AimTraceChannel,
+		QueryParams)
+		? FVector(AimHit.ImpactPoint)
+		: TraceEnd;
+}
+
+FVector UNPThrowableRelicComponent::CalculateAimedThrowVelocity(
+	const FVector& StartLocation,
+	const FVector& TargetLocation,
+	const FVector& CameraForward,
+	const FVector& ThrowerVelocity) const
+{
+	const float ForwardSpeed = FMath::IsFinite(ThrowSettings.ForwardSpeed)
+		? FMath::Max(0.0f, ThrowSettings.ForwardSpeed)
+		: 0.0f;
+	const float UpwardSpeed = FMath::IsFinite(ThrowSettings.UpwardSpeed)
+		? FMath::Max(0.0f, ThrowSettings.UpwardSpeed)
+		: 0.0f;
+	const float LaunchSpeed = FVector2D(ForwardSpeed, UpwardSpeed).Size();
+	const FVector InheritedVelocity = ThrowSettings.bInheritThrowerVelocity
+		&& !ThrowerVelocity.ContainsNaN()
+		? ThrowerVelocity
+		: FVector::ZeroVector;
+	if (LaunchSpeed > UE_SMALL_NUMBER
+		&& !StartLocation.ContainsNaN()
+		&& !TargetLocation.ContainsNaN())
+	{
+		FVector SuggestedVelocity = FVector::ZeroVector;
+		FVector AdjustedTarget = TargetLocation;
+		bool bFoundSolution = false;
+		for (int32 Iteration = 0; Iteration < 3; ++Iteration)
+		{
+			UGameplayStatics::FSuggestProjectileVelocityParameters Params(
+				this,
+				StartLocation,
+				AdjustedTarget,
+				LaunchSpeed);
+			Params.bFavorHighArc = ThrowSettings.bFavorHighArc;
+			Params.TraceOption = ESuggestProjVelocityTraceOption::DoNotTrace;
+			Params.ActorsToIgnore.Add(GetOwner());
+			bFoundSolution = UGameplayStatics::SuggestProjectileVelocity(
+				Params,
+				SuggestedVelocity);
+			if (!bFoundSolution || InheritedVelocity.IsNearlyZero())
+			{
+				break;
+			}
+
+			const FVector2D HorizontalDelta(
+				AdjustedTarget.X - StartLocation.X,
+				AdjustedTarget.Y - StartLocation.Y);
+			const FVector2D HorizontalVelocity(
+				SuggestedVelocity.X,
+				SuggestedVelocity.Y);
+			const float HorizontalSpeed = HorizontalVelocity.Size();
+			if (HorizontalSpeed <= UE_SMALL_NUMBER)
+			{
+				break;
+			}
+			const float FlightTime = HorizontalDelta.Size() / HorizontalSpeed;
+			AdjustedTarget = TargetLocation - InheritedVelocity * FlightTime;
+		}
+		if (bFoundSolution)
+		{
+			return SuggestedVelocity + InheritedVelocity;
+		}
+	}
+
+	// 현재 속도로 목표점에 도달할 탄도 해가 없으면 기존 직접 투척으로 대체합니다.
+	return CalculateThrowVelocity(
+		CameraForward,
+		ThrowerVelocity,
+		ThrowSettings);
 }
 
 void UNPThrowableRelicComponent::HandleRelicGrabStarted(
@@ -511,6 +640,7 @@ void UNPThrowableRelicComponent::EndPlay(
 	}
 	FlightHitMesh.Reset();
 	bFlightActive = false;
+	bFirstImpactPresented = false;
 	ThrowInstigator.Reset();
 	ThrowSourceAbilitySystem.Reset();
 	StopFlyingAudio(false);
