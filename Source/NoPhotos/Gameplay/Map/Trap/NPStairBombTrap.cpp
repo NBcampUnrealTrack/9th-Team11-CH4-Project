@@ -7,7 +7,6 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Core/GameplayTag/NPGameplayTags.h"
-#include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
@@ -94,7 +93,10 @@ void ANPStairBombTrap::HandleTrapStateChanged(
 	switch (NewState)
 	{
 	case ENPStairTrapState::Warning:
-		BeginThrow();
+		if (HasAuthority())
+		{
+			BeginThrow();
+		}
 		break;
 	case ENPStairTrapState::Active:
 	case ENPStairTrapState::Returning:
@@ -121,14 +123,30 @@ void ANPStairBombTrap::BeginThrow()
 		return;
 	}
 
-	ThrowStartLocation = ResolveThrowStartLocation();
-	ThrowTargetLocation = ResolveThrowTargetLocation();
-	ThrowStartRotation = IsValid(BombMeshComponent)
+	const FVector StartLocation = ResolveThrowStartLocation();
+	const FVector TargetLocation = ResolveThrowTargetLocation();
+	const FRotator StartRotation = IsValid(BombMeshComponent)
 		? BombMeshComponent->GetComponentRotation()
 		: FRotator::ZeroRotator;
+	MulticastBeginThrow(
+		StartLocation,
+		TargetLocation,
+		StartRotation,
+		GetTrapCycleSequence());
+}
+
+void ANPStairBombTrap::MulticastBeginThrow_Implementation(
+	const FVector_NetQuantize10 StartLocation,
+	const FVector_NetQuantize10 TargetLocation,
+	const FRotator StartRotation,
+	const int32 CycleSequence)
+{
+	ThrowStartLocation = StartLocation;
+	ThrowTargetLocation = TargetLocation;
+	ThrowStartRotation = StartRotation;
 	ThrowStartWorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 	LandedWorldTime = 0.0;
-	ActiveBombCycleSequence = GetTrapCycleSequence();
+	ActiveBombCycleSequence = CycleSequence;
 	BombLifecycle = ENPStairBombLifecycle::Flying;
 
 	if (IsValid(BombMeshComponent))
@@ -212,39 +230,6 @@ void ANPStairBombTrap::ExplodeOnce()
 	LastExplodedCycleSequence = CycleSequence;
 	// Warning 진입 때 선택하여 비행에 사용한 것과 정확히 같은 위치에서 판정합니다.
 	const FVector ExplosionLocation = ThrowTargetLocation;
-
-#if ENABLE_DRAW_DEBUG
-	if (bDrawDebugExplosion && GetWorld())
-	{
-		const float DrawDuration = FMath::Max(0.0f, DebugDrawDuration);
-		DrawDebugPoint(
-			GetWorld(),
-			ExplosionLocation,
-			30.0f,
-			FColor::Red,
-			false,
-			DrawDuration);
-		DrawDebugCrosshairs(
-			GetWorld(),
-			ExplosionLocation,
-			FRotator::ZeroRotator,
-			50.0f,
-			FColor::Yellow,
-			false,
-			DrawDuration);
-		DrawDebugSphere(
-			GetWorld(),
-			ExplosionLocation,
-			FMath::Max(0.0f, ExplosionRadius),
-			32,
-			FColor::Orange,
-			false,
-			DrawDuration,
-			0,
-			3.0f);
-	}
-#endif
-
 	SetActorTickEnabled(false);
 	SetBombVisible(false);
 	HideExplosionTelegraph();
@@ -462,40 +447,50 @@ FVector ANPStairBombTrap::ResolveThrowTargetLocation()
 {
 	if (!ThrowTargetComponents.IsEmpty())
 	{
-		const int32 SafeCycleSequence = FMath::Max(1, GetTrapCycleSequence());
-		const int32 TargetCount = ThrowTargetComponents.Num();
-		const int32 ZeroBasedCycle = SafeCycleSequence - 1;
-		const int32 ShuffleRound = ZeroBasedCycle / TargetCount;
-		const int32 IndexInRound = ZeroBasedCycle % TargetCount;
-
-		TArray<int32> ShuffledIndices;
-		ShuffledIndices.Reserve(TargetCount);
-		for (int32 TargetIndex = 0; TargetIndex < TargetCount; ++TargetIndex)
+		if (RemainingThrowTargetIndices.IsEmpty())
 		{
-			ShuffledIndices.Add(TargetIndex);
+			for (int32 TargetIndex = 0;
+				TargetIndex < ThrowTargetComponents.Num();
+				++TargetIndex)
+			{
+				const FComponentReference& TargetReference =
+					ThrowTargetComponents[TargetIndex];
+				if (Cast<USceneComponent>(TargetReference.GetComponent(this)))
+				{
+					RemainingThrowTargetIndices.Add(TargetIndex);
+				}
+			}
+
+			for (int32 ShuffleIndex = RemainingThrowTargetIndices.Num() - 1;
+				ShuffleIndex > 0;
+				--ShuffleIndex)
+			{
+				const int32 SwapIndex = FMath::RandRange(0, ShuffleIndex);
+				RemainingThrowTargetIndices.Swap(ShuffleIndex, SwapIndex);
+			}
+
+			// 새 순회의 첫 발이 직전 순회의 마지막 지점과 같아지는 것을 막습니다.
+			if (RemainingThrowTargetIndices.Num() > 1
+				&& RemainingThrowTargetIndices.Last() == LastThrowTargetIndex)
+			{
+				RemainingThrowTargetIndices.Swap(
+					RemainingThrowTargetIndices.Num() - 1,
+					0);
+			}
 		}
 
-		// ResolveThrowTargetLocation은 서버와 각 클라이언트에서 호출되므로
-		// 전역 난수가 아니라 설정 Seed와 순회 번호 기반의 결정적 난수를
-		// 사용해 모두 같은 착탄 순서를 계산합니다.
-		const int32 RoundSeed = ThrowTargetRandomSeed
-			^ (ShuffleRound * 196613);
-		FRandomStream RandomStream(RoundSeed);
-		for (int32 ShuffleIndex = TargetCount - 1;
-			ShuffleIndex > 0;
-			--ShuffleIndex)
+		if (!RemainingThrowTargetIndices.IsEmpty())
 		{
-			const int32 SwapIndex = RandomStream.RandRange(0, ShuffleIndex);
-			ShuffledIndices.Swap(ShuffleIndex, SwapIndex);
-		}
-
-		const int32 TargetIndex = ShuffledIndices[IndexInRound];
-		const FComponentReference& TargetReference =
-			ThrowTargetComponents[TargetIndex];
-		if (const USceneComponent* TargetComponent =
-			Cast<USceneComponent>(TargetReference.GetComponent(this)))
-		{
-			return TargetComponent->GetComponentLocation();
+			const int32 TargetIndex =
+				RemainingThrowTargetIndices.Pop(EAllowShrinking::No);
+			LastThrowTargetIndex = TargetIndex;
+			const FComponentReference& TargetReference =
+				ThrowTargetComponents[TargetIndex];
+			if (const USceneComponent* TargetComponent =
+				Cast<USceneComponent>(TargetReference.GetComponent(this)))
+			{
+				return TargetComponent->GetComponentLocation();
+			}
 		}
 	}
 
