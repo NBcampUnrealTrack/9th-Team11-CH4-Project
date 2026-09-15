@@ -18,6 +18,7 @@
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Gameplay/Relic/Components/NPRelicOwnershipComponent.h"
 #include "Gameplay/Relic/Components/NPAimableRelicComponent.h"
+#include "Gameplay/Relic/Components/NPThrowableRelicComponent.h"
 #include "Gameplay/Photo/NPPhotoCapturePenaltyComponent.h"
 #include "UI/GameScreen/NPScoreFeedbackWidgetComponent.h"
 #include "Core/NPPlayerState.h"
@@ -628,6 +629,61 @@ void ANPReplicatedStablePhysicsPawn::ServerRequestAimableRelicFire_Implementatio
 		AbilitySystem,
 		RequestLocation,
 		RequestForward);
+}
+
+void ANPReplicatedStablePhysicsPawn::ServerRequestThrowableRelicThrow_Implementation(
+	FVector_NetQuantize10 CameraLocation,
+	FVector_NetQuantizeNormal CameraForward)
+{
+	if (IsPhotoStunned())
+	{
+		return;
+	}
+
+	ANPBaseRelic* HeldRelic = Cast<ANPBaseRelic>(
+		ReplicatedGrabState.GrabbedActor);
+	UNPThrowableRelicComponent* ThrowableRelic = HeldRelic
+		? HeldRelic->FindComponentByClass<UNPThrowableRelicComponent>()
+		: nullptr;
+	UGrabbableComponent* Grabbable = HeldRelic
+		? HeldRelic->FindComponentByClass<UGrabbableComponent>()
+		: nullptr;
+	if (!IsValid(HeldRelic)
+		|| !IsValid(ThrowableRelic)
+		|| !IsValid(Grabbable)
+		|| Grabbable->GetActiveGrabCount() != 1
+		|| !IsValid(AbilitySystem))
+	{
+		return;
+	}
+
+	const FVector RequestLocation(CameraLocation);
+	const FVector RequestForward = FVector(CameraForward).GetSafeNormal();
+	const FNPRelicThrowSettings& Settings = ThrowableRelic->GetThrowSettings();
+	const float CameraDistanceFromPawn = FVector::Distance(
+		RequestLocation,
+		GetActorLocation());
+	const FVector ServerForward = GetServerViewRotation().Vector().GetSafeNormal();
+	const float DirectionDot = FVector::DotProduct(
+		RequestForward,
+		ServerForward);
+	const float MaximumDirectionError = FMath::Clamp(
+		Settings.MaximumCameraDirectionError,
+		0.0f,
+		180.0f);
+	const float MinimumDirectionDot = FMath::Cos(FMath::DegreesToRadians(
+		MaximumDirectionError));
+	if (RequestLocation.ContainsNaN()
+		|| RequestForward.IsNearlyZero()
+		|| CameraDistanceFromPawn > FMath::Max(
+			0.0f,
+			Settings.MaximumCameraDistanceFromPawn)
+		|| DirectionDot < MinimumDirectionDot)
+	{
+		return;
+	}
+
+	ThrowableRelic->TryThrow(this, RequestLocation, RequestForward);
 }
 
 void ANPReplicatedStablePhysicsPawn::ServerSetRightHandActive_Implementation(

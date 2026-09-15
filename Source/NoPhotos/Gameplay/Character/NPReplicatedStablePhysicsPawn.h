@@ -105,6 +105,12 @@ public:
 		FVector_NetQuantize10 CameraLocation,
 		FVector_NetQuantizeNormal CameraForward);
 
+	/** 로컬 실제 카메라 정보를 서버에 전달하여 투척 유물 사용을 요청합니다. */
+	UFUNCTION(Server, Reliable)
+	void ServerRequestThrowableRelicThrow(
+		FVector_NetQuantize10 CameraLocation,
+		FVector_NetQuantizeNormal CameraForward);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void CompleteTemporaryRagdollRecovery() override;

@@ -1,7 +1,8 @@
 #include "Gameplay/Relic/Abilities/NPThrowableRelicUseAbility.h"
 
 #include "Core/GameplayTag/NPGameplayTags.h"
-#include "Gameplay/Character/NPStablePhysicsPawn.h"
+#include "GameFramework/PlayerController.h"
+#include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 #include "Gameplay/Relic/Components/NPThrowableRelicComponent.h"
 
 UNPThrowableRelicUseAbility::UNPThrowableRelicUseAbility()
@@ -45,23 +46,34 @@ void UNPThrowableRelicUseAbility::ActivateAbility(
 	const FGameplayEventData* TriggerEventData)
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
-	ANPStablePhysicsPawn* Pawn = ActorInfo
-		? Cast<ANPStablePhysicsPawn>(ActorInfo->AvatarActor.Get())
+	ANPReplicatedStablePhysicsPawn* Pawn = ActorInfo
+		? Cast<ANPReplicatedStablePhysicsPawn>(ActorInfo->AvatarActor.Get())
 		: nullptr;
-	AActor* Relic = Cast<AActor>(GetCurrentSourceObject());
-	UNPThrowableRelicComponent* Throwable = Relic
-		? Relic->FindComponentByClass<UNPThrowableRelicComponent>()
-		: nullptr;
-
-	// Local prediction waits for the server. ForceRelease clears this granted ability on both sides.
-	if (Pawn && !Pawn->HasAuthority())
+	bool bRequestedThrow = false;
+	if (Pawn && ActorInfo && ActorInfo->IsLocallyControlled())
 	{
-		return;
+		if (APlayerController* PlayerController = Cast<APlayerController>(
+			Pawn->GetController()))
+		{
+			FVector CameraLocation;
+			FRotator CameraRotation;
+			PlayerController->GetPlayerViewPoint(
+				CameraLocation,
+				CameraRotation);
+			Pawn->ServerRequestThrowableRelicThrow(
+				CameraLocation,
+				CameraRotation.Vector());
+			bRequestedThrow = true;
+		}
 	}
-	const bool bThrown = Throwable && Throwable->TryThrow(Pawn);
 	if (IsActive())
 	{
-		EndAbility(Handle, ActorInfo, ActivationInfo, true, !bThrown);
+		EndAbility(
+			Handle,
+			ActorInfo,
+			ActivationInfo,
+			true,
+			!bRequestedThrow && ActorInfo && ActorInfo->IsLocallyControlled());
 	}
 }
 
