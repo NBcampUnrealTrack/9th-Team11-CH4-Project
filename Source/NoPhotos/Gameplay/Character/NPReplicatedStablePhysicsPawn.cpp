@@ -723,7 +723,15 @@ void ANPReplicatedStablePhysicsPawn::ServerRequestThrowableRelicThrow_Implementa
 		return;
 	}
 
-	ThrowableRelic->TryThrow(this, RequestLocation, RequestForward);
+	if (!ThrowableRelic->TryThrow(this, RequestLocation, RequestForward))
+	{
+		return;
+	}
+
+	// ForceReleaseAllGrabs만으로는 소유 클라이언트의 로컬 Grab 입력이 남아
+	// 날아가는 유물을 다시 잡을 수 있으므로 서버/소유 클라이언트를 함께 정리합니다.
+	SetServerRightHandState(false);
+	ClientConfirmThrowableRelicRelease();
 }
 
 void ANPReplicatedStablePhysicsPawn::ServerSetRightHandActive_Implementation(
@@ -737,6 +745,12 @@ void ANPReplicatedStablePhysicsPawn::ServerSetRightHandActive_Implementation(
 	}
 
 	SetServerRightHandState(bActive);
+}
+
+void ANPReplicatedStablePhysicsPawn::ClientConfirmThrowableRelicRelease_Implementation()
+{
+	ResetLocalGrabState();
+	RightHandGrab->ClearReplicatedGrab();
 }
 
 bool ANPReplicatedStablePhysicsPawn::IsPhotoStunned() const

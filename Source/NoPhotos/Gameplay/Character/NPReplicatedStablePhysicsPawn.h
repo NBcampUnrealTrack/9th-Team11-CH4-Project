@@ -159,6 +159,10 @@ private:
 	UFUNCTION(Client, Reliable)
 	void ClientSetExternalVerticalVelocity(float VerticalVelocity);
 
+	/** 서버 투척 성공 직후 소유 클라이언트에 남은 Grab 예측과 Constraint를 정리합니다. */
+	UFUNCTION(Client, Reliable)
+	void ClientConfirmThrowableRelicRelease();
+
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastStartTemporaryRagdoll();
 
