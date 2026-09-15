@@ -147,7 +147,13 @@ void UNPThroneLiftGimmickComponent::RaiseChair()
 void UNPThroneLiftGimmickComponent::MulticastPlayLiftCameraShake_Implementation()
 {
 	const AActor* Owner = GetOwner();
-	if (!Owner || !LiftCameraShakeClass)
+	if (!Owner)
+	{
+		return;
+	}
+
+	OnLiftStarted.Broadcast();
+	if (!LiftCameraShakeClass)
 	{
 		return;
 	}
