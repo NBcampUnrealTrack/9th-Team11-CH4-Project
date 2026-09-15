@@ -29,6 +29,28 @@ struct NOPHOTOS_API FNPRelicThrowSettings
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throw")
 	bool bInheritThrowerVelocity = true;
 
+	/** 카메라 중앙에서 목표점을 찾을 최대 거리입니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throw|Aim",
+		meta=(ClampMin="1.0", Units="cm"))
+	float AimTraceDistance = 3000.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throw|Aim")
+	TEnumAsByte<ECollisionChannel> AimTraceChannel = ECC_Visibility;
+
+	/** 탄도 해가 둘이면 더 높은 포물선을 선택합니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throw|Aim")
+	bool bFavorHighArc = false;
+
+	/** 클라이언트가 보낸 카메라가 Pawn 원점에서 떨어질 수 있는 최대 거리입니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throw|Aim|Security",
+		meta=(ClampMin="0.0", Units="cm"))
+	float MaximumCameraDistanceFromPawn = 700.0f;
+
+	/** 클라이언트 카메라 방향과 서버 시선 사이의 최대 허용 각도입니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throw|Aim|Security",
+		meta=(ClampMin="0.0", ClampMax="180.0", Units="deg"))
+	float MaximumCameraDirectionError = 25.0f;
+
 	/** 유물 로컬 좌표 기준 회전축입니다. 기본 Y축은 무기를 앞뒤로 빙글빙글 돌립니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throw|Spin")
 	FVector LocalSpinAxis = FVector::YAxisVector;
@@ -87,7 +109,10 @@ public:
 	bool CanThrow(const ANPStablePhysicsPawn* ThrowerPawn) const;
 
 	/** 서버에서 그랩을 해제하고 선속도와 각속도를 적용합니다. */
-	bool TryThrow(ANPStablePhysicsPawn* ThrowerPawn);
+	bool TryThrow(
+		ANPStablePhysicsPawn* ThrowerPawn,
+		const FVector& CameraLocation,
+		const FVector& CameraForward);
 
 	static FVector CalculateThrowVelocity(
 		const FVector& ForwardDirection,
@@ -107,10 +132,19 @@ private:
 	void EndFlight(bool bPlayImpactSound, const FVector& ImpactLocation = FVector::ZeroVector);
 	void HandleFlightTimeout();
 	void StopFlyingAudio(bool bFadeOut);
-	void TryApplyKnockback(
+	bool TryApplyKnockback(
 		UPrimitiveComponent* HitComponent,
 		AActor* OtherActor,
 		const FHitResult& Hit);
+	FVector ResolveAimTarget(
+		const ANPStablePhysicsPawn* ThrowerPawn,
+		const FVector& CameraLocation,
+		const FVector& CameraForward) const;
+	FVector CalculateAimedThrowVelocity(
+		const FVector& StartLocation,
+		const FVector& TargetLocation,
+		const FVector& CameraForward,
+		const FVector& ThrowerVelocity) const;
 
 	UFUNCTION()
 	void HandleThrownRelicHit(
@@ -166,6 +200,7 @@ private:
 	TWeakObjectPtr<UPrimitiveComponent> FlightHitMesh;
 	bool bPreviousFlightNotifyRigidBodyCollision = false;
 	bool bFlightActive = false;
+	bool bFirstImpactPresented = false;
 	FTimerHandle FlightTimeoutTimer;
 
 	UPROPERTY(Transient)
