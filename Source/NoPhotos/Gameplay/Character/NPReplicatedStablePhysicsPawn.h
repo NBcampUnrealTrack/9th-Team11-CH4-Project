@@ -9,6 +9,7 @@
 #include "NPReplicatedStablePhysicsPawn.generated.h"
 
 class UPrimitiveComponent;
+class UStaticMeshComponent;
 class UAbilitySystemComponent;
 class AController;
 class FLifetimeProperty;
@@ -106,6 +107,9 @@ public:
 		FVector_NetQuantizeNormal CameraForward);
 
 protected:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Grab|Visual")
+	TObjectPtr<UStaticMeshComponent> GrabPreviewMesh;
+
 	virtual void BeginPlay() override;
 	virtual void CompleteTemporaryRagdollRecovery() override;
 	virtual void PossessedBy(AController* NewController) override;
@@ -128,6 +132,9 @@ protected:
 	void OnGrabConstraintBroken();
 
 private:
+	void UpdateGrabPreview();
+	FVector GrabPreviewBaseScale = FVector::OneVector;
+
 	FActiveGameplayEffectHandle LeaderEffectHandle;
 
 	static constexpr float ViewRotationSendInterval = 0.05f;
