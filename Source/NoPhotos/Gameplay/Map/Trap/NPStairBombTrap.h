@@ -87,10 +87,6 @@ protected:
 		meta=(UseComponentPicker, AllowedClasses="/Script/Engine.SceneComponent"))
 	TArray<FComponentReference> ThrowTargetComponents;
 
-	/** 서버와 클라이언트가 같은 무작위 착탄 순서를 계산하기 위한 기준값입니다. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stair Bomb Trap|Throw")
-	int32 ThrowTargetRandomSeed = 173;
-
 	/** Warning 진입부터 목표 위치 도착까지 걸리는 시간입니다. Controller WarningDuration과 맞추는 것을 권장합니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stair Bomb Trap|Throw",
 		meta=(ClampMin="0.01", Units="s"))
@@ -155,14 +151,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Stair Bomb Trap|Presentation")
 	TObjectPtr<USoundBase> ExplosionSound;
 
-	/** 서버가 실제 폭발 판정에 사용한 중심과 반경을 표시합니다. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stair Bomb Trap|Debug")
-	bool bDrawDebugExplosion = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stair Bomb Trap|Debug",
-		meta=(ClampMin="0.0", Units="s", EditCondition="bDrawDebugExplosion"))
-	float DebugDrawDuration = 3.0f;
-
 	/** 투척 장치의 애니메이션, 준비음 같은 선택적 블루프린트 연출 지점입니다. */
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic,
 		Category="Stair Bomb Trap|Presentation", meta=(DisplayName="On Throw Started"))
@@ -188,6 +176,13 @@ private:
 	FVector ResolveThrowTargetLocation();
 
 	UFUNCTION(NetMulticast, Reliable)
+	void MulticastBeginThrow(
+		FVector_NetQuantize10 StartLocation,
+		FVector_NetQuantize10 TargetLocation,
+		FRotator StartRotation,
+		int32 CycleSequence);
+
+	UFUNCTION(NetMulticast, Reliable)
 	void MulticastPlayExplosion(
 		FVector_NetQuantize ExplosionLocation,
 		int32 CycleSequence);
@@ -205,4 +200,6 @@ private:
 
 	int32 LastExplodedCycleSequence = INDEX_NONE;
 	int32 LastPresentedExplosionCycle = INDEX_NONE;
+	int32 LastThrowTargetIndex = INDEX_NONE;
+	TArray<int32> RemainingThrowTargetIndices;
 };
