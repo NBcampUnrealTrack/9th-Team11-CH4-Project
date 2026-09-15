@@ -14,6 +14,7 @@ enum class ENPMainWorldState : uint8
 {
 	Preparing,
 	WaitingForPlayers,
+	Countdown,
 	Playing,
 	LoadFailed,
 	Ended
@@ -66,6 +67,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Main Game|Loading")
 	bool IsMainWorldReady() const { return MainWorldState == ENPMainWorldState::Playing; }
+
+	UFUNCTION(BlueprintPure, Category = "Main Game|Loading")
+	float GetCountdownEndServerTime() const { return CountdownEndServerTime; }
 
 	UFUNCTION(BlueprintPure, Category = "Picture Selection")
 	bool IsPlayerPictureSelectionComplete(const APlayerState* PlayerState) const;
@@ -120,6 +124,7 @@ public:
 
 	void RefreshPlayerRankings();
 	void SetMainWorldState(ENPMainWorldState NewState);
+	void BeginGameStartCountdown(float EndServerTime);
 	void StartMainGame(int32 DurationSeconds);
 	void SetRemainingGameTime(int32 RemainingSeconds);
 	void FinishMainGame();
@@ -182,6 +187,9 @@ private:
 
 	UPROPERTY(ReplicatedUsing = OnRep_MainGameState)
 	ENPMainWorldState MainWorldState = ENPMainWorldState::Preparing;
+
+	UPROPERTY(ReplicatedUsing = OnRep_MainGameState)
+	float CountdownEndServerTime = 0.0f;
 
 	//사진 선택 완료를 누른 플레이어 목록
 	UPROPERTY(ReplicatedUsing = OnRep_PictureSelectionCompletedPlayers)

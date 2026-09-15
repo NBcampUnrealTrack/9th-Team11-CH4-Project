@@ -309,6 +309,7 @@ void ANPRoomGameMode::TryStartGame(APlayerController* RequestingPlayer)
 	{
 		if (UNPRoomSubsystem* RoomSubsystem = GameInstance->GetSubsystem<UNPRoomSubsystem>())
 		{
+			RoomSubsystem->CaptureExpectedMainGamePlayers(GetWorld());
 			RoomSubsystem->MarkRoomInGame();
 		}
 	}

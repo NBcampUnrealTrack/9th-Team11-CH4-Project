@@ -46,6 +46,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Main Game|Loading", meta = (ClampMin = "5.0", Units = "s"))
 	float WorldPreparationTimeoutSeconds = 60.0f;
 
+	/** 3, 2, 1, 게임 시작을 각각 1초씩 표시하는 전체 시간입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Main Game|Loading",
+		meta = (ClampMin = "4.0", Units = "s"))
+	float GameStartCountdownDurationSeconds = 4.0f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Main Game")
 	TSoftObjectPtr<UWorld> RoomLevel;
 
@@ -55,7 +60,10 @@ protected:
 private:
 	bool ShouldBypassRoomPreparationForEditorTest() const;
 	void BeginWorldPreparation();
+	void InitializeExpectedMainGamePlayers();
 	void TryStartPreparedMainGame();
+	void BeginGameStartCountdown();
+	void FinishGameStartCountdown();
 	void FailWorldPreparation();
 	void HandleWorldPreparationTimeout();
 
@@ -73,10 +81,13 @@ private:
 
 	FTimerHandle MainGameTimer;
 	FTimerHandle WorldPreparationTimeoutTimer;
+	FTimerHandle GameStartCountdownTimer;
 	bool bReturningToRoom = false;
 	bool bServerWorldReady = false;
 	bool bMainGameStarted = false;
-	TSet<TWeakObjectPtr<ANPMainPlayerController>> ReadyPlayers;
+	bool bGameStartCountdownStarted = false;
+	TSet<FString> ExpectedPlayerIds;
+	TSet<FString> ReadyPlayerIds;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNPPhotoEvidenceService> PhotoEvidenceService;

@@ -22,6 +22,7 @@ void ANPMainGameState::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(ANPMainGameState, bMainGameActive);
 	DOREPLIFETIME(ANPMainGameState, bMainGameEnded);
 	DOREPLIFETIME(ANPMainGameState, MainWorldState);
+	DOREPLIFETIME(ANPMainGameState, CountdownEndServerTime);
 	DOREPLIFETIME(
 		ANPMainGameState,
 		PictureSelectionCompletedPlayers);
@@ -30,6 +31,19 @@ void ANPMainGameState::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(ANPMainGameState, SelectedPhotos);
 	DOREPLIFETIME(ANPMainGameState, ResultParticipants);
 	DOREPLIFETIME(ANPMainGameState, PhotoLikes);
+}
+
+void ANPMainGameState::BeginGameStartCountdown(const float EndServerTime)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	CountdownEndServerTime = FMath::Max(0.0f, EndServerTime);
+	MainWorldState = ENPMainWorldState::Countdown;
+	ForceNetUpdate();
+	OnMainGameStateChanged.Broadcast();
 }
 
 TArray<FNPPlayerRanking> ANPMainGameState::GetPlayerRankings() const
@@ -377,6 +391,7 @@ void ANPMainGameState::StartMainGame(const int32 DurationSeconds)
 	bMainGameActive = true;
 	bMainGameEnded = false;
 	MainWorldState = ENPMainWorldState::Playing;
+	CountdownEndServerTime = 0.0f;
 
 	//새게임 시작시 이전게임 완료상태 초기화
 	PictureSelectionCompletedPlayers.Empty();

@@ -7,6 +7,7 @@
 #include "NPRoomSubsystem.generated.h"
 
 class APlayerController;
+class APlayerState;
 class UCanvas;
 class UNetDriver;
 class UWorld;
@@ -77,6 +78,14 @@ public:
 
 	void UpdateRoomPlayerCount(int32 PlayerCount);
 	void MarkRoomInGame();
+	/** ServerTravel 직전 현재 대기방 참가자를 메인 월드 준비 대상 목록으로 고정합니다. */
+	void CaptureExpectedMainGamePlayers(UWorld* RoomWorld);
+	const TSet<FString>& GetExpectedMainGamePlayerIds() const
+	{
+		return ExpectedMainGamePlayerIds;
+	}
+	void ClearExpectedMainGamePlayers();
+	static FString BuildMainGamePlayerId(const APlayerState* PlayerState);
 	void RestoreWaitingRoom(FNPOnWaitingRoomRestored CompletionDelegate);
 	bool IsWaitingRoomActive() const;
 
@@ -125,6 +134,7 @@ private:
 	bool bHasLoggedOnlineServiceStatus = false;
 	FText PendingConnectionFailureMessage;
 	TArray<FNPRoomDebugMessage> DebugMessages;
+	TSet<FString> ExpectedMainGamePlayerIds;
 	
 #pragma region UI
 public:

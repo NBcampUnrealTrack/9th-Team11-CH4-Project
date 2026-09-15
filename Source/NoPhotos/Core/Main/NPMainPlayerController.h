@@ -13,6 +13,7 @@ class UNPPhotoFlashWidget;
 class UNPPhotoTransferComponent;
 class UNPNoticeEventWidget;
 class UNPMainWorldLoadingWidget;
+class UNPGameStartCountdownWidget;
 class UNPAimCrosshairWidget;
 class UNPRelicUsePromptUIComponent;
 class UNPUserWidget;
@@ -67,6 +68,9 @@ public:
 	/** 서버가 전 플레이어 준비를 확인한 뒤 로딩 화면을 닫고 조작을 허용합니다. */
 	UFUNCTION(Client, Reliable)
 	void ClientFinishMainWorldPreparation();
+
+	UFUNCTION(Client, Reliable)
+	void ClientBeginGameStartCountdown(float CountdownEndServerTime);
 
 	UFUNCTION(Client, Reliable)
 	void ClientNotifyMainWorldLoadFailed();
@@ -164,6 +168,9 @@ protected:
 		meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
 	float MinimumMainWorldLoadingDisplaySeconds = 1.0f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Loading")
+	TSubclassOf<UNPGameStartCountdownWidget> GameStartCountdownWidgetClass;
+
 	/** State.Relic.Aiming 태그가 활성화된 동안 로컬 화면에 표시할 조준점 위젯입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Aim")
 	TSubclassOf<UNPAimCrosshairWidget> AimCrosshairWidgetClass;
@@ -200,6 +207,9 @@ private:
 	void FinishTransitionLoadingScreenHandoff();
 	void HideMainWorldLoadingOverlay();
 	void ShowMainWorldLoadingFailure();
+	void UpdateGameStartCountdown();
+	void FinishCountdownLoadingHandoff();
+	void HideGameStartCountdown();
 
 	void HandleAimStarted();
 	void HandleAimReleased();
@@ -243,6 +253,9 @@ private:
 	TObjectPtr<UNPMainWorldLoadingWidget> MainWorldLoadingWidget;
 
 	UPROPERTY(Transient)
+	TObjectPtr<UNPGameStartCountdownWidget> GameStartCountdownWidget;
+
+	UPROPERTY(Transient)
 	TObjectPtr<UNPAimCrosshairWidget> AimCrosshairWidget;
 
 	UPROPERTY(Transient)
@@ -266,6 +279,8 @@ private:
 	bool bReportedMainWorldReady = false;
 	double MainWorldLoadingShownAtRealTime = -1.0;
 	FTimerHandle MinimumMainWorldLoadingTimer;
+	FTimerHandle GameStartCountdownUpdateTimer;
+	float GameStartCountdownEndServerTime = 0.0f;
 	TSet<FGuid> PendingSelectedPhotoIds;
 	bool bTransitionLoadingScreenHandoffScheduled = false;
 

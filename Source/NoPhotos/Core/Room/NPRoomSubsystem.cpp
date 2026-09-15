@@ -116,9 +116,59 @@ void UNPRoomSubsystem::Deinitialize()
 	PendingMigrationId.Reset();
 	RoomLevelPath.Reset();
 	ReturnMapPath.Reset();
+	ExpectedMainGamePlayerIds.Reset();
 	WaitingRoomRestoredDelegate.Unbind();
 	bCleaningSessionAfterNetworkFailure = false;
 	Super::Deinitialize();
+}
+
+void UNPRoomSubsystem::CaptureExpectedMainGamePlayers(UWorld* RoomWorld)
+{
+	ExpectedMainGamePlayerIds.Reset();
+	if (!IsValid(RoomWorld))
+	{
+		return;
+	}
+
+	for (FConstPlayerControllerIterator Iterator =
+		RoomWorld->GetPlayerControllerIterator(); Iterator; ++Iterator)
+	{
+		const APlayerController* PlayerController = Iterator->Get();
+		const FString PlayerId = BuildMainGamePlayerId(
+			IsValid(PlayerController) ? PlayerController->PlayerState : nullptr);
+		if (!PlayerId.IsEmpty())
+		{
+			ExpectedMainGamePlayerIds.Add(PlayerId);
+		}
+	}
+
+	NPRoomLog::Info(
+		this,
+		FString::Printf(
+			TEXT("메인 게임 참가 예정 플레이어 저장: Count=%d"),
+			ExpectedMainGamePlayerIds.Num()));
+}
+
+void UNPRoomSubsystem::ClearExpectedMainGamePlayers()
+{
+	ExpectedMainGamePlayerIds.Reset();
+}
+
+FString UNPRoomSubsystem::BuildMainGamePlayerId(
+	const APlayerState* PlayerState)
+{
+	if (!IsValid(PlayerState))
+	{
+		return FString();
+	}
+
+	const FUniqueNetIdRepl& UniqueId = PlayerState->GetUniqueId();
+	if (UniqueId.IsValid())
+	{
+		return FString::Printf(TEXT("Unique:%s"), *UniqueId.ToString());
+	}
+
+	return FString::Printf(TEXT("PlayerId:%d"), PlayerState->GetPlayerId());
 }
 
 bool UNPRoomSubsystem::HostRoom()

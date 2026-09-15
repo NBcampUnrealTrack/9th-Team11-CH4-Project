@@ -37,6 +37,7 @@
 #include "UI/GameScreen/Event/NPNoticeEventWidget.h"
 #include "UI/GameScreen/NPAimCrosshairWidget.h"
 #include "UI/GameScreen/Relic/NPRelicUsePromptUIComponent.h"
+#include "UI/Loading/NPGameStartCountdownWidget.h"
 #include "UI/Loading/NPMainWorldLoadingWidget.h"
 #include "UI/NPUserWidget.h"
 #include "UObject/ConstructorHelpers.h"
@@ -256,6 +257,8 @@ void ANPMainPlayerController::BeginPlay()
 
 void ANPMainPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	GetWorldTimerManager().ClearTimer(GameStartCountdownUpdateTimer);
+	HideGameStartCountdown();
 	UnbindAimCrosshairFromAbilitySystem();
 	Super::EndPlay(EndPlayReason);
 }
@@ -289,6 +292,9 @@ void ANPMainPlayerController::ClientBeginMainWorldPreparation_Implementation()
 
 void ANPMainPlayerController::BeginLocalMainWorldPreparation()
 {
+	GetWorldTimerManager().ClearTimer(GameStartCountdownUpdateTimer);
+	HideGameStartCountdown();
+
 	if (ShouldBypassRoomPreparationForEditorTest())
 	{
 		GetWorldTimerManager().ClearTimer(MinimumMainWorldLoadingTimer);
@@ -420,9 +426,113 @@ void ANPMainPlayerController::ServerReportMainWorldReady_Implementation()
 	}
 }
 
+void ANPMainPlayerController::ClientBeginGameStartCountdown_Implementation(
+	const float CountdownEndServerTime)
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	GameStartCountdownEndServerTime = CountdownEndServerTime;
+	if (!IsValid(GameStartCountdownWidget))
+	{
+		TSubclassOf<UNPGameStartCountdownWidget> WidgetClass =
+			GameStartCountdownWidgetClass;
+		if (!WidgetClass)
+		{
+			WidgetClass = UNPGameStartCountdownWidget::StaticClass();
+		}
+
+		GameStartCountdownWidget =
+			CreateWidget<UNPGameStartCountdownWidget>(this, WidgetClass);
+		if (IsValid(GameStartCountdownWidget))
+		{
+			GameStartCountdownWidget->AddToPlayerScreen(10001);
+		}
+	}
+
+	SetMainWorldInputLocked(true);
+	UpdateGameStartCountdown();
+	GetWorldTimerManager().SetTimer(
+		GameStartCountdownUpdateTimer,
+		this,
+		&ThisClass::UpdateGameStartCountdown,
+		0.05f,
+		true);
+	GetWorldTimerManager().SetTimerForNextTick(
+		this,
+		&ThisClass::FinishCountdownLoadingHandoff);
+}
+
+void ANPMainPlayerController::UpdateGameStartCountdown()
+{
+	if (!IsValid(GameStartCountdownWidget))
+	{
+		GetWorldTimerManager().ClearTimer(GameStartCountdownUpdateTimer);
+		return;
+	}
+
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const ANPMainGameState* MainGameState =
+		World->GetGameState<ANPMainGameState>();
+	float CurrentServerTime = World->GetTimeSeconds();
+	if (MainGameState)
+	{
+		CurrentServerTime = MainGameState->GetServerWorldTimeSeconds();
+	}
+	const float RemainingTime = FMath::Max(
+		0.0f,
+		GameStartCountdownEndServerTime - CurrentServerTime);
+
+	int32 CountdownStep = 0;
+	if (RemainingTime > 3.0f)
+	{
+		CountdownStep = 3;
+	}
+	else if (RemainingTime > 2.0f)
+	{
+		CountdownStep = 2;
+	}
+	else if (RemainingTime > 1.0f)
+	{
+		CountdownStep = 1;
+	}
+
+	GameStartCountdownWidget->SetCountdownStep(CountdownStep);
+	if (RemainingTime <= 0.0f)
+	{
+		GetWorldTimerManager().ClearTimer(GameStartCountdownUpdateTimer);
+	}
+}
+
+void ANPMainPlayerController::FinishCountdownLoadingHandoff()
+{
+	// 카운트다운 위젯이 Viewport에 올라온 다음 프레임에 방 로딩 UI를 제거한다.
+	HideMainWorldLoadingOverlay();
+}
+
+void ANPMainPlayerController::HideGameStartCountdown()
+{
+	if (IsValid(GameStartCountdownWidget))
+	{
+		GameStartCountdownWidget->RemoveFromParent();
+		GameStartCountdownWidget = nullptr;
+	}
+
+	GameStartCountdownEndServerTime = 0.0f;
+}
+
 void ANPMainPlayerController::ClientFinishMainWorldPreparation_Implementation()
 {
 	GetWorldTimerManager().ClearTimer(MinimumMainWorldLoadingTimer);
+	GetWorldTimerManager().ClearTimer(GameStartCountdownUpdateTimer);
+	HideGameStartCountdown();
 	SetMainWorldInputLocked(false);
 	HideMainWorldLoadingOverlay();
 	ShowGameScreenUI();
@@ -430,6 +540,8 @@ void ANPMainPlayerController::ClientFinishMainWorldPreparation_Implementation()
 
 void ANPMainPlayerController::ClientNotifyMainWorldLoadFailed_Implementation()
 {
+	GetWorldTimerManager().ClearTimer(GameStartCountdownUpdateTimer);
+	HideGameStartCountdown();
 	SetMainWorldInputLocked(true);
 	ShowMainWorldLoadingFailure();
 	UE_LOG(LogNoPhotos, Error,

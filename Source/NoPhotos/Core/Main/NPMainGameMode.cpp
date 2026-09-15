@@ -209,6 +209,19 @@ void ANPMainGameMode::PostLogin(APlayerController* NewPlayer)
 		{
 			NPPlayerController->ClientFinishMainWorldPreparation();
 		}
+		else if (bGameStartCountdownStarted)
+		{
+			const ANPMainGameState* MainGameState =
+				GetGameState<ANPMainGameState>();
+			float CountdownEndServerTime = 0.0f;
+			if (MainGameState)
+			{
+				CountdownEndServerTime =
+					MainGameState->GetCountdownEndServerTime();
+			}
+			NPPlayerController->ClientBeginGameStartCountdown(
+				CountdownEndServerTime);
+		}
 		else
 		{
 			NPPlayerController->ClientBeginMainWorldPreparation();
@@ -220,7 +233,12 @@ void ANPMainGameMode::PostLogin(APlayerController* NewPlayer)
 
 void ANPMainGameMode::Logout(AController* Exiting)
 {
-	ReadyPlayers.Remove(Cast<ANPMainPlayerController>(Exiting));
+	const FString ExitingPlayerId = UNPRoomSubsystem::BuildMainGamePlayerId(
+		Exiting ? Exiting->PlayerState : nullptr);
+	if (!ExitingPlayerId.IsEmpty())
+	{
+		ReadyPlayerIds.Remove(ExitingPlayerId);
+	}
 	Super::Logout(Exiting);
 	TryStartPreparedMainGame();
 	RefreshPlayerRankings();
@@ -263,6 +281,19 @@ void ANPMainGameMode::HandleSeamlessTravelPlayer(AController*& Controller)
 		{
 			NPPlayerController->ClientFinishMainWorldPreparation();
 		}
+		else if (bGameStartCountdownStarted)
+		{
+			const ANPMainGameState* MainGameState =
+				GetGameState<ANPMainGameState>();
+			float CountdownEndServerTime = 0.0f;
+			if (MainGameState)
+			{
+				CountdownEndServerTime =
+					MainGameState->GetCountdownEndServerTime();
+			}
+			NPPlayerController->ClientBeginGameStartCountdown(
+				CountdownEndServerTime);
+		}
 		else
 		{
 			NPPlayerController->ClientBeginMainWorldPreparation();
@@ -274,6 +305,8 @@ void ANPMainGameMode::HandleSeamlessTravelPlayer(AController*& Controller)
 
 void ANPMainGameMode::BeginWorldPreparation()
 {
+	InitializeExpectedMainGamePlayers();
+
 	if (ShouldBypassRoomPreparationForEditorTest())
 	{
 		NPMainGameLog::Info(
@@ -319,6 +352,43 @@ void ANPMainGameMode::BeginWorldPreparation()
 	{
 		HandleServerRoomGenerationFailed();
 	}
+}
+
+void ANPMainGameMode::InitializeExpectedMainGamePlayers()
+{
+	ExpectedPlayerIds.Reset();
+	ReadyPlayerIds.Reset();
+
+	UNPRoomSubsystem* RoomSubsystem = GetGameInstance()
+		? GetGameInstance()->GetSubsystem<UNPRoomSubsystem>()
+		: nullptr;
+	if (RoomSubsystem)
+	{
+		ExpectedPlayerIds = RoomSubsystem->GetExpectedMainGamePlayerIds();
+	}
+
+	// 메인 맵 직접 실행과 기존 세션 호환을 위한 예비 경로입니다.
+	// 정상적인 대기방 ServerTravel에서는 위에서 저장된 목록을 사용합니다.
+	if (ExpectedPlayerIds.IsEmpty())
+	{
+		for (FConstPlayerControllerIterator Iterator =
+			GetWorld()->GetPlayerControllerIterator(); Iterator; ++Iterator)
+		{
+			const APlayerController* PlayerController = Iterator->Get();
+			const FString PlayerId = UNPRoomSubsystem::BuildMainGamePlayerId(
+				IsValid(PlayerController) ? PlayerController->PlayerState : nullptr);
+			if (!PlayerId.IsEmpty())
+			{
+				ExpectedPlayerIds.Add(PlayerId);
+			}
+		}
+	}
+
+	NPMainGameLog::Info(
+		this,
+		FString::Printf(
+			TEXT("메인 월드 참가 예정 플레이어 불러오기: Expected=%d"),
+			ExpectedPlayerIds.Num()));
 }
 
 bool ANPMainGameMode::ShouldBypassRoomPreparationForEditorTest() const
@@ -368,23 +438,42 @@ void ANPMainGameMode::RegisterPlayerWorldReady(
 		return;
 	}
 
-	ReadyPlayers.Add(PlayerController);
+	const FString PlayerId = UNPRoomSubsystem::BuildMainGamePlayerId(
+		PlayerController->PlayerState);
+	if (PlayerId.IsEmpty()
+		|| (!ExpectedPlayerIds.IsEmpty()
+			&& !ExpectedPlayerIds.Contains(PlayerId)))
+	{
+		NPMainGameLog::Info(
+			this,
+			FString::Printf(
+				TEXT("메인 월드 준비 보고 거절: 참가 예정 목록에 없는 플레이어 Controller=%s Id=%s"),
+				*GetNameSafe(PlayerController),
+				*PlayerId));
+		return;
+	}
+
+	ReadyPlayerIds.Add(PlayerId);
 	NPMainGameLog::Info(
 		this,
 		FString::Printf(
-			TEXT("메인 월드 클라이언트 준비 완료: %s"),
-			*GetNameSafe(PlayerController)));
+			TEXT("메인 월드 클라이언트 준비 완료: %s Id=%s Ready=%d/%d"),
+			*GetNameSafe(PlayerController),
+			*PlayerId,
+			ReadyPlayerIds.Num(),
+			ExpectedPlayerIds.Num()));
 	TryStartPreparedMainGame();
 }
 
 void ANPMainGameMode::TryStartPreparedMainGame()
 {
-	if (!bServerWorldReady || bMainGameStarted)
+	if (!bServerWorldReady || bMainGameStarted
+		|| bGameStartCountdownStarted)
 	{
 		return;
 	}
 
-	int32 ConnectedPlayerCount = 0;
+	TSet<FString> ArrivedPlayerIds;
 	for (FConstPlayerControllerIterator Iterator =
 		GetWorld()->GetPlayerControllerIterator(); Iterator; ++Iterator)
 	{
@@ -395,21 +484,96 @@ void ANPMainGameMode::TryStartPreparedMainGame()
 			continue;
 		}
 
-		++ConnectedPlayerCount;
-		if (!ReadyPlayers.Contains(PlayerController))
+		const FString PlayerId = UNPRoomSubsystem::BuildMainGamePlayerId(
+			PlayerController->PlayerState);
+		if (!PlayerId.IsEmpty())
+		{
+			ArrivedPlayerIds.Add(PlayerId);
+		}
+	}
+
+	if (ExpectedPlayerIds.IsEmpty())
+	{
+		return;
+	}
+
+	for (const FString& ExpectedPlayerId : ExpectedPlayerIds)
+	{
+		if (!ArrivedPlayerIds.Contains(ExpectedPlayerId)
+			|| !ReadyPlayerIds.Contains(ExpectedPlayerId))
 		{
 			return;
 		}
 	}
 
-	if (ConnectedPlayerCount == 0)
+	GetWorldTimerManager().ClearTimer(WorldPreparationTimeoutTimer);
+	BeginGameStartCountdown();
+}
+
+void ANPMainGameMode::BeginGameStartCountdown()
+{
+	if (bMainGameStarted || bGameStartCountdownStarted)
 	{
 		return;
 	}
 
+	bGameStartCountdownStarted = true;
+	const float CountdownDuration = FMath::Max(
+		4.0f,
+		GameStartCountdownDurationSeconds);
+	ANPMainGameState* MainGameState = GetGameState<ANPMainGameState>();
+	float ServerTime = GetWorld()->GetTimeSeconds();
+	if (MainGameState)
+	{
+		ServerTime = MainGameState->GetServerWorldTimeSeconds();
+	}
+	const float CountdownEndServerTime = ServerTime + CountdownDuration;
+	if (MainGameState)
+	{
+		MainGameState->BeginGameStartCountdown(CountdownEndServerTime);
+	}
+
+	for (FConstPlayerControllerIterator Iterator =
+		GetWorld()->GetPlayerControllerIterator(); Iterator; ++Iterator)
+	{
+		if (ANPMainPlayerController* PlayerController =
+			Cast<ANPMainPlayerController>(Iterator->Get()))
+		{
+			PlayerController->ClientBeginGameStartCountdown(
+				CountdownEndServerTime);
+		}
+	}
+
+	NPMainGameLog::Info(
+		this,
+		FString::Printf(
+			TEXT("메인 월드 전원 준비 완료: %.1f초 게임 시작 카운트다운을 시작합니다."),
+			CountdownDuration));
+	GetWorldTimerManager().SetTimer(
+		GameStartCountdownTimer,
+		this,
+		&ThisClass::FinishGameStartCountdown,
+		CountdownDuration,
+		false);
+}
+
+void ANPMainGameMode::FinishGameStartCountdown()
+{
+	if (bMainGameStarted || !bGameStartCountdownStarted)
+	{
+		return;
+	}
+
+	bGameStartCountdownStarted = false;
 	bMainGameStarted = true;
-	GetWorldTimerManager().ClearTimer(WorldPreparationTimeoutTimer);
-	NPMainGameLog::Info(this, TEXT("메인 월드 전원 준비 완료: 타이머와 맵 이벤트를 시작합니다."));
+	if (UNPRoomSubsystem* RoomSubsystem = GetGameInstance()
+		? GetGameInstance()->GetSubsystem<UNPRoomSubsystem>()
+		: nullptr)
+	{
+		RoomSubsystem->ClearExpectedMainGamePlayers();
+	}
+
+	NPMainGameLog::Info(this, TEXT("게임 시작 카운트다운 완료: 타이머와 맵 이벤트를 시작합니다."));
 	StartMainGame();
 	if (ANPMainGameState* MainGameState = GetGameState<ANPMainGameState>())
 	{
@@ -435,6 +599,8 @@ void ANPMainGameMode::TryStartPreparedMainGame()
 void ANPMainGameMode::FailWorldPreparation()
 {
 	GetWorldTimerManager().ClearTimer(WorldPreparationTimeoutTimer);
+	GetWorldTimerManager().ClearTimer(GameStartCountdownTimer);
+	bGameStartCountdownStarted = false;
 	if (ANPMainGameState* MainGameState = GetGameState<ANPMainGameState>())
 	{
 		MainGameState->SetMainWorldState(ENPMainWorldState::LoadFailed);
@@ -456,9 +622,10 @@ void ANPMainGameMode::HandleWorldPreparationTimeout()
 	NPMainGameLog::Info(
 		this,
 		FString::Printf(
-			TEXT("메인 월드 준비 시간 초과: ServerReady=%s ReadyPlayers=%d"),
+			TEXT("메인 월드 준비 시간 초과: ServerReady=%s ReadyPlayers=%d ExpectedPlayers=%d"),
 			bServerWorldReady ? TEXT("true") : TEXT("false"),
-			ReadyPlayers.Num()));
+			ReadyPlayerIds.Num(),
+			ExpectedPlayerIds.Num()));
 	FailWorldPreparation();
 }
 
