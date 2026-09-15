@@ -10,10 +10,12 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerStart.h"
 #include "Gameplay/Photo/NPPhotoEvidenceService.h"
+#include "Gameplay/Photo/NPMatchScorePolicy.h"
 #include "Gameplay/Photo/NPPhotoLog.h"
 #include "Gameplay/Photo/NPPhotoRepository.h"
 #include "Gameplay/Photo/NPPhotoCapturePenaltyComponent.h"
 #include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
+#include "Gameplay/Interaction/Components/GrabbableComponent.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Gameplay/Relic/NPRelicDeliveryService.h"
 #include "Gameplay/MapEvents/NPMapEventManager.h"
@@ -44,6 +46,7 @@ void ANPMainGameMode::InitGame(
 		: UNPPhotoEvidenceService::StaticClass();
 	PhotoEvidenceService = NewObject<UNPPhotoEvidenceService>(this, EvidenceClass, TEXT("PhotoEvidenceService"));
 	PhotoEvidenceService->Initialize(this);
+	PhotoEvidenceService->SetMinimumVisibleHeadSampleCount(MinimumVisibleHeadSampleCount);
 
 	PhotoRepository = NewObject<UNPPhotoRepository>(this, TEXT("PhotoRepository"));
 	PhotoRepository->Initialize(this);
@@ -71,62 +74,70 @@ FNPPhotoEvidenceResult ANPMainGameMode::HandlePhotoCaptureRequest(const FNPPhoto
 		return Result;
 	}
 
-	ANPBaseRelic* EvidenceRelic = Result.bSuccess
-		? Cast<ANPBaseRelic>(Result.Relic.Get())
-		: nullptr;
-	int32 AppliedPhotoPenalty = 0;
-	if (Result.bSuccess && RelicDeliveryService && IsValid(EvidenceRelic))
+	for (const FNPPhotoRelicEvidenceGroup& EvidenceGroup : Result.RelicEvidenceGroups)
 	{
-		const int32 PreviousPenalty =
-			EvidenceRelic->GetAccumulatedPhotoPenalty();
-		RelicDeliveryService->RegisterPhotoEvidence(Result);
-		AppliedPhotoPenalty = FMath::Max(
+		ANPBaseRelic* EvidenceRelic = Cast<ANPBaseRelic>(EvidenceGroup.Relic.Get());
+		if (!IsValid(EvidenceRelic))
+		{
+			continue;
+		}
+
+		const int32 PreviousPenalty = EvidenceRelic->GetAccumulatedPhotoPenalty();
+		if (RelicDeliveryService)
+		{
+			RelicDeliveryService->RegisterPhotoEvidence(EvidenceRelic, Result.Photographer.Get());
+		}
+		const int32 AppliedPhotoPenalty = FMath::Max(
 			0,
 			EvidenceRelic->GetAccumulatedPhotoPenalty() - PreviousPenalty);
-	}
-	if (Result.bSuccess && IsValid(Result.Thief))
-	{
-		ANPReplicatedStablePhysicsPawn* ThiefPawn =
-			Cast<ANPReplicatedStablePhysicsPawn>(Result.Thief->GetPawn());
-		UNPPhotoCapturePenaltyComponent* PenaltyComponent = ThiefPawn
-			? ThiefPawn->FindComponentByClass<UNPPhotoCapturePenaltyComponent>()
-			: nullptr;
-		UE_LOG(
-			LogNPPhoto,
-			Warning,
-			TEXT("[PhotoStun][Request] Success=%s Thief=%s Relic=%s Penalty=%d Pawn=%s Component=%s"),
-			Result.bSuccess ? TEXT("true") : TEXT("false"),
-			*GetNameSafe(Result.Thief.Get()),
-			*GetNameSafe(EvidenceRelic),
-			AppliedPhotoPenalty,
-			*GetNameSafe(ThiefPawn),
-			*GetNameSafe(PenaltyComponent));
-		if (PenaltyComponent)
+
+		bool bAnyStunApplied = false;
+		for (APlayerState* Thief : EvidenceGroup.Thieves)
 		{
-			PenaltyComponent->ApplyCapturedWithRelicPenalty(
-				EvidenceRelic,
-				AppliedPhotoPenalty);
+			ANPReplicatedStablePhysicsPawn* ThiefPawn = IsValid(Thief)
+				? Cast<ANPReplicatedStablePhysicsPawn>(Thief->GetPawn())
+				: nullptr;
+			UNPPhotoCapturePenaltyComponent* PenaltyComponent = ThiefPawn
+				? ThiefPawn->FindComponentByClass<UNPPhotoCapturePenaltyComponent>()
+				: nullptr;
+			if (PenaltyComponent)
+			{
+				bAnyStunApplied |= PenaltyComponent->ApplyCapturedWithRelicPenalty(
+					EvidenceRelic,
+					AppliedPhotoPenalty);
+			}
+		}
+
+		if (bAnyStunApplied)
+		{
+			if (UGrabbableComponent* Grabbable =
+				EvidenceRelic->FindComponentByClass<UGrabbableComponent>())
+			{
+				Grabbable->ForceReleaseAllGrabs();
+			}
 		}
 	}
 	if (Result.bSuccess)
 	{
+		const int32 AwardedScore = GetDefault<UNPMatchScorePolicy>()->CalculateEvidenceScore(Result);
+		if (ANPPlayerState* Photographer = Cast<ANPPlayerState>(Result.Photographer.Get()))
+		{
+			Photographer->AddScore(AwardedScore);
+		}
 		Result.PhotoId = FGuid::NewGuid();
 		if (ANPMainGameState* MainGameState = GetGameState<ANPMainGameState>())
 		{
-			MainGameState->AddPhotoEvidence(Result, 0);
+			MainGameState->AddPhotoEvidence(Result, AwardedScore);
 		}
 	}
 
 	UE_LOG(
 		LogNPPhoto,
 		Log,
-		TEXT("[GameMode] Photo accepted. Photographer=%s PlayerCaptured=%s CapturedPlayer=%s RelicEvidence=%s Thief=%s Relic=%s ReactiveTarget=%s"),
+		TEXT("[GameMode] Photo accepted. Photographer=%s RelicEvidence=%s RelicCount=%d ReactiveTarget=%s"),
 		*GetNameSafe(Result.Photographer.Get()),
-		Result.bPlayerCaptured ? TEXT("true") : TEXT("false"),
-		*GetNameSafe(Result.CapturedPlayer.Get()),
 		Result.bSuccess ? TEXT("true") : TEXT("false"),
-		*GetNameSafe(Result.Thief.Get()),
-		*GetNameSafe(Result.Relic.Get()),
+		Result.RelicEvidenceGroups.Num(),
 		*GetNameSafe(Result.ReactiveTarget.Get()));
 	return Result;
 }
@@ -134,7 +145,7 @@ FNPPhotoEvidenceResult ANPMainGameMode::HandlePhotoCaptureRequest(const FNPPhoto
 void ANPMainGameMode::PlayPhotoWorldFeedback(
 	const FNPPhotoEvidenceResult& Result)
 {
-	if (!HasAuthority() || !Result.bPlayerCaptured)
+	if (!HasAuthority() || !Result.bSuccess)
 	{
 		return;
 	}
@@ -142,10 +153,6 @@ void ANPMainGameMode::PlayPhotoWorldFeedback(
 	ANPReplicatedStablePhysicsPawn* PhotographerPawn = IsValid(Result.Photographer.Get())
 		? Cast<ANPReplicatedStablePhysicsPawn>(Result.Photographer->GetPawn())
 		: nullptr;
-	ANPReplicatedStablePhysicsPawn* PhotographedPawn = IsValid(Result.CapturedPlayer.Get())
-		? Cast<ANPReplicatedStablePhysicsPawn>(Result.CapturedPlayer->GetPawn())
-		: nullptr;
-
 	if (IsValid(PhotographerPawn))
 	{
 		if (UAbilitySystemComponent* AbilitySystem =
@@ -155,27 +162,37 @@ void ANPMainGameMode::PlayPhotoWorldFeedback(
 				NPGameplayTags::GameplayCue_Photo_WorldFeedback_Photographer);
 		}
 	}
-	if (IsValid(PhotographedPawn))
+	for (const FNPPhotoRelicEvidenceGroup& EvidenceGroup : Result.RelicEvidenceGroups)
 	{
-		if (UAbilitySystemComponent* AbilitySystem =
-			PhotographedPawn->GetAbilitySystemComponent())
+		for (APlayerState* Thief : EvidenceGroup.Thieves)
 		{
-			AbilitySystem->ExecuteGameplayCue(
-				NPGameplayTags::GameplayCue_Photo_WorldFeedback_Photographed);
-		}
-		if (ANPMainPlayerController* PhotographedController =
-			Cast<ANPMainPlayerController>(PhotographedPawn->GetController()))
-		{
-			PhotographedController->ClientPlayPhotographedFlash();
+			ANPReplicatedStablePhysicsPawn* PhotographedPawn = IsValid(Thief)
+				? Cast<ANPReplicatedStablePhysicsPawn>(Thief->GetPawn())
+				: nullptr;
+			if (!IsValid(PhotographedPawn))
+			{
+				continue;
+			}
+			if (UAbilitySystemComponent* AbilitySystem =
+				PhotographedPawn->GetAbilitySystemComponent())
+			{
+				AbilitySystem->ExecuteGameplayCue(
+					NPGameplayTags::GameplayCue_Photo_WorldFeedback_Photographed);
+			}
+			if (ANPMainPlayerController* PhotographedController =
+				Cast<ANPMainPlayerController>(PhotographedPawn->GetController()))
+			{
+				PhotographedController->ClientPlayPhotographedFlash();
+			}
 		}
 	}
 
 	UE_LOG(
 		LogNPPhoto,
 		Log,
-		TEXT("[PhotoWorldFeedback] GameplayCues requested. PhotographerPawn=%s PhotographedPawn=%s"),
+		TEXT("[PhotoWorldFeedback] GameplayCues requested. PhotographerPawn=%s RelicCount=%d"),
 		*GetNameSafe(PhotographerPawn),
-		*GetNameSafe(PhotographedPawn));
+		Result.RelicEvidenceGroups.Num());
 }
 
 void ANPMainGameMode::HandlePhotoStored(
@@ -196,6 +213,13 @@ void ANPMainGameMode::HandlePhotoStored(
 void ANPMainGameMode::BeginPlay()
 {
 	Super::BeginPlay();
+	if (ANPMainGameState* MainGameState = GetGameState<ANPMainGameState>())
+	{
+		MainGameState->SetMinimumVisibleHeadSampleCount(
+			PhotoEvidenceService
+				? PhotoEvidenceService->GetMinimumVisibleHeadSampleCount()
+				: MinimumVisibleHeadSampleCount);
+	}
 	BeginWorldPreparation();
 }
 

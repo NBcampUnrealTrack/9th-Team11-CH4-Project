@@ -68,16 +68,36 @@ void UNPPersonalResultWidget::CreatePictureButtons()
 			continue;
 		}
 
-		FString CapturedPlayerName;
+		FString CapturedPlayerNames;
 		for (const FNPReplicatedPhotoEvidence& Evidence : GameState->GetPhotoEvidence())
 		{
-			if (Evidence.PhotoId == PhotoId && IsValid(Evidence.Thief))
+			if (Evidence.PhotoId != PhotoId)
 			{
-				CapturedPlayerName = Evidence.Thief->GetPlayerName();
-				break;
+				continue;
 			}
+
+			TArray<APlayerState*> Thieves;
+			for (APlayerState* Thief : Evidence.Thieves)
+			{
+				if (IsValid(Thief))
+				{
+					Thieves.AddUnique(Thief);
+				}
+			}
+			Thieves.Sort([](const APlayerState& Left, const APlayerState& Right)
+			{
+				return Left.GetPlayerId() < Right.GetPlayerId();
+			});
+
+			TArray<FString> Names;
+			for (const APlayerState* Thief : Thieves)
+			{
+				Names.Add(Thief->GetPlayerName());
+			}
+			CapturedPlayerNames = FString::Join(Names, TEXT(", "));
+			break;
 		}
-		PictureButton->InitializePhoto(PhotoId, CapturedPlayerName);
+		PictureButton->InitializePhoto(PhotoId, CapturedPlayerNames);
 		if (UHorizontalBoxSlot* PictureSlot = Cast<UHorizontalBoxSlot>(PictureList->AddChild(PictureButton)))
 		{
 			FMargin SlotPadding = PictureSlot->GetPadding();

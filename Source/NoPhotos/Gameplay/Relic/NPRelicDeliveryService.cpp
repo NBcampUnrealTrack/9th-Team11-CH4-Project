@@ -2,7 +2,6 @@
 
 #include "Core/Main/NPMainGameState.h"
 #include "Core/NPPlayerState.h"
-#include "Gameplay/Photo/NPPhotoEvidenceTypes.h"
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Gameplay/Relic/Components/NPRelicOwnershipComponent.h"
 #include "Gameplay/Relic/Components/NPPlayerBonusQuestComponent.h"
@@ -23,15 +22,12 @@ UWorld* UNPRelicDeliveryService::GetWorld() const
 	return OwningGameMode.IsValid() ? OwningGameMode->GetWorld() : nullptr;
 }
 
-bool UNPRelicDeliveryService::RegisterPhotoEvidence(const FNPPhotoEvidenceResult& Evidence)
+bool UNPRelicDeliveryService::RegisterPhotoEvidence(
+	ANPBaseRelic* Relic,
+	APlayerState* Photographer)
 {
-	if (!OwningGameMode.IsValid() || !OwningGameMode->HasAuthority() || !Evidence.bSuccess)
-	{
-		return false;
-	}
-
-	ANPBaseRelic* Relic = Cast<ANPBaseRelic>(Evidence.Relic);
-	if (!Relic || !IsValid(Evidence.Photographer))
+	if (!OwningGameMode.IsValid() || !OwningGameMode->HasAuthority()
+		|| !IsValid(Relic) || !IsValid(Photographer))
 	{
 		return false;
 	}
@@ -44,7 +40,7 @@ bool UNPRelicDeliveryService::RegisterPhotoEvidence(const FNPPhotoEvidenceResult
 		TEXT("[RelicDelivery] Evidence penalty %s. Relic=%s Photographer=%s CaptureCount=%d PenaltyRate=%.2f AccumulatedPenalty=%d ReturnScore=%d"),
 		bPenaltyChanged ? TEXT("applied") : TEXT("clamped/ignored"),
 		*GetNameSafe(Relic),
-		*GetNameSafe(Evidence.Photographer),
+		*GetNameSafe(Photographer),
 		Relic->GetSuccessfulEvidenceCaptureCount(),
 		PhotoPenaltyRatePerCapture,
 		Relic->GetAccumulatedPhotoPenalty(),

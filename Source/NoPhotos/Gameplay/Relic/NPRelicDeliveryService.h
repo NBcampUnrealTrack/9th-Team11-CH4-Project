@@ -7,7 +7,7 @@
 class ANPBaseRelic;
 class ANPMainGameMode;
 class ANPRelicReturnZone;
-struct FNPPhotoEvidenceResult;
+class APlayerState;
 
 /** 서버에서 Relic의 증거 누적, 반환 가치 계산과 최종 점수 지급을 처리합니다. */
 UCLASS()
@@ -19,7 +19,7 @@ public:
 	void Initialize(ANPMainGameMode* InGameMode);
 	virtual UWorld* GetWorld() const override;
 
-	bool RegisterPhotoEvidence(const FNPPhotoEvidenceResult& Evidence);
+	bool RegisterPhotoEvidence(ANPBaseRelic* Relic, APlayerState* Photographer);
 	bool TryDeliverRelic(ANPBaseRelic* Relic, ANPRelicReturnZone* ReturnZone);
 
 	UFUNCTION(BlueprintPure, Category="Relic|Delivery")

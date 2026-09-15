@@ -29,6 +29,12 @@ private:
 
 	void UpdateNameplateVisibility();
 	void UpdateFacingCamera();
+	void UpdatePhotoTargetIndicator(float DeltaTime);
+
+	UPROPERTY(EditDefaultsOnly, Category="Nameplate|Photo", meta=(ClampMin="0.02", Units="s"))
+	float PhotoTargetRefreshInterval = 0.1f;
+
+	float PhotoTargetRefreshElapsed = 0.0f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNPUserNameWidget> NameplateWidget;

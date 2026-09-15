@@ -52,6 +52,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Photo")
 	TSubclassOf<UNPPhotoEvidenceService> PhotoEvidenceServiceClass;
 
+	/** 사진 성공에 필요한, 화면 안에 보이며 가려지지 않은 머리 소켓의 최소 개수입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Photo|Validation",
+		meta = (ClampMin = "1", ClampMax = "19", UIMin = "1", UIMax = "19"))
+	int32 MinimumVisibleHeadSampleCount = 2;
+
 private:
 	bool ShouldBypassRoomPreparationForEditorTest() const;
 	void BeginWorldPreparation();

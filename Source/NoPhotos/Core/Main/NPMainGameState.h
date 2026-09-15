@@ -73,6 +73,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Photo")
 	TArray<FNPReplicatedPhotoEvidence> GetPhotoEvidence() const { return PhotoEvidence; }
 
+	UFUNCTION(BlueprintPure, Category = "Photo|Validation")
+	int32 GetMinimumVisibleHeadSampleCount() const { return MinimumVisibleHeadSampleCount; }
+
 	UFUNCTION(BlueprintPure, Category = "Photo")
 	TArray<FGuid> GetTransferredPhotoIds() const { return TransferredPhotoIds; }
 
@@ -124,6 +127,7 @@ public:
 	void SetRemainingGameTime(int32 RemainingSeconds);
 	void FinishMainGame();
 	void AddPhotoEvidence(const FNPPhotoEvidenceResult& Result, int32 AwardedScore);
+	void SetMinimumVisibleHeadSampleCount(int32 InSampleCount);
 	void RegisterTransferredPhoto(const FGuid& PhotoId);
 	void SetSelectedPhotoIds(APlayerState* PlayerState, const TArray<FGuid>& PhotoIds);
 	bool AddPhotoLike(const FGuid& PhotoId, APlayerState* PlayerState);
@@ -192,6 +196,9 @@ private:
 
 	UPROPERTY(ReplicatedUsing = OnRep_PhotoEvidence)
 	TArray<FNPReplicatedPhotoEvidence> PhotoEvidence;
+
+	UPROPERTY(Replicated)
+	int32 MinimumVisibleHeadSampleCount = 2;
 
 	UPROPERTY(ReplicatedUsing = OnRep_TransferredPhotoIds)
 	TArray<FGuid> TransferredPhotoIds;

@@ -7,17 +7,28 @@
 
 class AActor;
 class ANPMainGameMode;
+class ANPReplicatedStablePhysicsPawn;
 class APawn;
 
-/** 서버 월드 상태를 이용해 사진 속 도둑과 Relic의 유효성을 판정합니다. */
+/** 사진 속 유물 보유 플레이어와 사진 반응 대상의 유효성을 판정합니다. */
 UCLASS(BlueprintType, Blueprintable, EditInlineNew, DefaultToInstanced)
 class NOPHOTOS_API UNPPhotoEvidenceService : public UObject
 {
 	GENERATED_BODY()
 
 public:
+	UNPPhotoEvidenceService();
+
 	void Initialize(ANPMainGameMode* InOwningGameMode);
 	FNPPhotoEvidenceResult EvaluatePhoto(const FNPPhotoCaptureRequest& Request);
+	void SetMinimumVisibleHeadSampleCount(int32 InSampleCount);
+	int32 GetMinimumVisibleHeadSampleCount() const { return MinimumVisibleHeadSampleCount; }
+	bool IsRelicHolderCapturable(
+		const FNPPhotoCaptureRequest& Request,
+		ANPReplicatedStablePhysicsPawn* TargetPawn,
+		APawn* PhotographerPawn,
+		AActor*& OutHeldRelic,
+		int32 RequiredVisibleHeadSampleCount = INDEX_NONE) const;
 	virtual UWorld* GetWorld() const override;
 
 protected:
@@ -33,15 +44,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Photo|Validation", meta=(ClampMin="0.1", ClampMax="1.0"))
 	float FOVAcceptanceScale = 0.9f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Photo|Validation", meta=(ClampMin="0.0", ClampMax="1.0"))
-	float MinimumThiefVisibility = 0.5f;
-
-	/** 유물 보유 여부와 무관한 플레이어 촬영 판정의 최소 가시율입니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Photo|Validation", meta=(ClampMin="0.0", ClampMax="1.0"))
-	float MinimumPlayerCaptureVisibility = 0.5f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Photo|Validation", meta=(ClampMin="0.0", ClampMax="1.0"))
-	float MinimumRelicVisibility = 0.5f;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Photo|Validation")
+	TArray<FName> HeadVisibilitySampleNames;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Photo|Validation", meta=(ClampMin="0.0", ClampMax="1.0"))
 	float MinimumReactiveTargetVisibility = 0.5f;
@@ -57,6 +61,8 @@ protected:
 	float ServerCaptureCooldown = 5.0f;
 
 private:
+	int32 MinimumVisibleHeadSampleCount = 2;
+
 	bool ValidateRequest(
 		const FNPPhotoCaptureRequest& Request,
 		FNPPhotoEvidenceResult& OutResult);
@@ -68,6 +74,10 @@ private:
 		AActor* TargetActor,
 		APawn* PhotographerPawn) const;
 	void BuildActorSamplePoints(AActor* TargetActor, TArray<FVector>& OutPoints) const;
+	int32 CountVisibleHeadSamples(
+		const FNPPhotoCaptureRequest& Request,
+		ANPReplicatedStablePhysicsPawn* TargetPawn,
+		APawn* PhotographerPawn) const;
 
 	TWeakObjectPtr<ANPMainGameMode> OwningGameMode;
 	TMap<TWeakObjectPtr<APlayerController>, double> LastCaptureTimes;

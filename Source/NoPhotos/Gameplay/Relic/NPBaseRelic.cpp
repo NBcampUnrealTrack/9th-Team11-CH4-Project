@@ -32,6 +32,7 @@ ANPBaseRelic::ANPBaseRelic(const FObjectInitializer& ObjectInitializer)
 void ANPBaseRelic::BeginPlay()
 {
 	Super::BeginPlay();
+	RelicMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
 	if (HasAuthority() && bStartWithPhysicsEnabled)
 	{
