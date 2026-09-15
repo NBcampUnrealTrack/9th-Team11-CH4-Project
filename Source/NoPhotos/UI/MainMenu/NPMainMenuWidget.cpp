@@ -44,6 +44,8 @@ void UNPMainMenuWidget::NativeConstruct()
 	{
 		if (UNPRoomSubsystem* RoomSubsystem = GameInstance->GetSubsystem<UNPRoomSubsystem>())
 		{
+			RoomSubsystem->RecoverSessionState();
+
 			FText FailureMessage;
 			if (RoomSubsystem->ConsumeConnectionFailureMessage(FailureMessage))
 			{
