@@ -71,6 +71,7 @@ public:
 	bool JoinRoom(int32 RoomNumber);
 
 	void SetRoomLevelPath(const FString& LevelPath);
+	void RecoverSessionState();
 	void LeaveRoom(const FString& MenuLevelPath);
 	void BeginHostMigration(const FString& MigrationId, bool bBecomeHost, const FString& MenuLevelPath);
 
@@ -94,6 +95,7 @@ private:
 	void HandlePostLoadMap(UWorld* LoadedWorld);
 	void UpdateSessionToWaiting();
 	void CompleteWaitingRoomRestore(bool bWasSuccessful);
+	void BeginSessionCleanup(UWorld* World);
 	void BeginExit(ENPRoomExitAction ExitAction, const FString& MigrationId, const FString& MenuLevelPath);
 	void TravelToStandaloneMenu();
 	void RetryMigrationSearch();

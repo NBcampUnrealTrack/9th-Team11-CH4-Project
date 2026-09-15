@@ -231,6 +231,30 @@ void UNPRoomSubsystem::SetRoomLevelPath(const FString& LevelPath)
 	}
 }
 
+void UNPRoomSubsystem::RecoverSessionState()
+{
+	UWorld* World = GetWorld();
+	if (!World || World->GetNetMode() != NM_Standalone)
+	{
+		return;
+	}
+
+	IOnlineSubsystem* OnlineSubsystem = Online::GetSubsystem(World);
+	const IOnlineSessionPtr SessionInterface = OnlineSubsystem ? OnlineSubsystem->GetSessionInterface() : nullptr;
+	if (!SessionInterface.IsValid())
+	{
+		return;
+	}
+
+	if (!SessionInterface->GetNamedSession(NAME_GameSession))
+	{
+		bCleaningSessionAfterNetworkFailure = false;
+		return;
+	}
+
+	BeginSessionCleanup(World);
+}
+
 bool UNPRoomSubsystem::FindRooms()
 {
 	if (bCleaningSessionAfterNetworkFailure)
@@ -497,6 +521,44 @@ void UNPRoomSubsystem::HandleNetworkFailureSessionCleanupComplete(
 	}
 
 	NPRoomLog::Info(this, TEXT("연결이 끊긴 이전 방 정보 정리 완료. list로 새 방을 검색할 수 있습니다."));
+}
+
+void UNPRoomSubsystem::BeginSessionCleanup(UWorld* World)
+{
+	if (!World || bCleaningSessionAfterNetworkFailure)
+	{
+		return;
+	}
+
+	IOnlineSubsystem* OnlineSubsystem = Online::GetSubsystem(World);
+	const IOnlineSessionPtr SessionInterface = OnlineSubsystem ? OnlineSubsystem->GetSessionInterface() : nullptr;
+	if (!SessionInterface.IsValid() || !SessionInterface->GetNamedSession(NAME_GameSession))
+	{
+		return;
+	}
+
+	SessionSearch.Reset();
+	ListedRoomResultIndices.Reset();
+	ListedRooms.Reset();
+	bSearchingForMigration = false;
+	World->GetTimerManager().ClearTimer(MigrationSearchTimer);
+	PendingExitAction = ENPRoomExitAction::None;
+	PendingMigrationId.Reset();
+
+	bCleaningSessionAfterNetworkFailure = true;
+	NPRoomLog::Info(this, TEXT("연결이 끊긴 이전 온라인 방 정보 정리 중..."));
+
+	const FOnDestroySessionCompleteDelegate CleanupCompleteDelegate =
+		FOnDestroySessionCompleteDelegate::CreateUObject(
+			this,
+			&UNPRoomSubsystem::HandleNetworkFailureSessionCleanupComplete);
+	if (!SessionInterface->DestroySession(NAME_GameSession, CleanupCompleteDelegate))
+	{
+		SessionInterface->RemoveNamedSession(NAME_GameSession);
+		bCleaningSessionAfterNetworkFailure = false;
+		NPRoomLog::Warning(this, TEXT("이전 온라인 방 정리 요청을 시작하지 못해 로컬 방 정보를 제거했습니다."));
+		NPRoomLog::Info(this, TEXT("이제 list로 새 방을 검색할 수 있습니다."));
+	}
 }
 
 void UNPRoomSubsystem::TravelToStandaloneMenu()
@@ -958,43 +1020,16 @@ void UNPRoomSubsystem::HandleNetworkFailure(
 
 	NPRoomLog::Warning(this, FailureMessage);
 
-	const bool bShouldCleanupSession = FailureType == ENetworkFailure::ConnectionTimeout
+	const bool bShouldCleanupSession = (NetDriver && NetDriver->GetNetMode() == NM_Client)
 		|| FailureType == ENetworkFailure::PendingConnectionFailure
-		|| FailureType == ENetworkFailure::ConnectionLost;
+		|| FailureType == ENetworkFailure::NetDriverCreateFailure
+		|| FailureType == ENetworkFailure::NetDriverListenFailure;
 	if (!bShouldCleanupSession || bCleaningSessionAfterNetworkFailure)
 	{
 		return;
 	}
 
-	IOnlineSubsystem* OnlineSubsystem = Online::GetSubsystem(FailureWorld);
-	const IOnlineSessionPtr SessionInterface = OnlineSubsystem ? OnlineSubsystem->GetSessionInterface() : nullptr;
-	if (!SessionInterface.IsValid() || !SessionInterface->GetNamedSession(NAME_GameSession))
-	{
-		return;
-	}
-
-	SessionSearch.Reset();
-	ListedRoomResultIndices.Reset();
-	ListedRooms.Reset();
-	bSearchingForMigration = false;
-	FailureWorld->GetTimerManager().ClearTimer(MigrationSearchTimer);
-	PendingExitAction = ENPRoomExitAction::None;
-	PendingMigrationId.Reset();
-
-	bCleaningSessionAfterNetworkFailure = true;
-	NPRoomLog::Info(this, TEXT("연결이 끊긴 이전 온라인 방 정보 정리 중..."));
-
-	const FOnDestroySessionCompleteDelegate CleanupCompleteDelegate =
-		FOnDestroySessionCompleteDelegate::CreateUObject(
-			this,
-			&UNPRoomSubsystem::HandleNetworkFailureSessionCleanupComplete);
-	if (!SessionInterface->DestroySession(NAME_GameSession, CleanupCompleteDelegate))
-	{
-		SessionInterface->RemoveNamedSession(NAME_GameSession);
-		bCleaningSessionAfterNetworkFailure = false;
-		NPRoomLog::Warning(this, TEXT("이전 온라인 방 정리 요청을 시작하지 못해 로컬 방 정보를 제거했습니다."));
-		NPRoomLog::Info(this, TEXT("이제 list로 새 방을 검색할 수 있습니다."));
-	}
+	BeginSessionCleanup(FailureWorld);
 }
 
 bool UNPRoomSubsystem::ConsumeConnectionFailureMessage(FText& OutMessage)
