@@ -257,6 +257,7 @@ void ANPMainPlayerController::BeginPlay()
 
 void ANPMainPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	GetWorldTimerManager().ClearTimer(MinimumMainWorldLoadingTimer);
 	GetWorldTimerManager().ClearTimer(GameStartCountdownUpdateTimer);
 	HideGameStartCountdown();
 	UnbindAimCrosshairFromAbilitySystem();
@@ -292,9 +293,11 @@ void ANPMainPlayerController::ClientBeginMainWorldPreparation_Implementation()
 
 void ANPMainPlayerController::BeginLocalMainWorldPreparation()
 {
+	bMainWorldPreparationFailed = false;
+	GetWorldTimerManager().ClearTimer(MinimumMainWorldLoadingTimer);
 	GetWorldTimerManager().ClearTimer(GameStartCountdownUpdateTimer);
 	HideGameStartCountdown();
-
+	
 	if (ShouldBypassRoomPreparationForEditorTest())
 	{
 		GetWorldTimerManager().ClearTimer(MinimumMainWorldLoadingTimer);
@@ -540,6 +543,8 @@ void ANPMainPlayerController::ClientFinishMainWorldPreparation_Implementation()
 
 void ANPMainPlayerController::ClientNotifyMainWorldLoadFailed_Implementation()
 {
+	bMainWorldPreparationFailed = true;
+	GetWorldTimerManager().ClearTimer(MinimumMainWorldLoadingTimer);
 	GetWorldTimerManager().ClearTimer(GameStartCountdownUpdateTimer);
 	HideGameStartCountdown();
 	SetMainWorldInputLocked(true);

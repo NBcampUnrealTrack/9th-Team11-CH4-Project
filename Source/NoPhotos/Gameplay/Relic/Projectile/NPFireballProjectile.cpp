@@ -2,7 +2,6 @@
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
-#include "Components/AudioComponent.h"
 #include "Components/SphereComponent.h"
 #include "Core/GameplayTag/NPGameplayTags.h"
 #include "DrawDebugHelpers.h"
@@ -20,7 +19,6 @@
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "Sound/SoundBase.h"
-#include "UObject/ConstructorHelpers.h"
 
 ANPFireballProjectile::ANPFireballProjectile()
 {
@@ -44,11 +42,6 @@ ANPFireballProjectile::ANPFireballProjectile()
 		TEXT("FireballEffectComponent"));
 	FireballEffectComponent->SetupAttachment(CollisionComponent);
 
-	FlightAudioComponent = CreateDefaultSubobject<UAudioComponent>(
-		TEXT("FlightAudioComponent"));
-	FlightAudioComponent->SetupAttachment(CollisionComponent);
-	FlightAudioComponent->SetAutoActivate(false);
-
 	ProjectileMovement = CreateDefaultSubobject<UProjectileMovementComponent>(
 		TEXT("ProjectileMovement"));
 	ProjectileMovement->UpdatedComponent = CollisionComponent;
@@ -58,26 +51,6 @@ ANPFireballProjectile::ANPFireballProjectile()
 	ProjectileMovement->bRotationFollowsVelocity = true;
 	ProjectileMovement->bShouldBounce = false;
 
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> FlightEffectAsset(
-		TEXT("/Game/Fire_EXP_Vol01_Free/Niagara/Fire/Loop/NS_Sub_FireTorch_Loop_002.NS_Sub_FireTorch_Loop_002"));
-	if (FlightEffectAsset.Succeeded())
-	{
-		FlightEffect = FlightEffectAsset.Object;
-	}
-
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> ExplosionEffectAsset(
-		TEXT("/Game/Fire_EXP_Vol01_Free/Niagara/EXP/NS_Sub_EXP_Large_001_01.NS_Sub_EXP_Large_001_01"));
-	if (ExplosionEffectAsset.Succeeded())
-	{
-		ExplosionEffect = ExplosionEffectAsset.Object;
-	}
-
-	static ConstructorHelpers::FObjectFinder<USoundBase> ExplosionSoundAsset(
-		TEXT("/Game/NoPhotos/Resources/Sound/SFX/Rellic/soundreality-explosion-fx-343683.soundreality-explosion-fx-343683"));
-	if (ExplosionSoundAsset.Succeeded())
-	{
-		ExplosionSound = ExplosionSoundAsset.Object;
-	}
 }
 
 void ANPFireballProjectile::OnConstruction(const FTransform& Transform)
@@ -92,19 +65,6 @@ void ANPFireballProjectile::OnConstruction(const FTransform& Transform)
 	FireballEffectComponent->SetVariableFloat(
 		TEXT("User.FireballScale"),
 		FMath::Max(FireballScale, 0.0f));
-	FlightAudioComponent->SetSound(FlightSound);
-	FlightAudioComponent->SetVolumeMultiplier(
-		FMath::Max(FlightSoundVolume, 0.0f));
-}
-
-void ANPFireballProjectile::BeginPlay()
-{
-	Super::BeginPlay();
-
-	if (IsValid(FlightSound))
-	{
-		FlightAudioComponent->Play();
-	}
 }
 
 void ANPFireballProjectile::InitializeProjectile(
@@ -370,7 +330,6 @@ void ANPFireballProjectile::MulticastExplode_Implementation(
 {
 	CollisionComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	FireballEffectComponent->Deactivate();
-	FlightAudioComponent->Stop();
 	SetActorHiddenInGame(true);
 
 #if ENABLE_DRAW_DEBUG

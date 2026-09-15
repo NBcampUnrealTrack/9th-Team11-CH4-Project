@@ -53,6 +53,8 @@ public:
 	UPrimitiveComponent* GetGrabbedComponent() const { return GrabbedComponent; }
 
 	FName GetGrabbedBoneName() const { return GrabbedBoneName; }
+	FName GetHandBoneName() const { return HandBoneName; }
+	float GetGrabRadius() const { return GrabRadius; }
 	FTransform GetGrabConstraintFrame(EConstraintFrame::Type Frame) const;
 	void ApplyReplicatedGrab(
 		UPrimitiveComponent* PrimitiveComponent,

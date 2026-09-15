@@ -6,7 +6,6 @@
 
 class ANPBaseRelic;
 class UAbilitySystemComponent;
-class UAudioComponent;
 class UGameplayEffect;
 class UNiagaraComponent;
 class UNiagaraSystem;
@@ -50,8 +49,6 @@ public:
 
 protected:
 	virtual void OnConstruction(const FTransform& Transform) override;
-	virtual void BeginPlay() override;
-
 	UFUNCTION()
 	void HandleProjectileHit(
 		UPrimitiveComponent* HitComponent,
@@ -74,9 +71,6 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<UNiagaraComponent> FireballEffectComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
-	TObjectPtr<UAudioComponent> FlightAudioComponent;
-
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Fireball|Effects|Flight")
 	TObjectPtr<UNiagaraSystem> FlightEffect;
 
@@ -89,12 +83,6 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Fireball|Effects|Flight", meta=(ClampMin="0.0"))
 	float FireballScale = 1.0f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Fireball|Effects|Flight")
-	TObjectPtr<USoundBase> FlightSound;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Fireball|Effects|Flight", meta=(ClampMin="0.0"))
-	float FlightSoundVolume = 1.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Fireball|Effects|Explosion")
 	TObjectPtr<UNiagaraSystem> ExplosionEffect;
