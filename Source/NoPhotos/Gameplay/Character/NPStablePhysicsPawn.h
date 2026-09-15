@@ -109,9 +109,6 @@ public:
 	/** 로컬 또는 복제된 시점의 수평 정면 방향입니다. */
 	FVector GetViewForwardDirection() const;
 
-	/** 로컬 또는 복제된 시점의 Pitch와 Yaw를 모두 포함한 정면 방향입니다. */
-	FVector GetViewDirection() const;
-
 	UFUNCTION(BlueprintPure, Category="Animation")
 	FRotator GetVisualFacingRotation() const;
 

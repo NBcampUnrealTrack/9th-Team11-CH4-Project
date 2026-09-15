@@ -34,6 +34,7 @@ public class NoPhotos : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[] {
 			"CoreOnline",
+			"RenderCore",
 			"OnlineSubsystemUtils",
 			"ImageCore",
 			"GeometryCollectionEngine",

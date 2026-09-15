@@ -8,6 +8,8 @@ class ANPBaseRelic;
 class ANPWallLever;
 class UCameraShakeBase;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnThroneLiftStarted);
+
 /** Lifts the owning throne once and keeps an assigned relic aligned with it. */
 UCLASS(ClassGroup=(Relic), meta=(BlueprintSpawnableComponent))
 class NOPHOTOS_API UNPThroneLiftGimmickComponent
@@ -32,6 +34,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Throne Lift")
 	bool IsChairRaised() const { return bIsRaised; }
+
+	UPROPERTY(BlueprintAssignable, Category="Throne Lift")
+	FOnThroneLiftStarted OnLiftStarted;
 
 protected:
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, EditFixedSize, Category="Throne Lift|Levers")

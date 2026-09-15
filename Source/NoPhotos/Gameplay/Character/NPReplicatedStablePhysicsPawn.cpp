@@ -1,6 +1,8 @@
 #include "Gameplay/Character/NPReplicatedStablePhysicsPawn.h"
 
 #include "Components/PrimitiveComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "Core/GameplayTag/NPGameplayTags.h"
 #include "Core/Main/NPMainGameState.h"
 #include "Gameplay/AbilitySystem/Effects/NPLeaderGameplayEffect.h"
@@ -18,6 +20,7 @@
 #include "Gameplay/Relic/NPBaseRelic.h"
 #include "Gameplay/Relic/Components/NPRelicOwnershipComponent.h"
 #include "Gameplay/Relic/Components/NPAimableRelicComponent.h"
+#include "Gameplay/Relic/Components/NPThrowableRelicComponent.h"
 #include "Gameplay/Photo/NPPhotoCapturePenaltyComponent.h"
 #include "UI/GameScreen/NPScoreFeedbackWidgetComponent.h"
 #include "Core/NPPlayerState.h"
@@ -29,6 +32,15 @@ ANPReplicatedStablePhysicsPawn::ANPReplicatedStablePhysicsPawn()
 	bReplicates = true;
 	SetReplicateMovement(true);
 	SetNetUpdateFrequency(30.0f);
+
+	GrabPreviewMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("GrabPreviewMesh"));
+	GrabPreviewMesh->SetupAttachment(GetRootComponent());
+	GrabPreviewMesh->SetAbsolute(true, true, true);
+	GrabPreviewMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	GrabPreviewMesh->SetGenerateOverlapEvents(false);
+	GrabPreviewMesh->SetCastShadow(false);
+	GrabPreviewMesh->SetOnlyOwnerSee(true);
+	GrabPreviewMesh->SetVisibility(false);
 
 	// 소유 클라이언트는 공유 Grab 중에만 서버 Root 상태를 별도로 보정받습니다.
 	PhysicsMesh->bReplicatePhysicsToAutonomousProxy = false;
@@ -55,6 +67,7 @@ ANPReplicatedStablePhysicsPawn::ANPReplicatedStablePhysicsPawn()
 void ANPReplicatedStablePhysicsPawn::BeginPlay()
 {
 	Super::BeginPlay();
+	GrabPreviewBaseScale = GrabPreviewMesh->GetRelativeScale3D();
 	AbilitySystem->InitializeForOwner();
 	RelicCarryingTagChangedHandle = AbilitySystem->RegisterGameplayTagEvent(
 		NPGameplayTags::State_Relic_Carrying,
@@ -309,11 +322,39 @@ void ANPReplicatedStablePhysicsPawn::Tick(float DeltaSeconds)
 	UpdateLocalPredictedGrab(DeltaSeconds);
 
 	Super::Tick(DeltaSeconds);
+	UpdateGrabPreview();
 	if (HasAuthority())
 	{
 		PhysicsMovement->SetFacingControlEnabled(true);
 		UpdateServerReplicatedState();
 	}
+}
+
+void ANPReplicatedStablePhysicsPawn::UpdateGrabPreview()
+{
+	const UStaticMesh* PreviewAsset = GrabPreviewMesh->GetStaticMesh();
+	const FName HandBoneName = RightHandGrab->GetHandBoneName();
+	const bool bShowPreview = IsLocallyControlled()
+		&& (HasAuthority() ? bReplicatedRightHandActive : bLocalRightHandActive)
+		&& !IsReplicatedGrabActive()
+		&& PreviewAsset
+		&& PhysicsMesh->GetBoneIndex(HandBoneName) != INDEX_NONE;
+	GrabPreviewMesh->SetVisibility(bShowPreview);
+	if (!bShowPreview)
+	{
+		return;
+	}
+
+	const float Radius = RightHandGrab->GetGrabRadius();
+	const FBoxSphereBounds MeshBounds = PreviewAsset->GetBounds();
+	const float MeshRadius = MeshBounds.BoxExtent.GetMax();
+	const float Scale = MeshRadius > UE_SMALL_NUMBER
+		? FMath::Max(0.0f, Radius) / MeshRadius : 0.0f;
+	const FVector PreviewScale = GrabPreviewBaseScale * Scale;
+	GrabPreviewMesh->SetWorldScale3D(PreviewScale);
+	GrabPreviewMesh->SetWorldRotation(FRotator::ZeroRotator);
+	GrabPreviewMesh->SetWorldLocation(
+		PhysicsMesh->GetSocketLocation(HandBoneName) - MeshBounds.Origin * PreviewScale);
 }
 
 void ANPReplicatedStablePhysicsPawn::UpdateClientSimulationState()
@@ -628,6 +669,61 @@ void ANPReplicatedStablePhysicsPawn::ServerRequestAimableRelicFire_Implementatio
 		AbilitySystem,
 		RequestLocation,
 		RequestForward);
+}
+
+void ANPReplicatedStablePhysicsPawn::ServerRequestThrowableRelicThrow_Implementation(
+	FVector_NetQuantize10 CameraLocation,
+	FVector_NetQuantizeNormal CameraForward)
+{
+	if (IsPhotoStunned())
+	{
+		return;
+	}
+
+	ANPBaseRelic* HeldRelic = Cast<ANPBaseRelic>(
+		ReplicatedGrabState.GrabbedActor);
+	UNPThrowableRelicComponent* ThrowableRelic = HeldRelic
+		? HeldRelic->FindComponentByClass<UNPThrowableRelicComponent>()
+		: nullptr;
+	UGrabbableComponent* Grabbable = HeldRelic
+		? HeldRelic->FindComponentByClass<UGrabbableComponent>()
+		: nullptr;
+	if (!IsValid(HeldRelic)
+		|| !IsValid(ThrowableRelic)
+		|| !IsValid(Grabbable)
+		|| Grabbable->GetActiveGrabCount() != 1
+		|| !IsValid(AbilitySystem))
+	{
+		return;
+	}
+
+	const FVector RequestLocation(CameraLocation);
+	const FVector RequestForward = FVector(CameraForward).GetSafeNormal();
+	const FNPRelicThrowSettings& Settings = ThrowableRelic->GetThrowSettings();
+	const float CameraDistanceFromPawn = FVector::Distance(
+		RequestLocation,
+		GetActorLocation());
+	const FVector ServerForward = GetServerViewRotation().Vector().GetSafeNormal();
+	const float DirectionDot = FVector::DotProduct(
+		RequestForward,
+		ServerForward);
+	const float MaximumDirectionError = FMath::Clamp(
+		Settings.MaximumCameraDirectionError,
+		0.0f,
+		180.0f);
+	const float MinimumDirectionDot = FMath::Cos(FMath::DegreesToRadians(
+		MaximumDirectionError));
+	if (RequestLocation.ContainsNaN()
+		|| RequestForward.IsNearlyZero()
+		|| CameraDistanceFromPawn > FMath::Max(
+			0.0f,
+			Settings.MaximumCameraDistanceFromPawn)
+		|| DirectionDot < MinimumDirectionDot)
+	{
+		return;
+	}
+
+	ThrowableRelic->TryThrow(this, RequestLocation, RequestForward);
 }
 
 void ANPReplicatedStablePhysicsPawn::ServerSetRightHandActive_Implementation(
